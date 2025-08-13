@@ -1450,10 +1450,7 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(payments);
   }
 
-  // Multi-school user lookup
-  async getUsersByEmail(email: string): Promise<User[]> {
-    return await db.select().from(users).where(eq(users.email, email.toLowerCase()));
-  }
+
 
   // Super Admin methods
   async getAdminUserByEmail(email: string): Promise<AdminUser | undefined> {

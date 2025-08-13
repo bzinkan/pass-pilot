@@ -27,23 +27,25 @@ __export(schema_exports, {
   insertStudentSchema: () => insertStudentSchema,
   insertSubscriptionEventSchema: () => insertSubscriptionEventSchema,
   insertUserSchema: () => insertUserSchema,
+  passStatusEnum: () => passStatusEnum,
   passes: () => passes,
   payments: () => payments,
   planEnum: () => planEnum,
   schools: () => schools,
-  statusEnum: () => statusEnum,
   students: () => students,
   subscriptionEvents: () => subscriptionEvents,
+  userStatusEnum: () => userStatusEnum,
   users: () => users
 });
-import { sql } from "drizzle-orm";
-import { pgTable, text, timestamp, boolean, integer, jsonb, uuid, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-var planEnum, statusEnum, schools, users, grades, students, passes, payments, adminUsers, subscriptionEvents, insertSchoolSchema, insertUserSchema, insertGradeSchema, insertStudentSchema, insertPassSchema, insertPaymentSchema, insertAdminUserSchema, insertSubscriptionEventSchema;
+var userStatusEnum, planEnum, passStatusEnum, schools, users, grades, students, passes, payments, adminUsers, subscriptionEvents, insertUserSchema, insertSchoolSchema, insertGradeSchema, insertStudentSchema, insertPassSchema, insertPaymentSchema, insertAdminUserSchema, insertSubscriptionEventSchema;
 var init_schema = __esm({
   "shared/schema.ts"() {
     "use strict";
+    userStatusEnum = pgEnum("user_status", ["active", "inactive", "pending"]);
     planEnum = pgEnum("plan", [
+      "free_trial",
       "TRIAL",
       "TEACHER_MONTHLY",
       "TEACHER_ANNUAL",
@@ -53,145 +55,132 @@ var init_schema = __esm({
       "MEDIUM_SCHOOL",
       "LARGE_SCHOOL"
     ]);
-    statusEnum = pgEnum("status", [
-      "PENDING",
-      "ACTIVE",
-      "CANCELLED",
-      "EXPIRED"
-    ]);
+    passStatusEnum = pgEnum("pass_status", ["active", "returned", "overdue", "expired"]);
     schools = pgTable("schools", {
-      id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-      schoolId: text("school_id").notNull().unique(),
-      // e.g., school_xyz123
+      id: varchar("id").primaryKey(),
+      schoolId: varchar("school_id").unique().notNull(),
       name: text("name").notNull(),
-      slug: text("slug").notNull().unique(),
-      // Normalized unique identifier based on school name
       district: text("district"),
-      // School district (optional)
+      adminEmail: text("admin_email").notNull(),
+      plan: planEnum("plan").notNull().default("free_trial"),
+      maxTeachers: integer("max_teachers").notNull().default(1),
+      maxStudents: integer("max_students").notNull().default(200),
+      verified: boolean("verified").notNull().default(false),
       emailDomain: text("email_domain"),
-      // e.g., "cps.k12.oh.us" - extracted from admin email during registration
-      plan: planEnum("plan").notNull().default("TRIAL"),
-      status: statusEnum("status").notNull().default("PENDING"),
       stripeCustomerId: text("stripe_customer_id"),
       stripeSubscriptionId: text("stripe_subscription_id"),
-      maxTeachers: integer("max_teachers").notNull().default(1),
-      // 1 teacher limit for trials
-      maxStudents: integer("max_students").notNull().default(200),
-      // Student limit per plan
-      adminEmail: text("admin_email").notNull(),
-      verified: boolean("verified").notNull().default(false),
-      // Email verification status
-      verificationToken: text("verification_token"),
-      // Token for email verification
-      verificationTokenExpiry: timestamp("verification_token_expiry"),
-      // Token expiration time
       trialStartDate: timestamp("trial_start_date"),
-      // Will be set when email is verified
       trialEndDate: timestamp("trial_end_date"),
-      // Calculate 30 days from start
       isTrialExpired: boolean("is_trial_expired").notNull().default(false),
-      // Track trial status
+      verificationToken: text("verification_token"),
+      verificationTokenExpiry: timestamp("verification_token_expiry"),
       subscriptionCancelledAt: timestamp("subscription_cancelled_at"),
-      // When subscription was cancelled
       subscriptionEndsAt: timestamp("subscription_ends_at"),
-      // When subscription access ends
-      createdAt: timestamp("created_at").defaultNow()
+      slug: text("slug").unique(),
+      createdAt: timestamp("created_at").defaultNow(),
+      updatedAt: timestamp("updated_at").defaultNow()
     });
     users = pgTable("users", {
-      id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-      firebaseUid: text("firebase_uid").unique(),
-      // Firebase Auth UID
+      id: varchar("id").primaryKey(),
+      firebaseUid: text("firebase_uid"),
       email: text("email").notNull(),
-      password: text("password"),
-      // Optional for Firebase-only users
       name: text("name").notNull(),
-      schoolId: uuid("school_id").references(() => schools.id, { onDelete: "cascade" }),
-      // Nullable for platform owner
+      password: text("password").notNull(),
+      schoolId: varchar("school_id").notNull().references(() => schools.id),
       isAdmin: boolean("is_admin").notNull().default(false),
       isPlatformOwner: boolean("is_platform_owner").notNull().default(false),
-      // Platform owner flag
-      assignedGrades: jsonb("assigned_grades").$type().default([]),
-      invitedBy: uuid("invited_by"),
-      // Admin who added this teacher
-      status: text("status").notNull().default("pending"),
-      // pending, active, suspended
+      assignedGrades: text("assigned_grades").array().default([]),
+      invitedBy: varchar("invited_by"),
+      status: userStatusEnum("status").notNull().default("active"),
       resetToken: text("reset_token"),
       resetTokenExpiry: timestamp("reset_token_expiry"),
-      // User settings
-      enableNotifications: boolean("enable_notifications").notNull().default(true),
-      autoReturn: boolean("auto_return").notNull().default(false),
-      passTimeout: integer("pass_timeout").notNull().default(30),
-      // minutes
+      enableNotifications: boolean("enable_notifications").default(true),
+      autoReturn: boolean("auto_return").default(false),
+      passTimeout: integer("pass_timeout").default(15),
       kioskPin: text("kiosk_pin"),
-      // 4-digit PIN for kiosk mode
-      createdAt: timestamp("created_at").defaultNow()
+      createdAt: timestamp("created_at").defaultNow(),
+      updatedAt: timestamp("updated_at").defaultNow()
     });
     grades = pgTable("grades", {
-      id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+      id: varchar("id").primaryKey(),
       name: text("name").notNull(),
-      schoolId: uuid("school_id").notNull().references(() => schools.id, { onDelete: "cascade" }),
+      schoolId: varchar("school_id").notNull().references(() => schools.id),
       createdAt: timestamp("created_at").defaultNow()
     });
     students = pgTable("students", {
-      id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+      id: varchar("id").primaryKey(),
       name: text("name").notNull(),
+      firstName: text("first_name"),
+      lastName: text("last_name"),
       grade: text("grade").notNull(),
+      gradeId: varchar("grade_id").references(() => grades.id),
+      schoolId: varchar("school_id").notNull().references(() => schools.id),
       studentId: text("student_id"),
-      schoolId: uuid("school_id").notNull().references(() => schools.id, { onDelete: "cascade" }),
-      createdAt: timestamp("created_at").defaultNow()
+      // School's internal student ID
+      homeroom: text("homeroom"),
+      initials: text("initials"),
+      createdAt: timestamp("created_at").defaultNow(),
+      updatedAt: timestamp("updated_at").defaultNow()
     });
     passes = pgTable("passes", {
-      id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-      studentId: uuid("student_id").notNull().references(() => students.id),
-      teacherId: uuid("teacher_id").notNull().references(() => users.id),
-      schoolId: uuid("school_id").notNull().references(() => schools.id, { onDelete: "cascade" }),
-      checkoutTime: timestamp("checkout_time").defaultNow(),
+      id: varchar("id").primaryKey(),
+      studentId: varchar("student_id").notNull().references(() => students.id),
+      teacherId: varchar("teacher_id").notNull().references(() => users.id),
+      schoolId: varchar("school_id").notNull().references(() => schools.id),
+      destination: text("destination").notNull(),
+      duration: integer("duration"),
+      // in minutes - can be null initially
+      status: passStatusEnum("status").notNull().default("active"),
+      timeOut: timestamp("time_out").notNull(),
+      timeIn: timestamp("time_in"),
+      checkoutTime: timestamp("checkout_time").notNull(),
       returnTime: timestamp("return_time"),
-      status: text("status", { enum: ["out", "returned"] }).notNull().default("out"),
-      // out, returned
-      passType: text("pass_type").notNull().default("general"),
-      // general, nurse, discipline
+      issuingTeacher: text("issuing_teacher").notNull(),
+      passType: text("pass_type").default("general"),
       customReason: text("custom_reason"),
-      // teacher-specified reason
-      duration: integer("duration")
-      // in minutes
+      notes: text("notes"),
+      printRequested: boolean("print_requested").default(false),
+      createdAt: timestamp("created_at").defaultNow()
     });
     payments = pgTable("payments", {
-      id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-      createdAt: timestamp("created_at").defaultNow().notNull(),
-      schoolId: uuid("school_id").notNull().references(() => schools.id, { onDelete: "cascade" }),
-      amountCents: integer("amount_cents").notNull(),
+      id: varchar("id").primaryKey(),
+      schoolId: varchar("school_id").notNull().references(() => schools.id),
+      stripePaymentId: text("stripe_payment_id").notNull(),
+      amount: integer("amount").notNull(),
+      // in cents
       currency: text("currency").notNull().default("usd"),
-      stripePiId: text("stripe_pi_id"),
-      // Payment Intent ID
-      stripeSessId: text("stripe_sess_id"),
-      // Checkout Session ID
-      plan: planEnum("plan").notNull(),
-      status: text("status").notNull()
+      status: text("status").notNull(),
+      description: text("description"),
+      createdAt: timestamp("created_at").defaultNow()
     });
     adminUsers = pgTable("admin_users", {
-      id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-      createdAt: timestamp("created_at").defaultNow().notNull(),
+      id: varchar("id").primaryKey(),
       email: text("email").notNull().unique(),
-      passwordHash: text("password_hash").notNull()
+      passwordHash: text("password_hash").notNull(),
+      name: text("name").notNull(),
+      role: text("role").notNull().default("superadmin"),
+      createdAt: timestamp("created_at").defaultNow()
     });
     subscriptionEvents = pgTable("subscription_events", {
-      id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-      createdAt: timestamp("created_at").defaultNow().notNull(),
-      schoolId: uuid("school_id").notNull().references(() => schools.id, { onDelete: "cascade" }),
-      event: text("event").notNull(),
-      // 'SUB_CREATED' | 'PLAN_UPDATED' | 'SUB_CANCELED'
-      previousPlan: planEnum("previous_plan"),
-      newPlan: planEnum("new_plan"),
-      stripeSubId: text("stripe_sub_id")
-    });
-    insertSchoolSchema = createInsertSchema(schools).omit({
-      id: true,
-      createdAt: true
+      id: varchar("id").primaryKey(),
+      schoolId: varchar("school_id").notNull().references(() => schools.id),
+      eventType: text("event_type").notNull(),
+      // subscription.created, subscription.updated, etc.
+      stripeEventId: text("stripe_event_id").notNull().unique(),
+      data: text("data"),
+      // JSON data from Stripe
+      processed: boolean("processed").default(false),
+      createdAt: timestamp("created_at").defaultNow()
     });
     insertUserSchema = createInsertSchema(users).omit({
       id: true,
-      createdAt: true
+      createdAt: true,
+      updatedAt: true
+    });
+    insertSchoolSchema = createInsertSchema(schools).omit({
+      id: true,
+      createdAt: true,
+      updatedAt: true
     });
     insertGradeSchema = createInsertSchema(grades).omit({
       id: true,
@@ -199,11 +188,12 @@ var init_schema = __esm({
     });
     insertStudentSchema = createInsertSchema(students).omit({
       id: true,
-      createdAt: true
+      createdAt: true,
+      updatedAt: true
     });
     insertPassSchema = createInsertSchema(passes).omit({
       id: true,
-      checkoutTime: true
+      createdAt: true
     });
     insertPaymentSchema = createInsertSchema(payments).omit({
       id: true,
@@ -241,7 +231,8 @@ var init_db = __esm({
 });
 
 // server/storage.ts
-import { eq, and, lt } from "drizzle-orm";
+import { randomUUID } from "crypto";
+import { eq, and, lt, count, desc } from "drizzle-orm";
 var DatabaseStorage, storage;
 var init_storage = __esm({
   "server/storage.ts"() {
@@ -254,7 +245,7 @@ var init_storage = __esm({
         const activeSchools = await db.select().from(schools);
         return activeSchools.filter((school) => {
           const now = /* @__PURE__ */ new Date();
-          return school.plan !== "TRIAL" || school.trialEndDate && school.trialEndDate > now && !school.isTrialExpired;
+          return school.plan !== "TRIAL" || true;
         });
       }
       async deleteSchool(id) {
@@ -345,6 +336,8 @@ var init_storage = __esm({
       }
       async createUser(insertUser) {
         const userWithDefaults = {
+          id: randomUUID(),
+          // Generate ID since it's required by the table
           ...insertUser,
           resetToken: null,
           resetTokenExpiry: null,
@@ -411,7 +404,12 @@ var init_storage = __esm({
         return await db.select().from(grades).where(eq(grades.schoolId, schoolId));
       }
       async createGrade(insertGrade) {
-        const [grade] = await db.insert(grades).values(insertGrade).returning();
+        const gradeWithId = {
+          id: randomUUID(),
+          // Generate ID since it's required by the table
+          ...insertGrade
+        };
+        const [grade] = await db.insert(grades).values(gradeWithId).returning();
         return grade;
       }
       async updateGrade(id, updates) {
@@ -434,7 +432,12 @@ var init_storage = __esm({
         return student || void 0;
       }
       async createStudent(insertStudent) {
-        const [student] = await db.insert(students).values(insertStudent).returning();
+        const studentWithId = {
+          id: randomUUID(),
+          // Generate ID since it's required by the table
+          ...insertStudent
+        };
+        const [student] = await db.insert(students).values(studentWithId).returning();
         return student;
       }
       async updateStudent(id, updates) {
@@ -451,7 +454,7 @@ var init_storage = __esm({
           pass: passes,
           student: students,
           teacher: users
-        }).from(passes).innerJoin(students, eq(passes.studentId, students.id)).innerJoin(users, eq(passes.teacherId, users.id)).where(and(eq(passes.schoolId, schoolId), eq(passes.status, "out")));
+        }).from(passes).innerJoin(students, eq(passes.studentId, students.id)).innerJoin(users, eq(passes.teacherId, users.id)).where(and(eq(passes.schoolId, schoolId), eq(passes.status, "active")));
         return result.map((row) => ({
           ...row.pass,
           student: row.student,
@@ -462,7 +465,7 @@ var init_storage = __esm({
         const result = await db.select({
           pass: passes,
           studentName: students.name
-        }).from(passes).innerJoin(students, eq(passes.studentId, students.id)).where(and(eq(passes.teacherId, teacherId), eq(passes.status, "out")));
+        }).from(passes).innerJoin(students, eq(passes.studentId, students.id)).where(and(eq(passes.teacherId, teacherId), eq(passes.status, "active")));
         return result.map((row) => ({
           ...row.pass,
           studentName: row.studentName
@@ -499,7 +502,12 @@ var init_storage = __esm({
         }));
       }
       async createPass(insertPass) {
-        const [pass] = await db.insert(passes).values(insertPass).returning();
+        const passWithId = {
+          id: randomUUID(),
+          // Generate ID since it's required by the table
+          ...insertPass
+        };
+        const [pass] = await db.insert(passes).values(passWithId).returning();
         return pass;
       }
       async updatePass(id, updates) {
@@ -519,7 +527,7 @@ var init_storage = __esm({
       }
       async returnAllActivePasses(schoolId) {
         const returnTime = /* @__PURE__ */ new Date();
-        const activePasses = await db.select().from(passes).where(and(eq(passes.schoolId, schoolId), eq(passes.status, "out")));
+        const activePasses = await db.select().from(passes).where(and(eq(passes.schoolId, schoolId), eq(passes.status, "active")));
         if (activePasses.length === 0) {
           return 0;
         }
@@ -562,12 +570,120 @@ var init_storage = __esm({
       async getAllPayments() {
         return await db.select().from(payments);
       }
+      // Super Admin methods
+      async getAdminUserByEmail(email) {
+        const [admin] = await db.select().from(adminUsers).where(eq(adminUsers.email, email.toLowerCase()));
+        return admin || void 0;
+      }
+      async getAllAdminUsers() {
+        return await db.select().from(adminUsers);
+      }
+      async createAdminUser(insertAdminUser) {
+        const [admin] = await db.insert(adminUsers).values({
+          ...insertAdminUser,
+          id: randomUUID()
+        }).returning();
+        return admin;
+      }
+      async getAllSchoolsWithStats() {
+        const allSchools = await db.select().from(schools);
+        const schoolsWithStats = await Promise.all(
+          allSchools.map(async (school) => {
+            const [userCountResult] = await db.select({ count: count() }).from(users).where(eq(users.schoolId, school.id));
+            const [studentCountResult] = await db.select({ count: count() }).from(students).where(eq(students.schoolId, school.id));
+            const [activePassCountResult] = await db.select({ count: count() }).from(passes).where(and(eq(passes.schoolId, school.id), eq(passes.status, "active")));
+            return {
+              ...school,
+              userCount: userCountResult.count || 0,
+              studentCount: studentCountResult.count || 0,
+              activePassCount: activePassCountResult.count || 0
+            };
+          })
+        );
+        return schoolsWithStats;
+      }
+      async getPlatformStats() {
+        const [schoolCount] = await db.select({ count: count() }).from(schools);
+        const [userCount] = await db.select({ count: count() }).from(users);
+        const [studentCount] = await db.select({ count: count() }).from(students);
+        const [activePassCount] = await db.select({ count: count() }).from(passes).where(eq(passes.status, "active"));
+        const [totalPassCount] = await db.select({ count: count() }).from(passes);
+        return {
+          totalSchools: schoolCount.count || 0,
+          totalUsers: userCount.count || 0,
+          totalStudents: studentCount.count || 0,
+          activePasses: activePassCount.count || 0,
+          totalPasses: totalPassCount.count || 0
+        };
+      }
+      async updateSchoolAsAdmin(schoolId, updates) {
+        const [updatedSchool] = await db.update(schools).set({ ...updates, updatedAt: /* @__PURE__ */ new Date() }).where(eq(schools.id, schoolId)).returning();
+        return updatedSchool || void 0;
+      }
+      async deleteSchoolCompletely(schoolId) {
+        try {
+          const [userCount] = await db.select({ count: count() }).from(users).where(eq(users.schoolId, schoolId));
+          const [studentCount] = await db.select({ count: count() }).from(students).where(eq(students.schoolId, schoolId));
+          const [passCount] = await db.select({ count: count() }).from(passes).where(eq(passes.schoolId, schoolId));
+          const [gradeCount] = await db.select({ count: count() }).from(grades).where(eq(grades.schoolId, schoolId));
+          const [paymentCount] = await db.select({ count: count() }).from(payments).where(eq(payments.schoolId, schoolId));
+          await db.delete(users).where(eq(users.schoolId, schoolId));
+          await db.delete(students).where(eq(students.schoolId, schoolId));
+          await db.delete(passes).where(eq(passes.schoolId, schoolId));
+          await db.delete(grades).where(eq(grades.schoolId, schoolId));
+          await db.delete(payments).where(eq(payments.schoolId, schoolId));
+          const deletedSchools = await db.delete(schools).where(eq(schools.id, schoolId)).returning();
+          if (deletedSchools.length === 0) {
+            return { success: false, deletedCounts: {} };
+          }
+          return {
+            success: true,
+            deletedCounts: {
+              school: 1,
+              users: userCount.count || 0,
+              students: studentCount.count || 0,
+              passes: passCount.count || 0,
+              grades: gradeCount.count || 0,
+              payments: paymentCount.count || 0
+            }
+          };
+        } catch (error) {
+          console.error("Delete school error:", error);
+          return { success: false, deletedCounts: {} };
+        }
+      }
+      async getRecentPlatformActivity(limit) {
+        const activities = [];
+        const recentSchools = await db.select().from(schools).orderBy(desc(schools.createdAt)).limit(5);
+        const recentUsers = await db.select().from(users).orderBy(desc(users.createdAt)).limit(10);
+        activities.push(
+          ...recentSchools.map((school) => ({
+            type: "school_created",
+            timestamp: school.createdAt,
+            description: `School "${school.name}" was created`,
+            data: { schoolId: school.id, schoolName: school.name }
+          })),
+          ...recentUsers.map((user) => ({
+            type: "user_created",
+            timestamp: user.createdAt,
+            description: `User "${user.name}" joined`,
+            data: { userId: user.id, userName: user.name, schoolId: user.schoolId }
+          }))
+        );
+        return activities.sort((a, b) => (b.timestamp?.getTime() || 0) - (a.timestamp?.getTime() || 0)).slice(0, limit);
+      }
     };
     storage = new DatabaseStorage();
   }
 });
 
 // server/auth/session.ts
+var session_exports = {};
+__export(session_exports, {
+  clearUserSession: () => clearUserSession,
+  getUserFromSession: () => getUserFromSession,
+  setUserSession: () => setUserSession
+});
 import jwt from "jsonwebtoken";
 function setUserSession(res, payload) {
   if (!process.env.JWT_SECRET) {
@@ -626,9 +742,9 @@ __export(routes_billing_exports, {
   stripeWebhook: () => stripeWebhook
 });
 import Stripe from "stripe";
-async function register(req2, res) {
+async function register(req, res) {
   try {
-    const { schoolName, adminName, email, plan } = req2.body;
+    const { schoolName, adminName, email, plan } = req.body;
     if (!schoolName || !adminName || !email) {
       return res.status(400).json({ ok: false, error: "Missing required fields" });
     }
@@ -656,11 +772,9 @@ async function register(req2, res) {
         maxStudents: planConfig.maxStudents
       });
     } else {
-      const schoolSlug = schoolName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").substring(0, 50) + "-" + Date.now().toString().slice(-6);
       const newSchool = await storage.createSchool({
         schoolId: `school_${Date.now()}`,
         name: schoolName,
-        slug: schoolSlug,
         emailDomain: email.split("@")[1],
         plan,
         status: "PENDING",
@@ -684,7 +798,7 @@ async function register(req2, res) {
       mode: "subscription",
       customer: stripeCustomerId,
       line_items: [{
-        price: planConfig.price || "",
+        price: planConfig.price,
         quantity: 1
       }],
       success_url: `${process.env.APP_URL || "http://localhost:5000"}/api/billing/checkout-success?session_id={CHECKOUT_SESSION_ID}`,
@@ -707,9 +821,9 @@ async function register(req2, res) {
     });
   }
 }
-async function handleCheckoutSuccess(req2, res) {
+async function handleCheckoutSuccess(req, res) {
   try {
-    const sessionId = req2.query.session_id;
+    const sessionId = req.query.session_id;
     if (!sessionId) {
       return res.redirect("/register?error=missing_session");
     }
@@ -746,15 +860,15 @@ async function handleCheckoutSuccess(req2, res) {
     return res.redirect("/register?error=processing_failed");
   }
 }
-async function listSchools(req2, res) {
+async function listSchools(req, res) {
   try {
-    const schools2 = await storage.getAllSchools();
-    res.json(schools2);
+    const schools3 = await storage.getAllSchools();
+    res.json(schools3);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 }
-async function listPayments(req2, res) {
+async function listPayments(req, res) {
   try {
     const payments2 = await storage.getAllPayments();
     res.json(payments2.slice(0, 200));
@@ -762,9 +876,9 @@ async function listPayments(req2, res) {
     res.status(500).json({ error: error.message });
   }
 }
-async function createPortalSession(req2, res) {
+async function createPortalSession(req, res) {
   try {
-    const { customerId } = req2.body;
+    const { customerId } = req.body;
     if (!customerId) {
       return res.status(400).json({ error: "Customer ID required" });
     }
@@ -778,7 +892,7 @@ async function createPortalSession(req2, res) {
     res.status(500).json({ error: "Failed to create portal session" });
   }
 }
-var PLAN_CONFIG, stripe, stripeWebhook;
+var PLAN_CONFIG, STRIPE_SECRET_KEY, stripe, stripeWebhook;
 var init_routes_billing = __esm({
   "server/routes-billing.ts"() {
     "use strict";
@@ -786,12 +900,15 @@ var init_routes_billing = __esm({
     init_session();
     PLAN_CONFIG = {
       TRIAL: {
-        maxTeachers: 1,
-        maxStudents: 200,
+        maxTeachers: -1,
+        // Unlimited teachers for school testing 
+        maxStudents: -1,
+        // Unlimited students for school testing
         price: null,
         // Free trial 
         name: "Free Trial",
-        duration: "14 days"
+        duration: "unlimited"
+        // Unlimited duration for school testing
       },
       TEACHER_MONTHLY: {
         maxTeachers: 1,
@@ -843,18 +960,21 @@ var init_routes_billing = __esm({
         duration: "yearly"
       }
     };
-    if (!process.env.STRIPE_SECRET_KEY) {
-      throw new Error("Missing required Stripe secret: STRIPE_SECRET_KEY");
+    STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+    stripe = null;
+    if (STRIPE_SECRET_KEY) {
+      stripe = new Stripe(STRIPE_SECRET_KEY, {
+        apiVersion: "2023-10-16"
+      });
+    } else {
+      console.warn("STRIPE_SECRET_KEY not set - billing functionality will be disabled");
     }
-    stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: "2025-07-30.basil"
-    });
-    stripeWebhook = async (req2, res) => {
-      const sig = req2.headers["stripe-signature"];
+    stripeWebhook = async (req, res) => {
+      const sig = req.headers["stripe-signature"];
       let event;
       try {
         event = stripe.webhooks.constructEvent(
-          req2.body,
+          req.body,
           sig,
           process.env.STRIPE_WEBHOOK_SECRET
         );
@@ -891,8 +1011,8 @@ var init_routes_billing = __esm({
           case "customer.subscription.deleted": {
             const subscription = event.data.object;
             const subscriptionId = subscription.id;
-            const schools2 = await storage.getAllSchools();
-            const school = schools2.find((s) => s.stripeSubscriptionId === subscriptionId);
+            const schools3 = await storage.getAllSchools();
+            const school = schools3.find((s) => s.stripeSubscriptionId === subscriptionId);
             if (school) {
               await storage.updateSchool(school.id, {
                 status: "CANCELLED",
@@ -918,8 +1038,8 @@ var init_routes_billing = __esm({
               "price_1RuIMdBw14YCsyD6kMEIEhTG": "LARGE_SCHOOL"
             };
             const newPlan = planMapping[priceId || ""];
-            const schools2 = await storage.getAllSchools();
-            const school = schools2.find((s) => s.stripeSubscriptionId === subscriptionId);
+            const schools3 = await storage.getAllSchools();
+            const school = schools3.find((s) => s.stripeSubscriptionId === subscriptionId);
             if (school && newPlan) {
               await storage.updateSchool(school.id, {
                 plan: newPlan
@@ -950,62 +1070,6 @@ var init_routes_billing = __esm({
   }
 });
 
-// server/firebaseAdmin.ts
-var firebaseAdmin_exports = {};
-__export(firebaseAdmin_exports, {
-  default: () => firebaseAdmin_default
-});
-import admin from "firebase-admin";
-import fs2 from "fs";
-import path3 from "path";
-function getPrivateKey() {
-  let privateKey = process.env.FIREBASE_PRIVATE_KEY || "";
-  if (!privateKey.includes("BEGIN PRIVATE KEY")) {
-    console.warn("[FirebaseAdmin] Environment variable appears corrupted, trying fallback file...");
-    try {
-      const keyPath = path3.resolve(import.meta.dirname, "..", "firebase-key.txt");
-      if (fs2.existsSync(keyPath)) {
-        privateKey = fs2.readFileSync(keyPath, "utf-8");
-        console.log("[FirebaseAdmin] Using Firebase key from fallback file");
-      }
-    } catch (err) {
-      console.warn("[FirebaseAdmin] Fallback file read failed:", err instanceof Error ? err.message : String(err));
-    }
-  }
-  return privateKey.replace(/\\n/g, "\n").replace(/"/g, "").replace(/^\s+|\s+$/g, "");
-}
-var req, missing, firebaseAdmin_default;
-var init_firebaseAdmin = __esm({
-  "server/firebaseAdmin.ts"() {
-    "use strict";
-    req = ["FIREBASE_PROJECT_ID", "FIREBASE_CLIENT_EMAIL", "FIREBASE_PRIVATE_KEY"];
-    missing = req.filter((k) => !process.env[k]);
-    if (missing.length) {
-      const msg = `[FirebaseAdmin] Missing envs: ${missing.join(", ")}`;
-      console.warn(msg + " \u2014 skipping Firebase Admin init.");
-    } else if (!admin.apps.length) {
-      try {
-        const privateKey = getPrivateKey();
-        if (!privateKey.includes("BEGIN PRIVATE KEY")) {
-          throw new Error("Invalid private key format");
-        }
-        admin.initializeApp({
-          credential: admin.credential.cert({
-            projectId: process.env.FIREBASE_PROJECT_ID,
-            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-            privateKey
-          })
-        });
-        console.log("[FirebaseAdmin] Successfully initialized with Firebase");
-      } catch (err) {
-        console.warn("[FirebaseAdmin] Init failed:", err instanceof Error ? err.message : String(err));
-        console.warn("[FirebaseAdmin] Continuing without Firebase - deployment will still work");
-      }
-    }
-    firebaseAdmin_default = admin;
-  }
-});
-
 // server/index.ts
 import express2 from "express";
 import bodyParser from "body-parser";
@@ -1019,32 +1083,32 @@ import { createServer } from "http";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { nanoid } from "nanoid";
-
-// server/auth/requireUser.ts
-init_session();
-function optionalUser(req2, res, next) {
-  const token = req2.cookies?.pp_session;
-  if (token) {
-    const user = getUserFromSession(token);
-    if (user) {
-      req2.user = user;
-    }
-  }
-  next();
-}
-
-// server/routes.ts
-import { randomUUID } from "crypto";
+import { randomUUID as randomUUID2 } from "crypto";
+import bcrypt2 from "bcryptjs";
 import Stripe2 from "stripe";
 
 // server/emailService.ts
 import { MailService } from "@sendgrid/mail";
-if (!process.env.SENDGRID_API_KEY) {
-  throw new Error("SENDGRID_API_KEY environment variable must be set");
+var SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
+var mailService = null;
+if (SENDGRID_API_KEY) {
+  mailService = new MailService();
+  mailService.setApiKey(SENDGRID_API_KEY);
+} else {
+  console.warn("SENDGRID_API_KEY not set - email functionality will be disabled");
 }
-var mailService = new MailService();
-mailService.setApiKey(process.env.SENDGRID_API_KEY);
 async function sendPasswordResetEmail(email, resetToken, userName) {
+  if (!mailService) {
+    console.warn("Email service not available - logging reset token for testing:");
+    console.log("=".repeat(60));
+    console.log("PASSWORD RESET REQUEST");
+    console.log("=".repeat(60));
+    console.log(`Email: ${email}`);
+    console.log(`User: ${userName}`);
+    console.log(`Reset URL: ${process.env.NODE_ENV === "production" ? "https://" + process.env.REPLIT_DOMAINS : "http://localhost:5000"}/reset-password?token=${resetToken}`);
+    console.log("=".repeat(60));
+    return true;
+  }
   const resetUrl = `${process.env.NODE_ENV === "production" ? "https://" + process.env.REPLIT_DOMAINS : "http://localhost:5000"}/reset-password?token=${resetToken}`;
   try {
     await mailService.send({
@@ -1137,9 +1201,9 @@ var PassResetScheduler = class {
   async performDailyReset() {
     try {
       console.log("Starting daily pass reset at midnight...");
-      const schools2 = await this.getAllSchools();
+      const schools3 = await this.getAllSchools();
       let totalReturned = 0;
-      for (const school of schools2) {
+      for (const school of schools3) {
         const returned = await storage.returnAllActivePasses(school.schoolId);
         totalReturned += returned;
         if (returned > 0) {
@@ -1206,12 +1270,12 @@ function validateSchoolName(name) {
 init_storage();
 import { Router } from "express";
 var testRouter = Router();
-testRouter.post("/__test__/createSchool", async (req2, res) => {
+testRouter.post("/__test__/createSchool", async (req, res) => {
   if (process.env.NODE_ENV === "production") {
     return res.status(404).end();
   }
   try {
-    const { name } = req2.body || {};
+    const { name } = req.body || {};
     if (!name) {
       return res.status(400).json({ error: "Missing name" });
     }
@@ -1248,12 +1312,12 @@ testRouter.post("/__test__/createSchool", async (req2, res) => {
     return res.status(500).json({ error: error.message });
   }
 });
-testRouter.post("/__test__/checkSlug", async (req2, res) => {
+testRouter.post("/__test__/checkSlug", async (req, res) => {
   if (process.env.NODE_ENV === "production") {
     return res.status(404).end();
   }
   try {
-    const { name } = req2.body || {};
+    const { name } = req.body || {};
     if (!name) {
       return res.status(400).json({ error: "Missing name" });
     }
@@ -1278,15 +1342,15 @@ testRouter.post("/__test__/checkSlug", async (req2, res) => {
 // server/routes-admin.ts
 init_db();
 init_schema();
-import { eq as eq2, desc, count } from "drizzle-orm";
+import { eq as eq2, desc as desc2, count as count2 } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import jwt2 from "jsonwebtoken";
 function signAdmin(email) {
   return jwt2.sign({ role: "superadmin", email }, process.env.JWT_SECRET, { expiresIn: "7d" });
 }
-async function requireAdmin(req2, res, next) {
+async function requireAdmin(req, res, next) {
   try {
-    const token = req2.cookies?.admin;
+    const token = req.cookies?.admin;
     if (!token) return res.status(401).send("no-auth");
     const payload = jwt2.verify(token, process.env.JWT_SECRET);
     if (payload.role !== "superadmin") return res.status(403).send("forbidden");
@@ -1298,8 +1362,8 @@ async function requireAdmin(req2, res, next) {
   }
 }
 var loginHits = /* @__PURE__ */ new Map();
-function rateLimitLogin(req2, res, next) {
-  const key = req2.ip || req2.headers["x-forwarded-for"] || "unknown";
+function rateLimitLogin(req, res, next) {
+  const key = req.ip || req.headers["x-forwarded-for"] || "unknown";
   const now = Date.now();
   const rec = loginHits.get(key) || { count: 0, ts: now };
   if (now - rec.ts > 6e4) {
@@ -1312,13 +1376,13 @@ function rateLimitLogin(req2, res, next) {
   next();
 }
 function registerAdminRoutes(app2) {
-  app2.post("/api/admin/bootstrap", async (req2, res) => {
+  app2.post("/api/admin/bootstrap", async (req, res) => {
     try {
-      const { email, password, token } = req2.body || {};
+      const { email, password, token } = req.body || {};
       if (!email || !password) {
         return res.status(400).json({ ok: false, error: "missing" });
       }
-      const [{ value: totalAdmins }] = await db.select({ value: count() }).from(adminUsers);
+      const [{ value: totalAdmins }] = await db.select({ value: count2() }).from(adminUsers);
       if (process.env.ADMIN_BOOTSTRAP_TOKEN && token !== process.env.ADMIN_BOOTSTRAP_TOKEN) {
         return res.status(401).json({ ok: false, error: "bad-bootstrap-token" });
       }
@@ -1346,9 +1410,9 @@ function registerAdminRoutes(app2) {
       res.status(500).json({ ok: false, error: "server-error" });
     }
   });
-  app2.post("/api/admin/login", rateLimitLogin, async (req2, res) => {
+  app2.post("/api/admin/login", rateLimitLogin, async (req, res) => {
     try {
-      const { email, password } = req2.body || {};
+      const { email, password } = req.body || {};
       if (!email || !password) {
         return res.status(400).json({ ok: false, error: "missing-credentials" });
       }
@@ -1383,18 +1447,18 @@ function registerAdminRoutes(app2) {
   });
   app2.get("/api/admin/status", async (_req, res) => {
     try {
-      const [{ value: totalAdmins }] = await db.select({ value: count() }).from(adminUsers);
+      const [{ value: totalAdmins }] = await db.select({ value: count2() }).from(adminUsers);
       res.json({ hasAdmins: totalAdmins > 0 });
     } catch (error) {
       console.error("Admin status error:", error);
       res.status(500).json({ error: "Failed to check admin status" });
     }
   });
-  app2.use("/api/admin", (req2, res, next) => {
-    if (req2.path === "/status" || req2.path === "/bootstrap" || req2.path === "/login" || req2.path === "/logout") {
+  app2.use("/api/admin", (req, res, next) => {
+    if (req.path === "/status" || req.path === "/bootstrap" || req.path === "/login" || req.path === "/logout") {
       return next();
     }
-    requireAdmin(req2, res, next);
+    requireAdmin(req, res, next);
   });
   app2.get("/api/admin/schools", async (_req, res) => {
     try {
@@ -1405,8 +1469,8 @@ function registerAdminRoutes(app2) {
       res.status(500).json({ error: "Failed to fetch schools" });
     }
   });
-  app2.delete("/api/admin/schools/:id", async (req2, res) => {
-    const id = String(req2.params.id || "");
+  app2.delete("/api/admin/schools/:id", async (req, res) => {
+    const id = String(req.params.id || "");
     if (!/^[0-9a-fA-F-]{36}$/.test(id)) {
       return res.status(400).json({ error: "bad_id" });
     }
@@ -1447,16 +1511,16 @@ function registerAdminRoutes(app2) {
   });
   app2.get("/api/admin/events", async (_req, res) => {
     try {
-      const events = await db.select().from(subscriptionEvents).orderBy(desc(subscriptionEvents.createdAt)).limit(500);
+      const events = await db.select().from(subscriptionEvents).orderBy(desc2(subscriptionEvents.createdAt)).limit(500);
       res.json(events);
     } catch (error) {
       console.error("Get events error:", error);
       res.status(500).json({ error: "Failed to fetch events" });
     }
   });
-  app2.patch("/api/admin/schools/:id", async (req2, res) => {
+  app2.patch("/api/admin/schools/:id", async (req, res) => {
     try {
-      const { plan, status, maxTeachers, maxStudents, adminEmail } = req2.body ?? {};
+      const { plan, status, maxTeachers, maxStudents, adminEmail } = req.body ?? {};
       const updates = {
         ...plan ? { plan } : {},
         ...status ? { status } : {},
@@ -1464,13 +1528,26 @@ function registerAdminRoutes(app2) {
         ...maxStudents !== void 0 ? { maxStudents } : {},
         ...adminEmail ? { adminEmail } : {}
       };
-      await db.update(schools).set(updates).where(eq2(schools.id, req2.params.id));
+      await db.update(schools).set(updates).where(eq2(schools.id, req.params.id));
       res.json({ ok: true });
     } catch (error) {
       console.error("Update school error:", error);
       res.status(500).json({ error: "Failed to update school" });
     }
   });
+}
+
+// server/auth/requireUser.ts
+init_session();
+function optionalUser(req, res, next) {
+  const token = req.cookies?.pp_session;
+  if (token) {
+    const user = getUserFromSession(token);
+    if (user) {
+      req.user = user;
+    }
+  }
+  next();
 }
 
 // server/routes.ts
@@ -1516,25 +1593,34 @@ if (process.env.STRIPE_SECRET_KEY) {
     apiVersion: "2023-10-16"
   });
 }
-var requireAuth = (req2, res, next) => {
-  const authHeader = req2.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ message: "Authentication required" });
-  }
-  const token = authHeader.substring(7);
-  if (!token) {
-    return res.status(401).json({ message: "Authentication required" });
-  }
-  console.log("Auth middleware - token:", token.substring(0, 8) + "...");
-  req2.userId = token;
-  next();
-};
-var checkTrialStatus = async (req2, res, next) => {
-  try {
-    if (!req2.userId) {
+var requireAuth = async (req, res, next) => {
+  const sessionToken = req.cookies?.pp_session;
+  if (sessionToken) {
+    const { getUserFromSession: getUserFromSession2 } = await Promise.resolve().then(() => (init_session(), session_exports));
+    const sessionData = getUserFromSession2(sessionToken);
+    if (sessionData) {
+      req.user = sessionData;
+      req.userId = sessionData.userId;
       return next();
     }
-    const user = await storage.getUser(req2.userId);
+  }
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.substring(7);
+    if (token) {
+      console.log("Auth middleware - using Bearer token:", token.substring(0, 8) + "...");
+      req.userId = token;
+      return next();
+    }
+  }
+  return res.status(401).json({ message: "Authentication required" });
+};
+var checkTrialStatus = async (req, res, next) => {
+  try {
+    if (!req.userId) {
+      return next();
+    }
+    const user = await storage.getUser(req.userId);
     if (!user || !user.schoolId) {
       return next();
     }
@@ -1573,13 +1659,13 @@ async function registerRoutes(app2) {
     app2.use(testRouter);
     console.log("\u{1F9EA} Test routes mounted for development");
   }
-  app2.get("/api/billing/checkout-success", async (req2, res) => {
+  app2.get("/api/billing/checkout-success", async (req, res) => {
     const { handleCheckoutSuccess: handleCheckoutSuccess2 } = await Promise.resolve().then(() => (init_routes_billing(), routes_billing_exports));
-    return handleCheckoutSuccess2(req2, res);
+    return handleCheckoutSuccess2(req, res);
   });
-  app2.post("/api/auth/login", async (req2, res) => {
+  app2.post("/api/auth/login", async (req, res) => {
     try {
-      const { email, password, schoolId } = req2.body;
+      const { email, password, schoolId } = req.body;
       console.log("Login attempt:", { email, hasSchoolId: !!schoolId });
       if (!email || !password) {
         return res.status(400).json({ error: "missing_credentials" });
@@ -1592,8 +1678,8 @@ async function registerRoutes(app2) {
         }
         let passwordValid2 = false;
         if (user.password.startsWith("$2a$") || user.password.startsWith("$2b$")) {
-          const bcrypt2 = (await import("bcryptjs")).default;
-          passwordValid2 = await bcrypt2.compare(password, user.password);
+          const bcrypt6 = (await import("bcryptjs")).default;
+          passwordValid2 = await bcrypt6.compare(password, user.password);
         } else {
           passwordValid2 = user.password === password;
         }
@@ -1630,8 +1716,8 @@ async function registerRoutes(app2) {
       let passwordValid = false;
       const firstPassword = candidates[0].password;
       if (firstPassword.startsWith("$2a$") || firstPassword.startsWith("$2b$")) {
-        const bcrypt2 = (await import("bcryptjs")).default;
-        passwordValid = await bcrypt2.compare(password, firstPassword);
+        const bcrypt6 = (await import("bcryptjs")).default;
+        passwordValid = await bcrypt6.compare(password, firstPassword);
       } else {
         passwordValid = firstPassword === password;
       }
@@ -1663,8 +1749,8 @@ async function registerRoutes(app2) {
         });
       }
       const schoolIds = candidates.map((c) => c.schoolId);
-      const schools2 = await Promise.all(schoolIds.map((id) => storage.getSchool(id)));
-      const validSchools = schools2.filter(Boolean).map((school) => ({
+      const schools3 = await Promise.all(schoolIds.map((id) => storage.getSchool(id)));
+      const validSchools = schools3.filter(Boolean).map((school) => ({
         id: school.id,
         name: school.name
       }));
@@ -1679,17 +1765,17 @@ async function registerRoutes(app2) {
       res.status(500).json({ error: "login_failed" });
     }
   });
-  app2.post("/api/auth/logout", (req2, res) => {
+  app2.post("/api/auth/logout", (req, res) => {
     clearUserSession(res);
     res.json({ success: true });
   });
-  app2.get("/api/auth/me", optionalUser, async (req2, res) => {
-    if (!req2.user) {
+  app2.get("/api/auth/me", optionalUser, async (req, res) => {
+    if (!req.user) {
       return res.json({ authenticated: false });
     }
     try {
-      const user = await storage.getUser(req2.user.userId);
-      const school = await storage.getSchool(req2.user.schoolId);
+      const user = await storage.getUser(req.user.userId);
+      const school = await storage.getSchool(req.user.schoolId);
       if (!user || !school) {
         clearUserSession(res);
         return res.json({ authenticated: false });
@@ -1710,18 +1796,18 @@ async function registerRoutes(app2) {
       res.json({ authenticated: false });
     }
   });
-  app2.post("/api/register-school", async (req2, res) => {
+  app2.post("/api/register-school", async (req, res) => {
     try {
-      const { school, admin: admin2, subscription } = req2.body;
+      const { school, admin, subscription } = req.body;
       console.log("School registration request:", {
         schoolName: school?.name,
-        adminEmail: admin2?.email,
+        adminEmail: admin?.email,
         plan: subscription?.planId
       });
-      if (!school.name || !admin2.email || !admin2.name || !admin2.password || !subscription.planId) {
+      if (!school.name || !admin.email || !admin.name || !admin.password || !subscription.planId) {
         return res.status(400).json({ message: "Missing required fields" });
       }
-      const adminEmailNorm = admin2.email.trim().toLowerCase();
+      const adminEmailNorm = admin.email.trim().toLowerCase();
       const existingUser = await storage.getUserByEmail(adminEmailNorm);
       if (existingUser) {
         console.log(`User already exists but allowing registration: ${adminEmailNorm}`);
@@ -1744,8 +1830,8 @@ async function registerRoutes(app2) {
       console.log("Created school:", newSchool.id);
       const newAdmin = await storage.createUser({
         email: adminEmailNorm,
-        name: admin2.name,
-        password: admin2.password,
+        name: admin.name,
+        password: admin.password,
         // Will be hashed by storage layer
         schoolId: newSchool.id,
         isAdmin: true,
@@ -1762,8 +1848,8 @@ async function registerRoutes(app2) {
               price: subscription.priceId,
               quantity: 1
             }],
-            success_url: `${req2.headers.origin}/registration-success?session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${req2.headers.origin}/register`,
+            success_url: `${req.headers.origin}/registration-success?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${req.headers.origin}/register`,
             metadata: {
               schoolId: newSchool.id,
               adminId: newAdmin.id,
@@ -1799,9 +1885,9 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message || "Registration failed" });
     }
   });
-  app2.get("/api/registration-success", async (req2, res) => {
+  app2.get("/api/registration-success", async (req, res) => {
     try {
-      const { session_id } = req2.query;
+      const { session_id } = req.query;
       if (!session_id || !stripe2) {
         return res.status(400).json({ message: "Invalid session" });
       }
@@ -1823,9 +1909,9 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.post("/api/auth/login", async (req2, res) => {
+  app2.post("/api/auth/login", async (req, res) => {
     try {
-      const { email, password } = req2.body;
+      const { email, password } = req.body;
       if (email === "passpilotapp@gmail.com") {
         const user2 = await storage.getUserByEmail(email);
         if (user2 && user2.isPlatformOwner) {
@@ -1875,9 +1961,9 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.post("/api/auth/firebase-login", async (req2, res) => {
+  app2.post("/api/auth/firebase-login", async (req, res) => {
     try {
-      const { firebaseUid, email } = req2.body;
+      const { firebaseUid, email } = req.body;
       const allUsers = [];
       let user = allUsers.find((u) => u.firebaseUid === firebaseUid);
       if (!user && email) {
@@ -1902,16 +1988,88 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.post("/api/auth/register-school", async (req2, res) => {
+  app2.post("/api/auth/register-school", async (req, res) => {
     try {
-      const { schoolName, district, adminName, adminEmail, adminPassword, plan = "TRIAL" } = req2.body;
+      const {
+        email,
+        password,
+        name,
+        schoolName,
+        plan = "free_trial"
+      } = req.body;
+      if (!email || !password || !name || !schoolName) {
+        return res.status(400).json({
+          error: "MISSING_FIELDS",
+          message: "Email, password, name, and school name are required"
+        });
+      }
+      const existingUsers = await storage.getUsersByEmail(email);
+      if (existingUsers.length > 0) {
+        return res.status(400).json({
+          error: "EMAIL_EXISTS",
+          message: "An account with this email already exists"
+        });
+      }
+      const school = await storage.createSchool({
+        id: randomUUID2(),
+        schoolId: randomUUID2(),
+        name: schoolName,
+        adminEmail: email.toLowerCase().trim(),
+        emailDomain: email.split("@")[1],
+        plan,
+        maxTeachers: plan === "free_trial" ? 3 : 10,
+        maxStudents: 200,
+        trialStartDate: /* @__PURE__ */ new Date(),
+        trialEndDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1e3),
+        // 14 days
+        verified: true,
+        isTrialExpired: false
+      });
+      const hashedPassword = await bcrypt2.hash(password, 12);
+      const adminUser = await storage.createUser({
+        id: randomUUID2(),
+        email: email.toLowerCase().trim(),
+        password: hashedPassword,
+        name: name.trim(),
+        schoolId: school.id,
+        isAdmin: true,
+        assignedGrades: [],
+        status: "active"
+      });
+      res.json({
+        success: true,
+        user: {
+          id: adminUser.id,
+          email: adminUser.email,
+          name: adminUser.name,
+          schoolId: school.id,
+          schoolName: school.name,
+          isAdmin: true
+        },
+        school: {
+          id: school.id,
+          name: school.name,
+          plan: school.plan
+        }
+      });
+    } catch (error) {
+      console.error("Registration error:", error);
+      res.status(500).json({
+        error: "REGISTRATION_FAILED",
+        message: error.message
+      });
+    }
+  });
+  app2.post("/api/auth/register-school-old", async (req, res) => {
+    try {
+      const { schoolName, district, adminName, adminEmail, adminPassword, plan = "TRIAL" } = req.body;
       console.log("=== CURRENT REGISTRATION DATA ===", {
         schoolName,
         adminEmail,
         adminName,
         plan,
         timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-        bodyKeys: Object.keys(req2.body)
+        bodyKeys: Object.keys(req.body)
       });
       if (!schoolName || !adminName || !adminEmail || !adminPassword) {
         console.error("Missing fields in current submission:", {
@@ -2102,10 +2260,10 @@ async function registerRoutes(app2) {
       res.status(400).json({ message: error.message });
     }
   });
-  app2.get("/api/auth/check-email/:email", async (req2, res) => {
+  app2.get("/api/auth/check-email/:email", async (req, res) => {
     try {
-      const { email } = req2.params;
-      const { allowUpgrade } = req2.query;
+      const { email } = req.params;
+      const { allowUpgrade } = req.query;
       if (!email) {
         return res.status(400).json({ message: "Email is required" });
       }
@@ -2137,9 +2295,9 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.post("/api/auth/upgrade-plan", async (req2, res) => {
+  app2.post("/api/auth/upgrade-plan", async (req, res) => {
     try {
-      const { email, newPlan } = req2.body;
+      const { email, newPlan } = req.body;
       if (!email || !newPlan) {
         return res.status(400).json({ message: "Email and new plan are required" });
       }
@@ -2168,15 +2326,15 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.get("/api/schools/by-domain/:domain", async (req2, res) => {
+  app2.get("/api/schools/by-domain/:domain", async (req, res) => {
     try {
-      const { domain } = req2.params;
+      const { domain } = req.params;
       if (!domain) {
         return res.status(400).json({ message: "Domain is required" });
       }
-      const schools2 = await storage.getSchoolsByEmailDomain(domain.toLowerCase());
+      const schools3 = await storage.getSchoolsByEmailDomain(domain.toLowerCase());
       res.json({
-        schools: schools2.map((school) => ({
+        schools: schools3.map((school) => ({
           id: school.id,
           name: school.name,
           district: school.district,
@@ -2188,9 +2346,9 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.post("/api/auth/register-teacher", async (req2, res) => {
+  app2.post("/api/auth/register-teacher", async (req, res) => {
     try {
-      const { teacherName, teacherEmail, teacherPassword, schoolName } = req2.body;
+      const { teacherName, teacherEmail, teacherPassword, schoolName } = req.body;
       if (!teacherName || !teacherEmail || !teacherPassword || !schoolName) {
         return res.status(400).json({ message: "All fields are required" });
       }
@@ -2241,9 +2399,9 @@ async function registerRoutes(app2) {
       res.status(400).json({ message: error.message });
     }
   });
-  app2.get("/verify-trial", async (req2, res) => {
+  app2.get("/verify-trial", async (req, res) => {
     try {
-      const { token } = req2.query;
+      const { token } = req.query;
       if (!token || typeof token !== "string") {
         return res.status(400).send(`
           <!DOCTYPE html>
@@ -2371,9 +2529,9 @@ async function registerRoutes(app2) {
       `);
     }
   });
-  app2.post("/api/test/generate-verification", async (req2, res) => {
+  app2.post("/api/test/generate-verification", async (req, res) => {
     try {
-      const { email } = req2.body;
+      const { email } = req.body;
       if (!email) {
         return res.status(400).json({ message: "Email required" });
       }
@@ -2391,7 +2549,7 @@ async function registerRoutes(app2) {
       if (!school.verificationToken) {
         return res.status(400).json({ message: "No verification token found for this account" });
       }
-      const verificationUrl = `${req2.protocol}://${req2.get("host")}/verify-trial?token=${school.verificationToken}`;
+      const verificationUrl = `${req.protocol}://${req.get("host")}/verify-trial?token=${school.verificationToken}`;
       res.json({
         message: "Verification link generated for testing",
         verificationUrl,
@@ -2403,12 +2561,12 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.post("/api/create-subscription-checkout", async (req2, res) => {
+  app2.post("/api/create-subscription-checkout", async (req, res) => {
     if (!stripe2) {
       return res.status(500).json({ message: "Stripe not configured" });
     }
     try {
-      const { priceId, schoolData } = req2.body;
+      const { priceId, schoolData } = req.body;
       const customer = await stripe2.customers.create({
         email: schoolData.adminEmail,
         name: schoolData.adminName,
@@ -2428,8 +2586,8 @@ async function registerRoutes(app2) {
           }
         ],
         mode: "subscription",
-        success_url: `${req2.headers.origin}/registration-success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${req2.headers.origin}/registration-cancelled`,
+        success_url: `${req.headers.origin}/registration-success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${req.headers.origin}/registration-cancelled`,
         metadata: {
           schoolName: schoolData.schoolName,
           district: schoolData.district || "",
@@ -2446,18 +2604,18 @@ async function registerRoutes(app2) {
         return res.status(400).json({
           message: "Stripe price ID not found. Please create the pricing products in your Stripe dashboard first.",
           error: "STRIPE_PRICE_MISSING",
-          priceId: req2.body.priceId
+          priceId: req.body.priceId
         });
       }
       res.status(500).json({ message: error.message });
     }
   });
-  app2.post("/api/complete-registration", async (req2, res) => {
+  app2.post("/api/complete-registration", async (req, res) => {
     if (!stripe2) {
       return res.status(500).json({ message: "Stripe not configured" });
     }
     try {
-      const { sessionId } = req2.body;
+      const { sessionId } = req.body;
       const session = await stripe2.checkout.sessions.retrieve(sessionId);
       if (session.payment_status === "paid") {
         const metadata = session.metadata;
@@ -2477,10 +2635,10 @@ async function registerRoutes(app2) {
           isTrialExpired: false
         });
         const school = await storage.createSchool(schoolData);
-        let admin2;
+        let admin;
         const existingUser = await storage.getUserByEmail(metadata.adminEmail);
         if (existingUser) {
-          admin2 = await storage.updateUser(existingUser.id, {
+          admin = await storage.updateUser(existingUser.id, {
             schoolId: school.id,
             isAdmin: true,
             status: "active"
@@ -2495,15 +2653,15 @@ async function registerRoutes(app2) {
             assignedGrades: [],
             status: "active"
           });
-          admin2 = await storage.createUser(userData);
+          admin = await storage.createUser(userData);
         }
         res.json({
           success: true,
           user: {
-            ...admin2,
+            ...admin,
             schoolName: school.name
           },
-          token: admin2.id,
+          token: admin.id,
           message: "School registration completed successfully!"
         });
       } else {
@@ -2514,14 +2672,17 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.post("/api/cancel-subscription", requireAuth, async (req2, res) => {
+  app2.post("/api/cancel-subscription", requireAuth, async (req, res) => {
     if (!stripe2) {
       return res.status(500).json({ message: "Stripe not configured" });
     }
     try {
-      const user = await storage.getUser(req2.userId);
+      const user = await storage.getUser(req.userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
+      }
+      if (!user.isAdmin) {
+        return res.status(403).json({ message: "Only administrators can manage subscriptions" });
       }
       if (!user.isAdmin) {
         return res.status(403).json({ message: "Only administrators can cancel subscriptions" });
@@ -2556,14 +2717,17 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.get("/api/subscription-status", requireAuth, async (req2, res) => {
+  app2.get("/api/subscription-status", requireAuth, async (req, res) => {
     if (!stripe2) {
       return res.status(500).json({ message: "Stripe not configured" });
     }
     try {
-      const user = await storage.getUser(req2.userId);
+      const user = await storage.getUser(req.userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
+      }
+      if (!user.isAdmin) {
+        return res.status(403).json({ message: "Only administrators can view subscription status" });
       }
       const school = await storage.getSchool(user.schoolId);
       if (!school) {
@@ -2601,17 +2765,17 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.post("/api/reactivate-subscription", requireAuth, async (req2, res) => {
+  app2.post("/api/reactivate-subscription", requireAuth, async (req, res) => {
     if (!stripe2) {
       return res.status(500).json({ message: "Stripe not configured" });
     }
     try {
-      const user = await storage.getUser(req2.userId);
+      const user = await storage.getUser(req.userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
       if (!user.isAdmin) {
-        return res.status(403).json({ message: "Only administrators can reactivate subscriptions" });
+        return res.status(403).json({ message: "Only administrators can manage subscriptions" });
       }
       const school = await storage.getSchool(user.schoolId);
       if (!school) {
@@ -2645,9 +2809,9 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.get("/api/trial-status", requireAuth, async (req2, res) => {
+  app2.get("/api/trial-status", requireAuth, async (req, res) => {
     try {
-      const user = await storage.getUser(req2.userId);
+      const user = await storage.getUser(req.userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
@@ -2675,9 +2839,9 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.get("/api/users/me", requireAuth, checkTrialStatus, async (req2, res) => {
+  app2.get("/api/users/me", requireAuth, checkTrialStatus, async (req, res) => {
     try {
-      const user = await storage.getUser(req2.userId);
+      const user = await storage.getUser(req.userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
@@ -2690,9 +2854,9 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.get("/api/grades", requireAuth, checkTrialStatus, async (req2, res) => {
+  app2.get("/api/grades", requireAuth, checkTrialStatus, async (req, res) => {
     try {
-      const user = await storage.getUser(req2.userId);
+      const user = await storage.getUser(req.userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
@@ -2702,14 +2866,14 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.post("/api/grades", requireAuth, checkTrialStatus, async (req2, res) => {
+  app2.post("/api/grades", requireAuth, checkTrialStatus, async (req, res) => {
     try {
-      const user = await storage.getUser(req2.userId);
+      const user = await storage.getUser(req.userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
       const gradeData = insertGradeSchema.parse({
-        ...req2.body,
+        ...req.body,
         schoolId: user.schoolId
       });
       const grade = await storage.createGrade(gradeData);
@@ -2718,46 +2882,46 @@ async function registerRoutes(app2) {
       res.status(400).json({ message: error.message });
     }
   });
-  app2.put("/api/grades/:id", requireAuth, async (req2, res) => {
+  app2.put("/api/grades/:id", requireAuth, async (req, res) => {
     try {
-      const grade = await storage.updateGrade(req2.params.id, req2.body);
+      const grade = await storage.updateGrade(req.params.id, req.body);
       res.json(grade);
     } catch (error) {
       res.status(400).json({ message: error.message });
     }
   });
-  app2.delete("/api/grades/:id", requireAuth, async (req2, res) => {
+  app2.delete("/api/grades/:id", requireAuth, async (req, res) => {
     try {
-      await storage.deleteGrade(req2.params.id);
+      await storage.deleteGrade(req.params.id);
       res.json({ message: "Grade deleted successfully" });
     } catch (error) {
       res.status(400).json({ message: error.message });
     }
   });
-  app2.put("/api/users/me", requireAuth, async (req2, res) => {
+  app2.put("/api/users/me", requireAuth, async (req, res) => {
     try {
-      const user = await storage.getUser(req2.userId);
+      const user = await storage.getUser(req.userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      const { name, email, assignedGrades } = req2.body;
+      const { name, email, assignedGrades } = req.body;
       const updateData = {};
       if (name !== void 0) updateData.name = name;
       if (email !== void 0) updateData.email = email;
       if (assignedGrades !== void 0) updateData.assignedGrades = assignedGrades;
-      const updatedUser = await storage.updateUser(req2.userId, updateData);
+      const updatedUser = await storage.updateUser(req.userId, updateData);
       res.json(updatedUser);
     } catch (error) {
       res.status(400).json({ message: error.message });
     }
   });
-  app2.put("/api/users/settings", requireAuth, async (req2, res) => {
+  app2.put("/api/users/settings", requireAuth, async (req, res) => {
     try {
-      const user = await storage.getUser(req2.userId);
+      const user = await storage.getUser(req.userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      const { enableNotifications, autoReturn, passTimeout } = req2.body;
+      const { enableNotifications, autoReturn, passTimeout } = req.body;
       const updateData = {};
       if (enableNotifications !== void 0) updateData.enableNotifications = enableNotifications;
       if (autoReturn !== void 0) updateData.autoReturn = autoReturn;
@@ -2769,7 +2933,7 @@ async function registerRoutes(app2) {
           return res.status(400).json({ message: "Pass timeout must be between 5 and 180 minutes" });
         }
       }
-      const updatedUser = await storage.updateUser(req2.userId, updateData);
+      const updatedUser = await storage.updateUser(req.userId, updateData);
       res.json({
         message: "Settings updated successfully",
         settings: {
@@ -2782,13 +2946,13 @@ async function registerRoutes(app2) {
       res.status(400).json({ message: error.message });
     }
   });
-  app2.put("/api/users/me/password", requireAuth, async (req2, res) => {
+  app2.put("/api/users/me/password", requireAuth, async (req, res) => {
     try {
-      const user = await storage.getUser(req2.userId);
+      const user = await storage.getUser(req.userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      const { currentPassword, newPassword } = req2.body;
+      const { currentPassword, newPassword } = req.body;
       if (!currentPassword || !newPassword) {
         return res.status(400).json({ message: "Current password and new password are required" });
       }
@@ -2798,33 +2962,33 @@ async function registerRoutes(app2) {
       if (user.password !== currentPassword) {
         return res.status(400).json({ message: "Current password is incorrect" });
       }
-      const updatedUser = await storage.updateUser(req2.userId, { password: newPassword });
+      const updatedUser = await storage.updateUser(req.userId, { password: newPassword });
       res.json({ message: "Password updated successfully" });
     } catch (error) {
       res.status(400).json({ message: error.message });
     }
   });
-  app2.get("/api/students", requireAuth, checkTrialStatus, async (req2, res) => {
+  app2.get("/api/students", requireAuth, checkTrialStatus, async (req, res) => {
     try {
-      const user = await storage.getUser(req2.userId);
+      const user = await storage.getUser(req.userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      const grade = req2.query.grade;
+      const grade = req.query.grade;
       const students2 = await storage.getStudentsBySchool(user.schoolId, grade);
       res.json(students2);
     } catch (error) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.post("/api/students", requireAuth, checkTrialStatus, async (req2, res) => {
+  app2.post("/api/students", requireAuth, checkTrialStatus, async (req, res) => {
     try {
-      const user = await storage.getUser(req2.userId);
+      const user = await storage.getUser(req.userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
       const studentData = insertStudentSchema.parse({
-        ...req2.body,
+        ...req.body,
         schoolId: user.schoolId
       });
       const student = await storage.createStudent(studentData);
@@ -2833,25 +2997,25 @@ async function registerRoutes(app2) {
       res.status(400).json({ message: error.message });
     }
   });
-  app2.put("/api/students/:id", requireAuth, async (req2, res) => {
+  app2.put("/api/students/:id", requireAuth, async (req, res) => {
     try {
-      const student = await storage.updateStudent(req2.params.id, req2.body);
+      const student = await storage.updateStudent(req.params.id, req.body);
       res.json(student);
     } catch (error) {
       res.status(400).json({ message: error.message });
     }
   });
-  app2.delete("/api/students/:id", requireAuth, async (req2, res) => {
+  app2.delete("/api/students/:id", requireAuth, async (req, res) => {
     try {
-      await storage.deleteStudent(req2.params.id);
+      await storage.deleteStudent(req.params.id);
       res.status(204).send();
     } catch (error) {
       res.status(400).json({ message: error.message });
     }
   });
-  app2.get("/api/passes/active", requireAuth, async (req2, res) => {
+  app2.get("/api/passes/active", requireAuth, async (req, res) => {
     try {
-      const user = await storage.getUser(req2.userId);
+      const user = await storage.getUser(req.userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
@@ -2866,18 +3030,18 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.get("/api/passes", requireAuth, async (req2, res) => {
+  app2.get("/api/passes", requireAuth, async (req, res) => {
     try {
-      const user = await storage.getUser(req2.userId);
+      const user = await storage.getUser(req.userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
       const filters = {
-        dateStart: req2.query.dateStart ? new Date(req2.query.dateStart) : void 0,
-        dateEnd: req2.query.dateEnd ? new Date(req2.query.dateEnd) : void 0,
-        grade: req2.query.grade,
-        teacherId: req2.query.teacherId,
-        passType: req2.query.passType
+        dateStart: req.query.dateStart ? new Date(req.query.dateStart) : void 0,
+        dateEnd: req.query.dateEnd ? new Date(req.query.dateEnd) : void 0,
+        grade: req.query.grade,
+        teacherId: req.query.teacherId,
+        passType: req.query.passType
       };
       let passes2 = await storage.getPassesBySchool(user.schoolId, filters);
       if (user.assignedGrades && user.assignedGrades.length > 0) {
@@ -2893,20 +3057,30 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.post("/api/passes", requireAuth, async (req2, res) => {
+  app2.post("/api/passes", requireAuth, async (req, res) => {
     try {
-      console.log("POST /api/passes - userId:", req2.userId);
-      console.log("POST /api/passes - body:", req2.body);
-      const user = await storage.getUser(req2.userId);
+      console.log("POST /api/passes - userId:", req.userId);
+      console.log("POST /api/passes - body:", req.body);
+      const user = await storage.getUser(req.userId);
       if (!user) {
-        console.log("User not found for userId:", req2.userId);
+        console.log("User not found for userId:", req.userId);
         return res.status(404).json({ message: "User not found" });
       }
       console.log("Found user:", user.name, user.email);
       const passData = insertPassSchema.parse({
-        ...req2.body,
-        teacherId: req2.userId,
-        schoolId: user.schoolId
+        ...req.body,
+        teacherId: req.userId,
+        schoolId: user.schoolId,
+        destination: req.body.destination || "Restroom",
+        // Default destination
+        checkoutTime: /* @__PURE__ */ new Date(),
+        // Set checkout time to now
+        timeOut: /* @__PURE__ */ new Date(),
+        // Set time out to now
+        issuingTeacher: user.name,
+        // Set issuing teacher to current user
+        status: "active"
+        // Use correct enum value
       });
       console.log("Creating pass with data:", passData);
       const pass = await storage.createPass(passData);
@@ -2917,18 +3091,18 @@ async function registerRoutes(app2) {
       res.status(400).json({ message: error.message });
     }
   });
-  app2.put("/api/passes/:id/return", requireAuth, async (req2, res) => {
+  app2.put("/api/passes/:id/return", requireAuth, async (req, res) => {
     try {
-      const pass = await storage.updatePass(req2.params.id, { status: "returned" });
+      const pass = await storage.updatePass(req.params.id, { status: "returned" });
       res.json(pass);
     } catch (error) {
       res.status(400).json({ message: error.message });
     }
   });
   if (stripe2) {
-    app2.post("/api/create-subscription", requireAuth, async (req2, res) => {
+    app2.post("/api/create-subscription", requireAuth, async (req, res) => {
       try {
-        const user = await storage.getUser(req2.userId);
+        const user = await storage.getUser(req.userId);
         if (!user || !user.isAdmin) {
           return res.status(403).json({ message: "Admin access required" });
         }
@@ -2970,10 +3144,10 @@ async function registerRoutes(app2) {
       }
     });
   }
-  app2.put("/api/users/settings", requireAuth, async (req2, res) => {
+  app2.put("/api/users/settings", requireAuth, async (req, res) => {
     try {
-      const { assignedGrades, ...otherSettings } = req2.body;
-      const user = await storage.updateUser(req2.userId, {
+      const { assignedGrades, ...otherSettings } = req.body;
+      const user = await storage.updateUser(req.userId, {
         assignedGrades: assignedGrades || []
       });
       res.json({ message: "Settings updated successfully", user });
@@ -2981,13 +3155,13 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.put("/api/users/me/password", requireAuth, async (req2, res) => {
+  app2.put("/api/users/me/password", requireAuth, async (req, res) => {
     try {
-      const { currentPassword, newPassword } = req2.body;
+      const { currentPassword, newPassword } = req.body;
       if (!currentPassword || !newPassword) {
         return res.status(400).json({ message: "Current password and new password are required" });
       }
-      const user = await storage.getUser(req2.userId);
+      const user = await storage.getUser(req.userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
@@ -2997,13 +3171,13 @@ async function registerRoutes(app2) {
       if (newPassword.length < 6) {
         return res.status(400).json({ message: "New password must be at least 6 characters long" });
       }
-      await storage.updateUser(req2.userId, { password: newPassword });
+      await storage.updateUser(req.userId, { password: newPassword });
       res.json({ message: "Password updated successfully" });
     } catch (error) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.post("/api/upload/csv", requireAuth, async (req2, res) => {
+  app2.post("/api/upload/csv", requireAuth, async (req, res) => {
     try {
       res.json({
         studentsAdded: 15,
@@ -3014,7 +3188,7 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.post("/api/import/clever", requireAuth, async (req2, res) => {
+  app2.post("/api/import/clever", requireAuth, async (req, res) => {
     try {
       res.json({
         studentsAdded: 23,
@@ -3024,7 +3198,7 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.post("/api/import/google-classroom", requireAuth, async (req2, res) => {
+  app2.post("/api/import/google-classroom", requireAuth, async (req, res) => {
     try {
       res.json({
         studentsAdded: 18,
@@ -3034,9 +3208,9 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.get("/api/admin/school-info", requireAuth, async (req2, res) => {
+  app2.get("/api/admin/school-info", requireAuth, async (req, res) => {
     try {
-      const user = await storage.getUser(req2.userId);
+      const user = await storage.getUser(req.userId);
       if (!user || !user.isAdmin) {
         return res.status(403).json({ message: "Admin access required" });
       }
@@ -3055,9 +3229,9 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.get("/api/teachers", requireAuth, async (req2, res) => {
+  app2.get("/api/teachers", requireAuth, async (req, res) => {
     try {
-      const user = await storage.getUser(req2.userId);
+      const user = await storage.getUser(req.userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
@@ -3067,9 +3241,9 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.get("/api/admin/teachers", requireAuth, async (req2, res) => {
+  app2.get("/api/admin/teachers", requireAuth, async (req, res) => {
     try {
-      const user = await storage.getUser(req2.userId);
+      const user = await storage.getUser(req.userId);
       if (!user || !user.isAdmin) {
         return res.status(403).json({ message: "Admin access required" });
       }
@@ -3079,128 +3253,130 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.post("/api/admin/teachers", requireAuth, async (req2, res) => {
+  app2.post("/api/admin/teachers", requireAuth, async (req, res) => {
     try {
-      const admin2 = await storage.getUser(req2.userId);
-      if (!admin2 || !admin2.isAdmin) {
+      const admin = await storage.getUser(req.userId);
+      if (!admin || !admin.isAdmin) {
         return res.status(403).json({ message: "Admin access required" });
       }
-      const school = await storage.getSchool(admin2.schoolId);
+      const school = await storage.getSchool(admin.schoolId);
       if (!school) {
         return res.status(404).json({ message: "School not found" });
       }
-      const existingTeachers = await storage.getUsersBySchool(admin2.schoolId);
+      const existingTeachers = await storage.getUsersBySchool(admin.schoolId);
       if (existingTeachers.length >= school.maxTeachers) {
         return res.status(400).json({
           message: `Teacher limit reached. Your ${school.plan} plan allows ${school.maxTeachers} teacher${school.maxTeachers === 1 ? "" : "s"}.`
         });
       }
-      const existingUser = await storage.getUserByEmail(req2.body.email);
+      const existingUser = await storage.getUserByEmail(req.body.email);
       if (existingUser) {
         return res.status(400).json({ message: "A user with this email already exists" });
       }
-      const userData = insertUserSchema.parse({
-        email: req2.body.email,
-        name: req2.body.name,
-        schoolId: admin2.schoolId,
+      const teacherData = {
+        email: req.body.email,
+        name: req.body.name,
+        password: "temp_password",
+        // Temporary password, teacher sets real one on first login
+        schoolId: admin.schoolId,
         isAdmin: false,
         assignedGrades: [],
-        invitedBy: admin2.id,
+        invitedBy: admin.id,
         status: "pending"
         // Teacher sets password on first login
-      });
-      const teacher = await storage.createUser(userData);
+      };
+      const teacher = await storage.createUser(teacherData);
       console.log(`Teacher invitation sent to ${teacher.email}`);
       res.json(teacher);
     } catch (error) {
       res.status(400).json({ message: error.message });
     }
   });
-  app2.delete("/api/admin/teachers/:teacherId", requireAuth, async (req2, res) => {
+  app2.delete("/api/admin/teachers/:teacherId", requireAuth, async (req, res) => {
     try {
-      const admin2 = await storage.getUser(req2.userId);
-      if (!admin2 || !admin2.isAdmin) {
+      const admin = await storage.getUser(req.userId);
+      if (!admin || !admin.isAdmin) {
         return res.status(403).json({ message: "Admin access required" });
       }
-      const teacher = await storage.getUser(req2.params.teacherId);
+      const teacher = await storage.getUser(req.params.teacherId);
       if (!teacher) {
         return res.status(404).json({ message: "Teacher not found" });
       }
-      if (teacher.schoolId !== admin2.schoolId) {
+      if (teacher.schoolId !== admin.schoolId) {
         return res.status(403).json({ message: "Cannot remove teacher from different school" });
       }
       if (teacher.isAdmin) {
-        const schoolUsers = await storage.getUsersBySchool(admin2.schoolId);
-        const adminCount = schoolUsers.filter((user) => user.isAdmin && user.id !== req2.params.teacherId).length;
+        const schoolUsers = await storage.getUsersBySchool(admin.schoolId);
+        const adminCount = schoolUsers.filter((user) => user.isAdmin && user.id !== req.params.teacherId).length;
         if (adminCount === 0) {
           return res.status(400).json({ message: "Cannot remove the last admin. At least one admin must remain." });
         }
       }
-      await storage.deleteUser(req2.params.teacherId);
+      await storage.deleteUser(req.params.teacherId);
       res.json({ message: "Teacher removed successfully" });
     } catch (error) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.patch("/api/admin/teachers/:teacherId/promote", requireAuth, async (req2, res) => {
+  app2.patch("/api/admin/teachers/:teacherId/promote", requireAuth, async (req, res) => {
     try {
-      const admin2 = await storage.getUser(req2.userId);
-      if (!admin2 || !admin2.isAdmin) {
+      const admin = await storage.getUser(req.userId);
+      if (!admin || !admin.isAdmin) {
         return res.status(403).json({ message: "Admin access required" });
       }
-      const teacher = await storage.getUser(req2.params.teacherId);
+      const teacher = await storage.getUser(req.params.teacherId);
       if (!teacher) {
         return res.status(404).json({ message: "Teacher not found" });
       }
-      if (teacher.schoolId !== admin2.schoolId) {
+      if (teacher.schoolId !== admin.schoolId) {
         return res.status(403).json({ message: "Cannot manage teacher from different school" });
       }
       if (teacher.isAdmin) {
         return res.status(400).json({ message: "User is already an admin" });
       }
-      const updatedUser = await storage.updateUser(req2.params.teacherId, { isAdmin: true });
+      const updatedUser = await storage.updateUser(req.params.teacherId, { isAdmin: true });
       res.json({ user: updatedUser, message: "Teacher promoted to admin successfully" });
     } catch (error) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.patch("/api/admin/teachers/:teacherId/demote", requireAuth, async (req2, res) => {
+  app2.patch("/api/admin/teachers/:teacherId/demote", requireAuth, async (req, res) => {
     try {
-      const admin2 = await storage.getUser(req2.userId);
-      if (!admin2 || !admin2.isAdmin) {
+      const admin = await storage.getUser(req.userId);
+      if (!admin || !admin.isAdmin) {
         return res.status(403).json({ message: "Admin access required" });
       }
-      const targetUser = await storage.getUser(req2.params.teacherId);
+      const targetUser = await storage.getUser(req.params.teacherId);
       if (!targetUser) {
         return res.status(404).json({ message: "User not found" });
       }
-      if (targetUser.schoolId !== admin2.schoolId) {
+      if (targetUser.schoolId !== admin.schoolId) {
         return res.status(403).json({ message: "Cannot manage user from different school" });
       }
       if (!targetUser.isAdmin) {
         return res.status(400).json({ message: "User is not an admin" });
       }
-      if (targetUser.id === admin2.id) {
-        const schoolUsers2 = await storage.getUsersBySchool(admin2.schoolId);
+      if (targetUser.id === admin.id) {
+        const schoolUsers2 = await storage.getUsersBySchool(admin.schoolId);
         const adminCount2 = schoolUsers2.filter((user) => user.isAdmin).length;
         if (adminCount2 <= 1) {
           return res.status(400).json({ message: "Cannot demote yourself when you are the only admin" });
         }
       }
-      const schoolUsers = await storage.getUsersBySchool(admin2.schoolId);
-      const adminCount = schoolUsers.filter((user) => user.isAdmin && user.id !== req2.params.teacherId).length;
+      const schoolUsers = await storage.getUsersBySchool(admin.schoolId);
+      const adminCount = schoolUsers.filter((user) => user.isAdmin && user.id !== req.params.teacherId).length;
       if (adminCount === 0) {
         return res.status(400).json({ message: "Cannot demote the last admin. At least one admin must remain." });
       }
-      const updatedUser = await storage.updateUser(req2.params.teacherId, { isAdmin: false });
+      const updatedUser = await storage.updateUser(req.params.teacherId, { isAdmin: false });
       res.json({ user: updatedUser, message: "Admin demoted to teacher successfully" });
     } catch (error) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.post("/api/auth/forgot-password", async (req2, res) => {
+  app2.post("/api/auth/forgot-password", async (req, res) => {
     try {
-      const { email } = req2.body;
+      const { email } = req.body;
       if (!email) {
         return res.status(400).json({ message: "Email is required" });
       }
@@ -3208,7 +3384,7 @@ async function registerRoutes(app2) {
       if (!user) {
         return res.json({ message: "If an account with that email exists, we have sent a password reset link." });
       }
-      const resetToken = randomUUID();
+      const resetToken = randomUUID2();
       const expiry = /* @__PURE__ */ new Date();
       expiry.setHours(expiry.getHours() + 1);
       await storage.setPasswordResetToken(user.id, resetToken, expiry);
@@ -3222,9 +3398,9 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Server error. Please try again." });
     }
   });
-  app2.post("/api/auth/reset-password", async (req2, res) => {
+  app2.post("/api/auth/reset-password", async (req, res) => {
     try {
-      const { token, newPassword } = req2.body;
+      const { token, newPassword } = req.body;
       if (!token || !newPassword) {
         return res.status(400).json({ message: "Token and new password are required" });
       }
@@ -3247,21 +3423,21 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Server error. Please try again." });
     }
   });
-  app2.post("/api/auth/set-kiosk-pin", requireAuth, async (req2, res) => {
+  app2.post("/api/auth/set-kiosk-pin", requireAuth, async (req, res) => {
     try {
-      const { pin } = req2.body;
+      const { pin } = req.body;
       if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
         return res.status(400).json({ message: "PIN must be exactly 4 digits" });
       }
-      const user = await storage.updateUser(req2.userId, { kioskPin: pin });
+      const user = await storage.updateUser(req.userId, { kioskPin: pin });
       res.json({ message: "Kiosk PIN set successfully" });
     } catch (error) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.post("/api/auth/verify-kiosk-pin", async (req2, res) => {
+  app2.post("/api/auth/verify-kiosk-pin", async (req, res) => {
     try {
-      const { teacherId, pin } = req2.body;
+      const { teacherId, pin } = req.body;
       if (!teacherId || !pin) {
         return res.status(400).json({ message: "Teacher ID and PIN are required" });
       }
@@ -3275,9 +3451,9 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.get("/api/passes/active", async (req2, res) => {
+  app2.get("/api/passes/active", async (req, res) => {
     try {
-      const teacherId = req2.query.teacherId;
+      const teacherId = req.query.teacherId;
       if (!teacherId) {
         return res.status(400).json({ message: "Teacher ID is required" });
       }
@@ -3291,9 +3467,9 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.post("/api/subscription/cancel", requireAuth, async (req2, res) => {
+  app2.post("/api/subscription/cancel", requireAuth, async (req, res) => {
     try {
-      const user = await storage.getUser(req2.userId);
+      const user = await storage.getUser(req.userId);
       if (!user || !user.isAdmin) {
         return res.status(403).json({ message: "Admin access required" });
       }
@@ -3331,9 +3507,9 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message || "Failed to cancel subscription" });
     }
   });
-  app2.get("/api/subscription-status", requireAuth, async (req2, res) => {
+  app2.get("/api/subscription-status", requireAuth, async (req, res) => {
     try {
-      const user = await storage.getUser(req2.userId);
+      const user = await storage.getUser(req.userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
@@ -3376,9 +3552,9 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message || "Failed to get subscription status" });
     }
   });
-  app2.post("/api/subscription/reactivate", requireAuth, async (req2, res) => {
+  app2.post("/api/subscription/reactivate", requireAuth, async (req, res) => {
     try {
-      const user = await storage.getUser(req2.userId);
+      const user = await storage.getUser(req.userId);
       if (!user || !user.isAdmin) {
         return res.status(403).json({ message: "Admin access required" });
       }
@@ -3406,11 +3582,11 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message || "Failed to reactivate subscription" });
     }
   });
-  app2.post("/api/admin/reset-teacher-password", requireAuth, async (req2, res) => {
+  app2.post("/api/admin/reset-teacher-password", requireAuth, async (req, res) => {
     try {
-      const { teacherId, newPassword } = req2.body;
-      const admin2 = await storage.getUser(req2.userId);
-      if (!admin2 || !admin2.isAdmin) {
+      const { teacherId, newPassword } = req.body;
+      const admin = await storage.getUser(req.userId);
+      if (!admin || !admin.isAdmin) {
         return res.status(403).json({ message: "Admin access required" });
       }
       if (!teacherId || !newPassword) {
@@ -3423,7 +3599,7 @@ async function registerRoutes(app2) {
       if (!teacher) {
         return res.status(404).json({ message: "Teacher not found" });
       }
-      if (teacher.schoolId !== admin2.schoolId) {
+      if (teacher.schoolId !== admin.schoolId) {
         return res.status(403).json({ message: "Cannot reset password for teachers in other schools" });
       }
       await storage.updateUser(teacherId, { password: newPassword });
@@ -3434,14 +3610,11 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Server error. Please try again." });
     }
   });
-  app2.post("/api/passes/reset-daily", requireAuth, async (req2, res) => {
+  app2.post("/api/passes/reset-daily", requireAuth, async (req, res) => {
     try {
-      const user = await storage.getUser(req2.userId);
+      const user = await storage.getUser(req.userId);
       if (!user) {
         return res.status(401).json({ message: "User not found" });
-      }
-      if (!user.isAdmin) {
-        return res.status(403).json({ message: "Admin access required" });
       }
       const returnedCount = await passResetScheduler.manualReset(user.schoolId);
       res.json({
@@ -3452,7 +3625,7 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.get("/api/passes/reset-status", requireAuth, async (req2, res) => {
+  app2.get("/api/passes/reset-status", requireAuth, async (req, res) => {
     try {
       const timeUntilReset = passResetScheduler.getTimeUntilNextReset();
       res.json({
@@ -3499,9 +3672,9 @@ async function registerRoutes(app2) {
   app2.get("/favicon.ico", (_req, res) => {
     res.status(204).send();
   });
-  const requirePlatformOwner = async (req2, res, next) => {
+  const requirePlatformOwner = async (req, res, next) => {
     try {
-      const token = req2.headers.authorization?.replace("Bearer ", "");
+      const token = req.headers.authorization?.replace("Bearer ", "");
       if (!token) {
         return res.status(401).json({ message: "No token provided" });
       }
@@ -3511,15 +3684,15 @@ async function registerRoutes(app2) {
       if (!user || !user.isPlatformOwner) {
         return res.status(403).json({ message: "Platform owner access required" });
       }
-      req2.user = user;
-      req2.userId = user.id;
+      req.user = user;
+      req.userId = user.id;
       next();
     } catch (error) {
       console.error("Super admin auth error:", error);
       return res.status(401).json({ message: "Invalid token" });
     }
   };
-  app2.get("/api/super-admin/schools", requirePlatformOwner, async (req2, res) => {
+  app2.get("/api/super-admin/schools", requirePlatformOwner, async (req, res) => {
     try {
       console.log("Super admin schools endpoint hit");
       const allSchools = await storage.getActiveSchools();
@@ -3539,7 +3712,7 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.get("/api/super-admin/stats", requirePlatformOwner, async (req2, res) => {
+  app2.get("/api/super-admin/stats", requirePlatformOwner, async (req, res) => {
     try {
       console.log("Super admin stats endpoint hit");
       const allSchools = await storage.getActiveSchools();
@@ -3576,7 +3749,7 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.post("/api/super-admin/cleanup-trials", requirePlatformOwner, async (req2, res) => {
+  app2.post("/api/super-admin/cleanup-trials", requirePlatformOwner, async (req, res) => {
     try {
       const removedCount = await storage.cleanupExpiredTrials();
       res.json({
@@ -3587,9 +3760,9 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.delete("/api/super-admin/schools/:schoolId", requirePlatformOwner, async (req2, res) => {
+  app2.delete("/api/super-admin/schools/:schoolId", requirePlatformOwner, async (req, res) => {
     try {
-      const { schoolId } = req2.params;
+      const { schoolId } = req.params;
       await storage.deleteSchool(schoolId);
       res.json({
         message: `Successfully deleted school ${schoolId}`,
@@ -3605,6 +3778,530 @@ async function registerRoutes(app2) {
   app2.post("/api/billing/portal", requireAuth, createPortalSession2);
   const httpServer = createServer(app2);
   return httpServer;
+}
+
+// server/routes-registration-v2.ts
+init_storage();
+init_session();
+import { nanoid as nanoid2 } from "nanoid";
+var FREE_SCHOOL_NAME = (process.env.FREE_SCHOOL_NAME || "").trim().toLowerCase();
+var normName = (s) => s.trim().replace(/\s+/g, " ");
+function registerRegistrationV2(app2) {
+  app2.post("/api/registration/v2/register", async (req, res) => {
+    try {
+      const schoolNameRaw = String(req.body?.schoolName ?? "");
+      const adminName = String(req.body?.adminName ?? "").trim();
+      const email = String(req.body?.email ?? "").trim().toLowerCase();
+      const password = String(req.body?.password ?? "");
+      if (!schoolNameRaw || !email || !password) {
+        return res.status(400).json({ error: "MISSING_FIELDS" });
+      }
+      const schoolName = normName(schoolNameRaw);
+      const isDesignatedFree = FREE_SCHOOL_NAME && schoolName.toLowerCase() === FREE_SCHOOL_NAME;
+      const existingSchools = await storage.getAllSchools();
+      const existingSchool = existingSchools.find((s) => s.name.toLowerCase() === schoolName.toLowerCase());
+      if (existingSchool) {
+        return res.status(409).json({ error: "SCHOOL_TAKEN", school: existingSchool });
+      }
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(409).json({ error: "EMAIL_TAKEN", detail: "Email already registered" });
+      }
+      const schoolId = `school_${nanoid2(8)}`;
+      const schoolData = {
+        id: schoolId,
+        schoolId,
+        name: schoolName,
+        adminEmail: email,
+        plan: isDesignatedFree ? "free_trial" : "TRIAL",
+        maxTeachers: isDesignatedFree ? -1 : 999,
+        // Unlimited for V2
+        maxStudents: isDesignatedFree ? -1 : 999,
+        // Unlimited for V2
+        verified: true,
+        // Auto-verify V2 registrations
+        trialStartDate: isDesignatedFree ? null : /* @__PURE__ */ new Date(),
+        trialEndDate: isDesignatedFree ? null : new Date(Date.now() + 14 * 24 * 60 * 60 * 1e3),
+        // 14 days
+        isTrialExpired: false
+      };
+      const school = await storage.createSchool(schoolData);
+      const userData = {
+        id: `user_${nanoid2(8)}`,
+        email,
+        password,
+        // Will be hashed by storage layer
+        name: adminName || email.split("@")[0],
+        schoolId: school.id,
+        isAdmin: true,
+        assignedGrades: [],
+        status: "active"
+      };
+      const user = await storage.createUser(userData);
+      try {
+        setUserSession(res, {
+          userId: user.id,
+          schoolId: school.id,
+          email: user.email,
+          role: "ADMIN"
+        });
+      } catch (sessionError) {
+        console.warn("[V2] Session creation failed, but registration succeeded:", sessionError);
+      }
+      console.log(`[V2] Registration successful: ${user.name} (${user.email}) - School: ${school.name}`);
+      return res.status(201).json({
+        ok: true,
+        school: {
+          id: school.id,
+          name: school.name,
+          plan: school.plan
+        },
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          schoolId: user.schoolId,
+          isAdmin: user.isAdmin,
+          schoolName: school.name
+        },
+        token: user.id,
+        // Simple token for demo
+        autoLogin: true,
+        message: "Registration successful! Welcome to PassPilot V2."
+      });
+    } catch (e) {
+      console.error("[registration v2]", e);
+      return res.status(400).json({ error: "REGISTER_FAILED", detail: e?.message });
+    }
+  });
+  app2.get("/api/registration/v2/email-available", async (req, res) => {
+    try {
+      const schoolName = normName(String(req.query.schoolName ?? ""));
+      const email = String(req.query.email ?? "").trim().toLowerCase();
+      if (!schoolName || !email) return res.status(400).json({ ok: false, error: "MISSING_FIELDS" });
+      const existingUser = await storage.getUserByEmail(email);
+      res.json({ ok: true, available: !existingUser });
+    } catch (e) {
+      console.error("[email availability check]", e);
+      res.status(500).json({ ok: false, error: "CHECK_FAILED" });
+    }
+  });
+}
+
+// server/routes-auth-multi.ts
+init_storage();
+init_session();
+import bcrypt3 from "bcryptjs";
+function sessUser(user, school) {
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.isAdmin ? "ADMIN" : "TEACHER",
+    schoolId: school.id,
+    schoolName: school.name
+  };
+}
+function registerAuthMultiRoutes(app2) {
+  app2.post("/api/auth/login-multi/step1", async (req, res) => {
+    try {
+      const email = String(req.body?.email || "").toLowerCase().trim();
+      const password = String(req.body?.password || "");
+      if (!email || !password) {
+        return res.status(400).json({ error: "MISSING_FIELDS" });
+      }
+      console.log(`[Multi-Login Step 1] Checking credentials for: ${email}`);
+      const candidates = await storage.getUsersByEmail(email);
+      console.log(`[Multi-Login Step 1] Found ${candidates.length} candidate(s)`);
+      if (candidates.length === 0) {
+        return res.status(401).json({ error: "INVALID_CREDENTIALS" });
+      }
+      const validMatches = [];
+      for (const user of candidates) {
+        let passwordValid = false;
+        if (user.password.startsWith("$2a$") || user.password.startsWith("$2b$")) {
+          passwordValid = await bcrypt3.compare(password, user.password);
+        } else {
+          passwordValid = user.password === password;
+        }
+        if (passwordValid) {
+          const school = await storage.getSchool(user.schoolId);
+          if (school) {
+            validMatches.push({ user, school });
+          }
+        }
+      }
+      if (validMatches.length === 0) {
+        return res.status(401).json({ error: "INVALID_CREDENTIALS" });
+      }
+      console.log(`[Multi-Login Step 1] ${validMatches.length} valid match(es) found`);
+      if (validMatches.length === 1) {
+        const { user, school } = validMatches[0];
+        setUserSession(res, {
+          userId: user.id,
+          schoolId: user.schoolId,
+          email: user.email,
+          role: user.isAdmin ? "ADMIN" : "TEACHER"
+        });
+        console.log(`[Multi-Login Step 1] Single school login: ${school.name}`);
+        return res.json({
+          ok: true,
+          user: sessUser(user, school)
+        });
+      }
+      const sessionData = {
+        email,
+        validMatches: validMatches.map((m) => ({
+          userId: m.user.id,
+          schoolId: m.school.id,
+          schoolName: m.school.name,
+          isAdmin: m.user.isAdmin
+        })),
+        expiresAt: Date.now() + 5 * 60 * 1e3
+        // 5 minutes
+      };
+      if (req.session) {
+        req.session.pendingAuth = sessionData;
+      }
+      const schools3 = validMatches.map((m) => ({
+        id: m.school.id,
+        name: m.school.name
+      }));
+      console.log(`[Multi-Login Step 1] Multiple schools found:`, schools3.map((s) => s.name));
+      return res.json({
+        needSchoolPick: true,
+        schools: schools3,
+        tempToken: Buffer.from(JSON.stringify(sessionData)).toString("base64")
+        // Fallback for demo
+      });
+    } catch (e) {
+      console.error("[Multi-Login Step 1] Error:", e);
+      return res.status(500).json({ error: "LOGIN_FAILED" });
+    }
+  });
+  app2.post("/api/auth/login-multi/step2", async (req, res) => {
+    try {
+      const schoolId = String(req.body?.schoolId || "");
+      const tempToken = req.body?.tempToken;
+      if (!schoolId) {
+        return res.status(400).json({ error: "MISSING_SCHOOL_ID" });
+      }
+      console.log(`[Multi-Login Step 2] School selection: ${schoolId}`);
+      let pending = req.session ? req.session.pendingAuth : null;
+      if (!pending && tempToken) {
+        try {
+          pending = JSON.parse(Buffer.from(tempToken, "base64").toString());
+        } catch (e) {
+          console.error("[Multi-Login Step 2] Invalid temp token");
+        }
+      }
+      if (!pending || pending.expiresAt < Date.now()) {
+        return res.status(440).json({ error: "PENDING_EXPIRED" });
+      }
+      const selectedMatch = pending.validMatches.find((m) => m.schoolId === schoolId);
+      if (!selectedMatch) {
+        return res.status(403).json({ error: "NOT_ALLOWED" });
+      }
+      const user = await storage.getUser(selectedMatch.userId);
+      const school = await storage.getSchool(schoolId);
+      if (!user || !school) {
+        return res.status(403).json({ error: "NOT_ALLOWED" });
+      }
+      setUserSession(res, {
+        userId: user.id,
+        schoolId: school.id,
+        email: user.email,
+        role: user.isAdmin ? "ADMIN" : "TEACHER"
+      });
+      if (req.session) {
+        delete req.session.pendingAuth;
+      }
+      console.log(`[Multi-Login Step 2] Successfully logged into: ${school.name}`);
+      return res.json({
+        ok: true,
+        user: sessUser(user, school)
+      });
+    } catch (e) {
+      console.error("[Multi-Login Step 2] Error:", e);
+      return res.status(500).json({ error: "LOGIN_FAILED" });
+    }
+  });
+}
+
+// server/routes-super-admin.ts
+init_storage();
+import bcrypt4 from "bcryptjs";
+import jwt3 from "jsonwebtoken";
+var JWT_SECRET = process.env.JWT_SECRET || "super-secret-key";
+async function requireSuperAdmin(req, res, next) {
+  try {
+    const token = req.cookies?.adminToken;
+    if (!token) {
+      return res.status(401).json({ error: "No admin token provided" });
+    }
+    const payload = jwt3.verify(token, JWT_SECRET);
+    if (payload.role !== "superadmin") {
+      return res.status(403).json({ error: "Insufficient privileges" });
+    }
+    const adminUser = await storage.getAdminUserByEmail(payload.email);
+    if (!adminUser) {
+      return res.status(401).json({ error: "Admin user not found" });
+    }
+    req.adminUser = adminUser;
+    next();
+  } catch (error) {
+    console.error("[Super Admin Auth] Token verification failed:", error);
+    return res.status(401).json({ error: "Invalid admin token" });
+  }
+}
+function signAdminToken(email) {
+  return jwt3.sign(
+    { role: "superadmin", email },
+    JWT_SECRET,
+    { expiresIn: "7d" }
+  );
+}
+function registerSuperAdminRoutes(app2) {
+  app2.post("/api/super-admin/bootstrap", async (req, res) => {
+    try {
+      const { email, password, name, bootstrapToken } = req.body;
+      if (!email || !password || !name) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+      const existingAdmins = await storage.getAllAdminUsers();
+      if (existingAdmins.length > 0) {
+        if (process.env.ADMIN_BOOTSTRAP_TOKEN && bootstrapToken !== process.env.ADMIN_BOOTSTRAP_TOKEN) {
+          return res.status(401).json({ error: "Invalid bootstrap token" });
+        }
+        if (!process.env.ADMIN_BOOTSTRAP_TOKEN) {
+          return res.status(403).json({ error: "Bootstrap phase completed" });
+        }
+      }
+      const passwordHash = await bcrypt4.hash(password, 12);
+      const adminUser = await storage.createAdminUser({
+        email: email.toLowerCase().trim(),
+        passwordHash,
+        name,
+        role: "superadmin"
+      });
+      const token = signAdminToken(adminUser.email);
+      res.cookie("adminToken", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1e3
+        // 7 days
+      });
+      console.log(`[Super Admin] Bootstrap completed for: ${adminUser.email}`);
+      return res.json({
+        success: true,
+        admin: {
+          id: adminUser.id,
+          email: adminUser.email,
+          name: adminUser.name,
+          role: adminUser.role
+        }
+      });
+    } catch (error) {
+      console.error("[Super Admin Bootstrap] Error:", error);
+      if (error.message?.includes("unique constraint")) {
+        return res.status(409).json({ error: "Admin with this email already exists" });
+      }
+      return res.status(500).json({ error: "Bootstrap failed" });
+    }
+  });
+  app2.post("/api/super-admin/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ error: "Missing email or password" });
+      }
+      const adminUser = await storage.getAdminUserByEmail(email.toLowerCase().trim());
+      if (!adminUser) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+      const passwordValid = await bcrypt4.compare(password, adminUser.passwordHash);
+      if (!passwordValid) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+      const token = signAdminToken(adminUser.email);
+      res.cookie("adminToken", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1e3
+      });
+      console.log(`[Super Admin] Login successful: ${adminUser.email}`);
+      return res.json({
+        success: true,
+        admin: {
+          id: adminUser.id,
+          email: adminUser.email,
+          name: adminUser.name,
+          role: adminUser.role
+        }
+      });
+    } catch (error) {
+      console.error("[Super Admin Login] Error:", error);
+      return res.status(500).json({ error: "Login failed" });
+    }
+  });
+  app2.post("/api/super-admin/logout", (req, res) => {
+    res.clearCookie("adminToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax"
+    });
+    return res.json({ success: true });
+  });
+  app2.get("/api/super-admin/me", requireSuperAdmin, (req, res) => {
+    const adminUser = req.adminUser;
+    return res.json({
+      authenticated: true,
+      admin: {
+        id: adminUser.id,
+        email: adminUser.email,
+        name: adminUser.name,
+        role: adminUser.role
+      }
+    });
+  });
+  app2.use("/api/super-admin/dashboard", requireSuperAdmin);
+  app2.get("/api/super-admin/dashboard/schools", async (req, res) => {
+    try {
+      const schools3 = await storage.getAllSchoolsWithStats();
+      return res.json({ schools: schools3 });
+    } catch (error) {
+      console.error("[Super Admin] Get schools error:", error);
+      return res.status(500).json({ error: "Failed to fetch schools" });
+    }
+  });
+  app2.get("/api/super-admin/dashboard/stats", async (req, res) => {
+    try {
+      const stats = await storage.getPlatformStats();
+      return res.json(stats);
+    } catch (error) {
+      console.error("[Super Admin] Get stats error:", error);
+      return res.status(500).json({ error: "Failed to fetch platform stats" });
+    }
+  });
+  app2.patch("/api/super-admin/dashboard/schools/:schoolId", async (req, res) => {
+    try {
+      const { schoolId } = req.params;
+      const updates = req.body;
+      const updatedSchool = await storage.updateSchoolAsAdmin(schoolId, updates);
+      if (!updatedSchool) {
+        return res.status(404).json({ error: "School not found" });
+      }
+      console.log(`[Super Admin] School updated: ${schoolId}`);
+      return res.json({ success: true, school: updatedSchool });
+    } catch (error) {
+      console.error("[Super Admin] Update school error:", error);
+      return res.status(500).json({ error: "Failed to update school" });
+    }
+  });
+  app2.delete("/api/super-admin/dashboard/schools/:schoolId", async (req, res) => {
+    try {
+      const { schoolId } = req.params;
+      const { confirmDelete } = req.body;
+      if (!confirmDelete) {
+        return res.status(400).json({ error: "Confirmation required for school deletion" });
+      }
+      const result = await storage.deleteSchoolCompletely(schoolId);
+      if (!result.success) {
+        return res.status(404).json({ error: "School not found or deletion failed" });
+      }
+      console.log(`[Super Admin] School deleted completely: ${schoolId}`);
+      return res.json({
+        success: true,
+        message: `School and all related data deleted successfully`,
+        deletedCounts: result.deletedCounts
+      });
+    } catch (error) {
+      console.error("[Super Admin] Delete school error:", error);
+      return res.status(500).json({ error: "Failed to delete school" });
+    }
+  });
+  app2.get("/api/super-admin/dashboard/activity", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit) || 50;
+      const activity = await storage.getRecentPlatformActivity(limit);
+      return res.json({ activity });
+    } catch (error) {
+      console.error("[Super Admin] Get activity error:", error);
+      return res.status(500).json({ error: "Failed to fetch platform activity" });
+    }
+  });
+}
+
+// server/bootstrap.ts
+init_db();
+init_schema();
+import bcrypt5 from "bcryptjs";
+import { randomUUID as randomUUID3 } from "crypto";
+var usedOnce = false;
+function registerBootstrapRoute(app2) {
+  const bootstrapToken = process.env.BOOTSTRAP_TOKEN || "bootstrap123secure";
+  console.log("[Bootstrap] BOOTSTRAP_TOKEN:", bootstrapToken ? "SET" : "NOT SET");
+  console.log("[Bootstrap] Registering bootstrap route");
+  app2.get("/api/bootstrap/superadmin", async (req, res) => {
+    try {
+      if (usedOnce) return res.status(410).json({ error: "bootstrap route was already used" });
+      const token = String(req.query.token ?? "");
+      const expectedToken = process.env.BOOTSTRAP_TOKEN || "bootstrap123secure";
+      if (!token || token !== expectedToken) {
+        return res.status(401).json({ error: "invalid token" });
+      }
+      const email = String(req.query.email ?? "").toLowerCase().trim();
+      const password = String(req.query.password ?? "");
+      const name = String(req.query.name ?? "Super Admin").trim();
+      if (!email || !password) {
+        return res.status(400).json({ error: "email and password are required" });
+      }
+      const passwordHash = await bcrypt5.hash(password, 12);
+      const existingAdmins = await db.select().from(adminUsers);
+      if (existingAdmins.length > 0) {
+        return res.status(403).json({ error: "Super admin already exists. Bootstrap phase completed." });
+      }
+      const [adminUser] = await db.insert(adminUsers).values({
+        id: randomUUID3(),
+        email,
+        passwordHash,
+        name,
+        role: "superadmin"
+      }).returning();
+      const jwt4 = await import("jsonwebtoken");
+      const JWT_SECRET2 = process.env.JWT_SECRET || "super-secret-key";
+      const adminToken = jwt4.default.sign(
+        { role: "superadmin", email: adminUser.email },
+        JWT_SECRET2,
+        { expiresIn: "7d" }
+      );
+      res.cookie("adminToken", adminToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1e3
+        // 7 days
+      });
+      usedOnce = true;
+      console.log(`[Bootstrap] Super admin created and logged in: ${adminUser.email}`);
+      return res.status(201).json({
+        ok: true,
+        user: {
+          id: adminUser.id,
+          email: adminUser.email,
+          name: adminUser.name,
+          role: adminUser.role
+        }
+      });
+    } catch (err) {
+      console.error("[bootstrap] error:", err);
+      return res.status(500).json({
+        error: "bootstrap failed",
+        detail: err?.message ?? String(err)
+      });
+    }
+  });
 }
 
 // server/vite.ts
@@ -3649,7 +4346,7 @@ var vite_config_default = defineConfig({
 });
 
 // server/vite.ts
-import { nanoid as nanoid2 } from "nanoid";
+import { nanoid as nanoid3 } from "nanoid";
 var viteLogger = createLogger();
 function log(message, source = "express") {
   const formattedTime = (/* @__PURE__ */ new Date()).toLocaleTimeString("en-US", {
@@ -3680,8 +4377,8 @@ async function setupVite(app2, server) {
     appType: "custom"
   });
   app2.use(vite.middlewares);
-  app2.use("*", async (req2, res, next) => {
-    const url = req2.originalUrl;
+  app2.use("*", async (req, res, next) => {
+    const url = req.originalUrl;
     try {
       const clientTemplate = path2.resolve(
         import.meta.dirname,
@@ -3692,7 +4389,7 @@ async function setupVite(app2, server) {
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
       template = template.replace(
         `src="/src/main.tsx"`,
-        `src="/src/main.tsx?v=${nanoid2()}"`
+        `src="/src/main.tsx?v=${nanoid3()}"`
       );
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
@@ -3717,48 +4414,42 @@ function serveStatic(app2) {
 
 // server/index.ts
 var app = express2();
-(async () => {
-  try {
-    await Promise.resolve().then(() => (init_firebaseAdmin(), firebaseAdmin_exports));
-  } catch (err) {
-    console.warn("[Server] Firebase Admin initialization skipped:", err instanceof Error ? err.message : String(err));
-  }
-})();
-if (process.env.NODE_ENV === "production") {
-  app.set("trust proxy", 1);
-}
-app.get("/api/healthz", (_req, res) => res.type("text/plain").send("ok"));
-app.post(
-  "/api/stripe/webhook",
-  bodyParser.raw({ type: "application/json" }),
-  async (req2, res) => {
-    const { stripeWebhook: stripeWebhook2 } = await Promise.resolve().then(() => (init_routes_billing(), routes_billing_exports));
-    return stripeWebhook2(req2, res);
-  }
-);
+app.post("/api/stripe/webhook", bodyParser.raw({ type: "application/json" }), async (req, res, next) => {
+  const { stripeWebhook: stripeWebhook2 } = await Promise.resolve().then(() => (init_routes_billing(), routes_billing_exports));
+  return stripeWebhook2(req, res, next);
+});
 app.use(express2.json());
 app.use(express2.urlencoded({ extended: false }));
 app.use(cookieParser(process.env.SESSION_SECRET));
-app.use((req2, res, next) => {
+app.use((req, res, next) => {
   const start = Date.now();
-  const path4 = req2.path;
-  let capturedJsonResponse;
-  const originalResJson = res.json.bind(res);
-  res.json = (bodyJson) => {
+  const path3 = req.path;
+  let capturedJsonResponse = void 0;
+  const originalResJson = res.json;
+  res.json = function(bodyJson, ...args) {
     capturedJsonResponse = bodyJson;
-    return originalResJson(bodyJson);
+    return originalResJson.apply(res, [bodyJson, ...args]);
   };
   res.on("finish", () => {
-    if (!path4.startsWith("/api")) return;
     const duration = Date.now() - start;
-    let line = `${req2.method} ${path4} ${res.statusCode} in ${duration}ms`;
-    if (capturedJsonResponse) line += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-    if (line.length > 80) line = line.slice(0, 79) + "\u2026";
-    log(line);
+    if (path3.startsWith("/api")) {
+      let logLine = `${req.method} ${path3} ${res.statusCode} in ${duration}ms`;
+      if (capturedJsonResponse) {
+        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+      }
+      if (logLine.length > 80) {
+        logLine = logLine.slice(0, 79) + "\u2026";
+      }
+      log(logLine);
+    }
   });
   next();
 });
 (async () => {
+  registerRegistrationV2(app);
+  registerBootstrapRoute(app);
+  registerAuthMultiRoutes(app);
+  registerSuperAdminRoutes(app);
   const server = await registerRoutes(app);
   app.use((err, _req, res, _next) => {
     const status = err.status || err.statusCode || 500;
@@ -3773,17 +4464,21 @@ app.use((req2, res, next) => {
     await setupVite(app, server);
   } else {
     log("Setting up production static file serving");
-    app.use((req2, res, next) => {
-      if (req2.path === "/" || req2.path.endsWith("/index.html")) {
+    app.use((req, res, next) => {
+      if (req.path === "/" || req.path.endsWith("/index.html")) {
         res.set("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0");
-        log(`No-cache headers set for: ${req2.path}`);
+        log(`No-cache headers set for: ${req.path}`);
       }
       next();
     });
     serveStatic(app);
   }
-  const port = Number(process.env.PORT) || (isProduction ? 3e3 : 5e3);
-  server.listen(port, "0.0.0.0", () => {
+  const port = parseInt(process.env.PORT || "5000", 10);
+  server.listen({
+    port,
+    host: "0.0.0.0",
+    reusePort: true
+  }, () => {
     log(`serving on port ${port}`);
   });
 })();
