@@ -1,11 +1,14 @@
 import { MailService } from '@sendgrid/mail';
 
-if (!process.env.SENDGRID_API_KEY) {
-  throw new Error("SENDGRID_API_KEY environment variable must be set");
-}
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
+let mailService: MailService | null = null;
 
-const mailService = new MailService();
-mailService.setApiKey(process.env.SENDGRID_API_KEY);
+if (SENDGRID_API_KEY) {
+  mailService = new MailService();
+  mailService.setApiKey(SENDGRID_API_KEY);
+} else {
+  console.warn("SENDGRID_API_KEY not set - email functionality will be disabled");
+}
 
 interface VerificationEmailParams {
   to: string;
@@ -15,6 +18,11 @@ interface VerificationEmailParams {
 }
 
 export async function sendTrialVerificationEmail(params: VerificationEmailParams): Promise<boolean> {
+  if (!mailService) {
+    console.warn("Email service not available - skipping verification email");
+    return false;
+  }
+  
   const verificationUrl = `${process.env.NODE_ENV === 'production' ? 'https://' + process.env.REPLIT_DOMAINS : 'http://localhost:5000'}/verify-trial?token=${params.verificationToken}`;
   
   try {
@@ -109,6 +117,11 @@ The PassPilot Team
 }
 
 export async function sendPasswordResetEmail(email: string, resetToken: string, userName: string): Promise<boolean> {
+  if (!mailService) {
+    console.warn("Email service not available - skipping password reset email");
+    return false;
+  }
+  
   const resetUrl = `${process.env.NODE_ENV === 'production' ? 'https://' + process.env.REPLIT_DOMAINS : 'http://localhost:5000'}/reset-password?token=${resetToken}`;
   
   try {

@@ -66,13 +66,16 @@ const PLAN_CONFIG = {
 import { z } from "zod";
 
 // Initialize Stripe
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
-}
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+let stripe: Stripe | null = null;
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2023-10-16',
-});
+if (STRIPE_SECRET_KEY) {
+  stripe = new Stripe(STRIPE_SECRET_KEY, {
+    apiVersion: '2023-10-16',
+  });
+} else {
+  console.warn('STRIPE_SECRET_KEY not set - billing functionality will be disabled');
+}
 
 // Define plan type
 type Plan = 'TRIAL' | 'TEACHER_MONTHLY' | 'TEACHER_ANNUAL' | 'SMALL_TEAM_MONTHLY' | 'SMALL_TEAM_ANNUAL' | 'SMALL_SCHOOL' | 'MEDIUM_SCHOOL' | 'LARGE_SCHOOL';
