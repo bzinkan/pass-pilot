@@ -19,7 +19,7 @@ const subscriptionPlans = [
     name: 'Free Trial',
     price: 0,
     teachers: '1',
-    students: '200',
+    students: '100',
     description: '14-day free trial',
     priceId: 'TRIAL',
     popular: true,
@@ -27,7 +27,7 @@ const subscriptionPlans = [
       '14 days trial period',
       'No credit card required',
       '1 teacher account',
-      'Up to 200 students',
+      'Up to 100 students',
       'All features included',
       'Email support'
     ]
@@ -37,14 +37,14 @@ const subscriptionPlans = [
     name: 'Teacher Plan (Monthly)',
     price: 6,
     teachers: 1,
-    students: 200,
+    students: 100,
     description: 'For individual classrooms',
     priceId: 'price_1Rtco7Bw14YCsyD6u5jnXzsw',
     popular: false,
     features: [
       'Individual teacher account',
       'Unlimited passes',
-      'Up to 200 students',
+      'Up to 100 students',
       'All features included',
       'Email support'
     ]
@@ -54,14 +54,14 @@ const subscriptionPlans = [
     name: 'Teacher Plan (Annual)',
     price: 60,
     teachers: 1,
-    students: 200,
+    students: 100,
     description: 'For individual classrooms - Save 17%',
     priceId: 'price_1Rtco7Bw14YCsyD6LEmSd5ek',
     popular: false,
     features: [
       'Individual teacher account',
       'Unlimited passes',
-      'Up to 200 students',
+      'Up to 100 students',
       'All features included',
       'Email support',
       '2 months free vs monthly'

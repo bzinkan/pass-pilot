@@ -38,9 +38,9 @@ function getMaxTeachersForPlan(plan: string): number {
 // Helper function to get max students for a plan  
 function getMaxStudentsForPlan(plan: string): number {
   const planConfig: Record<string, { maxStudents: number }> = {
-    'TRIAL': { maxStudents: 200 },
-    'TEACHER_MONTHLY': { maxStudents: 200 },
-    'TEACHER_ANNUAL': { maxStudents: 200 },
+    'TRIAL': { maxStudents: 100 },
+    'TEACHER_MONTHLY': { maxStudents: 100 },
+    'TEACHER_ANNUAL': { maxStudents: 100 },
     'SMALL_TEAM_MONTHLY': { maxStudents: 150 },
     'SMALL_TEAM_ANNUAL': { maxStudents: 150 },
     'SMALL_SCHOOL': { maxStudents: 500 },

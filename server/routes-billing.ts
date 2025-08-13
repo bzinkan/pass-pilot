@@ -8,21 +8,21 @@ import { setUserSession } from "./auth/session";
 const PLAN_CONFIG = {
   TRIAL: { 
     maxTeachers: 1, // 1 teacher for trial
-    maxStudents: 200, // 200 students for trial
+    maxStudents: 100, // 100 students for trial
     price: null, // Free trial 
     name: "Free Trial",
     duration: "14 days" // 14-day trial period
   },
   TEACHER_MONTHLY: { 
     maxTeachers: 1, 
-    maxStudents: 200, 
+    maxStudents: 100, 
     price: process.env.STRIPE_PRICE_TEACHER_MONTHLY || '',
     name: "Teacher Plan",
     duration: "monthly"
   },
   TEACHER_ANNUAL: { 
     maxTeachers: 1, 
-    maxStudents: 200, 
+    maxStudents: 100, 
     price: process.env.STRIPE_PRICE_TEACHER_ANNUAL || '',
     name: "Teacher Plan",
     duration: "yearly"
