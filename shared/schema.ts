@@ -165,9 +165,6 @@ export const insertStudentSchema = createInsertSchema(students).omit({
 export const insertPassSchema = createInsertSchema(passes).omit({
   id: true,
   createdAt: true,
-}).extend({
-  timeOut: z.string().optional(),
-  timeIn: z.string().optional(),
 });
 
 export const insertPaymentSchema = createInsertSchema(payments).omit({
