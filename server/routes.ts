@@ -185,6 +185,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(401).json({ error: 'invalid_credentials' });
         }
 
+        // FIRST LOGIN PASSWORD SETTING: If user status is 'pending', set their password now
+        if (user.status === 'pending') {
+          console.log('First login detected - setting password for user:', user.email);
+          const bcrypt = (await import('bcryptjs')).default;
+          const hashedPassword = await bcrypt.hash(password, 12);
+          
+          // Update user with their chosen password and activate account
+          await storage.updateUser(user.id, {
+            password: hashedPassword,
+            status: 'active'
+          });
+          
+          console.log('Password set and account activated for:', user.email);
+          
+          // Continue with login process using the newly set password
+          user.password = hashedPassword;
+          user.status = 'active';
+        }
+
         // Verify password (supporting both plain text for demo and bcrypt for production)
         let passwordValid = false;
         if (user.password.startsWith('$2a$') || user.password.startsWith('$2b$')) {
