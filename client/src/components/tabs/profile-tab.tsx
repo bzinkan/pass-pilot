@@ -285,54 +285,7 @@ export function ProfileTab({ user }: ProfileTabProps) {
           </CardContent>
         </Card>
 
-        {/* Subscription Management */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CreditCard className="w-5 h-5" />
-              Subscription Management
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-blue-700 mb-3">
-                  Manage your PassPilot subscription, view billing details, or cancel your plan.
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => window.open('/cancel-subscription', '_blank')}
-                    className="text-red-600 hover:text-red-700"
-                    data-testid="button-cancel-subscription-profile"
-                  >
-                    Cancel Subscription
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => apiRequest("POST", "/api/create-customer-portal")
-                      .then(res => res.json())
-                      .then(data => {
-                        if (data.url) window.location.href = data.url;
-                      })
-                      .catch(() => {
-                        toast({
-                          title: "Error",
-                          description: "Unable to open billing portal",
-                          variant: "destructive",
-                        });
-                      })}
-                    data-testid="button-billing-portal-profile"
-                  >
-                    Billing Portal
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+
 
         {/* Instructions */}
         <Card>

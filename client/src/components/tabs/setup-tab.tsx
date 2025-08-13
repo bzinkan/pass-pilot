@@ -908,6 +908,18 @@ function SubscriptionContent({ user }: { user: any }) {
           )}
         </div>
       )}
+
+      {/* Simple Cancellation Link */}
+      <div className="mt-4 pt-4 border-t border-gray-200">
+        <a 
+          href="/cancel-subscription" 
+          target="_blank"
+          className="text-sm text-red-600 hover:text-red-700 hover:underline"
+          data-testid="link-cancel-subscription-admin"
+        >
+          Cancel Subscription →
+        </a>
+      </div>
     </div>
   );
 }
