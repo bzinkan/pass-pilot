@@ -11,6 +11,7 @@ A comprehensive Hall Pass Management System built with React, TypeScript, Expres
 - ✅ **Firebase Removal Complete**: Eliminated Firebase complexity, using pure database authentication
 - ✅ **First-Login Password System**: Teachers set permanent password on first login (bcrypt hashed)
 - ✅ **Password System Fix**: Fixed multi-step login path to support first-login password setting
+- ✅ **Password Change Feature**: Complete password change functionality in Profile tab with secure validation
 
 # User Preferences
 
