@@ -2188,6 +2188,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userData = insertUserSchema.parse({
         email: req.body.email,
         name: req.body.name,
+        password: 'temp_password', // Temporary password, teacher sets real one on first login
         schoolId: admin.schoolId,
         isAdmin: false,
         assignedGrades: [],
