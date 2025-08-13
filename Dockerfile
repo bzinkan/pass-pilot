@@ -23,3 +23,4 @@ COPY --from=build /app /app
 EXPOSE 8080
 CMD ["node","dist/server/index.js"]
 
+
