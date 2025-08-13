@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, UserPlus, UserMinus, Users, Mail, Crown, AlertTriangle, Lock, Key } from "lucide-react";
+import { Trash2, UserPlus, UserMinus, Users, Mail, Crown, AlertTriangle, Lock, Key, CreditCard, ArrowUpRight, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -321,6 +321,19 @@ export function SetupTab({ user }: SetupTabProps) {
                     </p>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Subscription Management */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CreditCard className="w-5 h-5" />
+                  Subscription & Billing
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <SubscriptionContent user={user} />
               </CardContent>
             </Card>
 
@@ -732,6 +745,169 @@ export function SetupTab({ user }: SetupTabProps) {
           Save Settings
         </Button>
       </div>
+    </div>
+  );
+}
+
+// Subscription Content Component
+function SubscriptionContent({ user }: { user: any }) {
+  const { toast } = useToast();
+  
+  // Fetch subscription status
+  const { data: subscriptionData, isLoading } = useQuery({
+    queryKey: ['/api/subscription-status'],
+    enabled: !!user
+  });
+
+  // Cancel subscription mutation
+  const cancelMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/subscription/cancel"),
+    onSuccess: (data: any) => {
+      toast({
+        title: "Subscription Cancelled",
+        description: data?.message || "Subscription cancelled successfully"
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/subscription-status'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Cancellation Failed", 
+        description: error.message || "Failed to cancel subscription",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Reactivate subscription mutation
+  const reactivateMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/subscription/reactivate"),
+    onSuccess: (data: any) => {
+      toast({
+        title: "Subscription Reactivated",
+        description: data?.message || "Subscription reactivated successfully"
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/subscription-status'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Reactivation Failed",
+        description: error.message || "Failed to reactivate subscription", 
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Customer portal mutation
+  const portalMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/subscription/portal"),
+    onSuccess: (data: any) => {
+      if (data?.url) {
+        window.open(data.url, '_blank');
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Portal Access Failed",
+        description: error.message || "Failed to open customer portal",
+        variant: "destructive"
+      });
+    }
+  });
+
+  if (isLoading) {
+    return (
+      <div className="animate-pulse">
+        <div className="h-6 bg-gray-200 rounded mb-2"></div>
+        <div className="h-4 bg-gray-200 rounded mb-6"></div>
+        <div className="h-32 bg-gray-200 rounded"></div>
+      </div>
+    );
+  }
+
+  const subscription = subscriptionData;
+  const hasActiveSubscription = subscription?.status === 'active';
+  const isCancelled = subscription?.status === 'canceled' || subscription?.cancel_at_period_end;
+  const isTrialUser = !subscription?.subscriptionId || subscription?.status === 'trialing';
+
+  return (
+    <div className="space-y-4">
+      {/* Current Status */}
+      <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded">
+        <div>
+          <p className="font-medium">Current Status</p>
+          <p className="text-sm text-muted-foreground">
+            {hasActiveSubscription ? 'Active Subscription' : 
+             isCancelled ? 'Cancelled (Active until period end)' : 
+             'Trial Account'}
+          </p>
+        </div>
+        <Badge variant={hasActiveSubscription ? "default" : isCancelled ? "secondary" : "outline"}>
+          {hasActiveSubscription ? 'Active' : isCancelled ? 'Cancelled' : 'Trial'}
+        </Badge>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="space-y-3">
+        {hasActiveSubscription && !isCancelled && (
+          <>
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={() => portalMutation.mutate()}
+              disabled={portalMutation.isPending}
+            >
+              <CreditCard className="w-4 h-4 mr-2" />
+              Manage Subscription
+            </Button>
+            <Button 
+              variant="destructive" 
+              className="w-full"
+              onClick={() => cancelMutation.mutate()}
+              disabled={cancelMutation.isPending}
+            >
+              Cancel Subscription
+            </Button>
+          </>
+        )}
+
+        {isCancelled && (
+          <Button 
+            className="w-full"
+            onClick={() => reactivateMutation.mutate()}
+            disabled={reactivateMutation.isPending}
+          >
+            <RotateCcw className="w-4 h-4 mr-2" />
+            Reactivate Subscription
+          </Button>
+        )}
+
+        {isTrialUser && (
+          <Button 
+            className="w-full"
+            onClick={() => window.open('/pricing', '_blank')}
+          >
+            <ArrowUpRight className="w-4 h-4 mr-2" />
+            View Pricing Plans & Upgrade
+          </Button>
+        )}
+      </div>
+
+      {/* Subscription Details */}
+      {subscription && (
+        <div className="text-xs text-muted-foreground space-y-1 mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded">
+          {subscription.plan && (
+            <div>Plan: {subscription.plan}</div>
+          )}
+          {subscription.current_period_end && (
+            <div>
+              {isCancelled ? 'Ends' : 'Renews'}: {new Date(subscription.current_period_end).toLocaleDateString()}
+            </div>
+          )}
+          {subscription.amount && (
+            <div>Amount: ${(subscription.amount / 100).toFixed(2)}</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
