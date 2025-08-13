@@ -1584,10 +1584,11 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(schools.createdAt))
       .limit(5);
     
-    // Recent users
-    const recentUsers = await db
+    // Recent admin users only (filter by role 'admin')
+    const recentAdmins = await db
       .select()
       .from(users)
+      .where(eq(users.role, 'admin'))
       .orderBy(desc(users.createdAt))
       .limit(10);
     
@@ -1598,11 +1599,11 @@ export class DatabaseStorage implements IStorage {
         description: `School "${school.name}" was created`,
         data: { schoolId: school.id, schoolName: school.name }
       })),
-      ...recentUsers.map(user => ({
-        type: 'user_created',
-        timestamp: user.createdAt,
-        description: `User "${user.name}" joined`,
-        data: { userId: user.id, userName: user.name, schoolId: user.schoolId }
+      ...recentAdmins.map(admin => ({
+        type: 'admin_registered',
+        timestamp: admin.createdAt,
+        description: `Admin "${admin.name}" registered`,
+        data: { userId: admin.id, userName: admin.name, schoolId: admin.schoolId }
       }))
     );
     
