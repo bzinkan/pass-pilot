@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -94,12 +94,12 @@ export default function CancelSubscription() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <Button 
                       variant="outline" 
-                      onClick={() => setLocation("/upgrade-plans")}
+                      onClick={() => setLocation("/register")}
                       className="h-auto p-4 text-left"
                       data-testid="button-view-plans"
                     >
                       <div>
-                        <div className="font-medium">Switch Plans</div>
+                        <div className="font-medium">View Plans</div>
                         <div className="text-sm text-muted-foreground">Find a plan that better fits your needs</div>
                       </div>
                     </Button>
@@ -119,8 +119,8 @@ export default function CancelSubscription() {
                 </div>
 
                 <div className="pt-6 border-t">
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
+                  <Dialog>
+                    <DialogTrigger asChild>
                       <Button 
                         variant="destructive" 
                         className="w-full"
@@ -128,30 +128,30 @@ export default function CancelSubscription() {
                       >
                         I Still Want to Cancel My Subscription
                       </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                        <AlertDialogDescription>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Are you absolutely sure?</DialogTitle>
+                        <DialogDescription>
                           This action will cancel your subscription. You'll continue to have access until the end of your current billing period, 
                           but you will not be charged again.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel data-testid="button-cancel-dialog">
+                        </DialogDescription>
+                      </DialogHeader>
+                      <DialogFooter>
+                        <Button variant="outline" data-testid="button-cancel-dialog">
                           Keep My Subscription
-                        </AlertDialogCancel>
-                        <AlertDialogAction 
+                        </Button>
+                        <Button 
                           onClick={handleCancelSubscription}
                           disabled={isLoading}
-                          className="bg-red-600 hover:bg-red-700"
+                          variant="destructive"
                           data-testid="button-final-cancel"
                         >
                           {isLoading ? "Cancelling..." : "Yes, Cancel Subscription"}
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
                 </div>
               </div>
             </CardContent>

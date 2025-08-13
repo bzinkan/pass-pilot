@@ -220,50 +220,30 @@ export function LandingPage() {
               <span className="text-xl font-bold">PassPilot</span>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 max-w-2xl mx-auto">
-              {/* Support Section */}
-              <div>
-                <h4 className="font-semibold mb-4 text-lg">Support</h4>
-                <div className="text-xs text-gray-500 mb-2">Teacher helping teachers</div>
+            <div className="mb-8">
+              <h4 className="font-semibold mb-4 text-lg">Support</h4>
+              <div className="text-xs text-gray-500 mb-2">Teacher helping teachers</div>
+              <a 
+                href="mailto:passpilotapp@gmail.com" 
+                className="text-primary hover:text-primary/80 text-lg"
+                data-testid="link-support-email"
+              >
+                passpilotapp@gmail.com
+              </a>
+              <p className="text-sm text-gray-400 mt-2">
+                Adding pics for troubleshooting highly recommended
+              </p>
+              
+              {/* Simple cancellation link */}
+              <div className="mt-4 pt-4 border-t border-gray-700">
                 <a 
-                  href="mailto:passpilotapp@gmail.com" 
-                  className="text-primary hover:text-primary/80 text-lg"
-                  data-testid="link-support-email"
+                  href="/cancel-subscription"
+                  className="text-red-400 hover:text-red-300 text-sm"
+                  data-testid="link-cancel-subscription"
                 >
-                  passpilotapp@gmail.com
+                  Cancel Subscription
                 </a>
-                <p className="text-sm text-gray-400 mt-2">
-                  Adding pics for troubleshooting highly recommended
-                </p>
-              </div>
-
-              {/* Subscription Management Section */}
-              <div>
-                <h4 className="font-semibold mb-4 text-lg">Account Management</h4>
-                <div className="space-y-2">
-                  <a 
-                    href="/billing-portal"
-                    className="block text-primary hover:text-primary/80 text-sm"
-                    data-testid="link-billing-portal"
-                  >
-                    Manage Subscription
-                  </a>
-                  <a 
-                    href="/cancel-subscription"
-                    className="block text-red-400 hover:text-red-300 text-sm"
-                    data-testid="link-cancel-subscription"
-                  >
-                    Cancel Subscription
-                  </a>
-                  <a 
-                    href="/upgrade-plans"
-                    className="block text-green-400 hover:text-green-300 text-sm"
-                    data-testid="link-upgrade-plans"
-                  >
-                    Upgrade Plan
-                  </a>
-                </div>
-                <p className="text-xs text-gray-500 mt-3">
+                <p className="text-xs text-gray-500 mt-1">
                   Must be logged in to access
                 </p>
               </div>

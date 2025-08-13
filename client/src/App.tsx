@@ -20,6 +20,7 @@ import BillingSuccess from "./pages/billing-success";
 import AdminDashboard from "./pages/admin-dashboard";
 import Subscribe from "./pages/subscribe";
 import Checkout from "./pages/checkout";
+import CancelSubscription from "./pages/cancel-subscription";
 
 function Router() {
   return (
@@ -38,6 +39,7 @@ function Router() {
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/subscribe" component={Subscribe} />
       <Route path="/checkout" component={Checkout} />
+      <Route path="/cancel-subscription" component={CancelSubscription} />
       <Route path="/super-admin/login" component={SuperAdminLogin} />
       <Route path="/super-admin/dashboard" component={SuperAdminDashboard} />
       {/* Catch-all route for unmatched paths */}
