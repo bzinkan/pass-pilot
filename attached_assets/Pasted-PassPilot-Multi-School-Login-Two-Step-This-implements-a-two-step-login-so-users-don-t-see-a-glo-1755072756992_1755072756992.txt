@@ -1,0 +1,165 @@
+PassPilot — Multi‑School Login (Two‑Step)
+
+This implements a two-step login so users don’t see a global school list:
+
+User enters email + password.
+
+Server finds all schools where those creds are valid.
+
+If there’s one match → log in immediately. If multiple → return just those schools for the user to choose; the selection binds the session to that tenant.
+
+Assumes: sessions are configured (cookie pp.sid), users has password_hash, role, school_id; schools has id, name. Email matching is case‑insensitive.
+
+server/routes-auth-multi.ts
+
+// server/routes-auth-multi.ts
+import type { Express, Request, Response } from "express";
+import bcrypt from "bcryptjs";
+import pkg from "pg";
+const { Pool } = pkg;
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
+
+// Helper: build session user payload from a combined row
+function sessUser(r: any) {
+  return {
+    id: r.user_id as string,
+    email: r.email as string,
+    role: r.role as string,
+    schoolId: r.school_id as string,
+    schoolName: r.school_name as string,
+  } as const;
+}
+
+/**
+ * STEP 1
+ * POST /api/auth/login-multi/step1  { email, password }
+ * - Looks up all accounts for that email across schools.
+ * - Verifies password per account.
+ * - 401 if none match.
+ * - If one match → logs in and returns { ok, user }.
+ * - If multiple → stores a short‑lived pendingAuth in the session and returns { needSchoolPick, schools }.
+ */
+export function registerAuthMultiRoutes(app: Express) {
+  app.post("/api/auth/login-multi/step1", async (req: Request, res: Response) => {
+    try {
+      const email = String(req.body?.email || "").toLowerCase().trim();
+      const password = String(req.body?.password || "");
+      if (!email || !password) return res.status(400).json({ error: "MISSING_FIELDS" });
+
+      const client = await pool.connect();
+      try {
+        const q = await client.query(
+          `SELECT u.id   AS user_id,
+                  u.email AS email,
+                  u.password_hash,
+                  u.role  AS role,
+                  s.id    AS school_id,
+                  s.name  AS school_name
+             FROM users u
+             JOIN schools s ON s.id = u.school_id
+            WHERE lower(u.email) = lower($1)`,
+          [email]
+        );
+
+        const matches: any[] = [];
+        for (const row of q.rows) {
+          if (await bcrypt.compare(password, row.password_hash)) matches.push(row);
+        }
+
+        if (matches.length === 0) return res.status(401).json({ error: "INVALID_CREDENTIALS" });
+
+        if (matches.length === 1) {
+          // Single tenant → log in immediately
+          // @ts-ignore
+          req.session.user = sessUser(matches[0]);
+          return res.json({ ok: true, user: sessUser(matches[0]) });
+        }
+
+        // Multiple tenants → store pending list in session (5‑min TTL)
+        // @ts-ignore
+        req.session.pendingAuth = {
+          email,
+          allow: matches.map((m) => ({ userId: m.user_id, schoolId: m.school_id })),
+          expiresAt: Date.now() + 5 * 60 * 1000,
+        };
+        await new Promise<void>((resolve) => req.session.save(() => resolve()));
+
+        const schools = matches.map((m) => ({ id: m.school_id, name: m.school_name }));
+        return res.json({ needSchoolPick: true, schools });
+      } finally {
+        client.release();
+      }
+    } catch (e: any) {
+      console.error("[login-multi step1]", e);
+      return res.status(500).json({ error: "LOGIN_FAILED" });
+    }
+  });
+
+  /**
+   * STEP 2
+   * POST /api/auth/login-multi/step2  { schoolId }
+   * - Requires a valid pendingAuth in the session from step1.
+   * - Binds session to the chosen school and clears pending state.
+   */
+  app.post("/api/auth/login-multi/step2", async (req: Request, res: Response) => {
+    try {
+      // @ts-ignore
+      const pending = req.session.pendingAuth;
+      const schoolId = String(req.body?.schoolId || "");
+      if (!pending || !schoolId || pending.expiresAt < Date.now()) {
+        return res.status(440).json({ error: "PENDING_EXPIRED" });
+      }
+      const allowed = pending.allow.find((a: any) => String(a.schoolId) === schoolId);
+      if (!allowed) return res.status(403).json({ error: "NOT_ALLOWED" });
+
+      const client = await pool.connect();
+      try {
+        const r = await client.query(
+          `SELECT u.id   AS user_id,
+                  u.email AS email,
+                  u.role  AS role,
+                  s.id    AS school_id,
+                  s.name  AS school_name
+             FROM users u
+             JOIN schools s ON s.id = u.school_id
+            WHERE u.id = $1 AND s.id = $2
+            LIMIT 1`,
+          [allowed.userId, schoolId]
+        );
+        if (r.rowCount === 0) return res.status(403).json({ error: "NOT_ALLOWED" });
+
+        // @ts-ignore
+        req.session.user = sessUser(r.rows[0]);
+        // @ts-ignore
+        delete req.session.pendingAuth;
+        return res.json({ ok: true, user: sessUser(r.rows[0]) });
+      } finally {
+        client.release();
+      }
+    } catch (e: any) {
+      console.error("[login-multi step2]", e);
+      return res.status(500).json({ error: "LOGIN_FAILED" });
+    }
+  });
+}
+
+Wire-up in server/index.ts
+
+// server/index.ts (excerpt)
+import { registerAuthMultiRoutes } from "./routes-auth-multi";
+
+// ... your existing Stripe raw webhook FIRST ...
+// ... body parsers and session middleware ...
+registerAuthMultiRoutes(app); // mount AFTER sessions
+
+Frontend flow (modal)
+
+Show Email + Password → POST /api/auth/login-multi/step1.
+
+If { ok:true } → redirect to app.
+
+If { needSchoolPick:true, schools:[...] } → show a dropdown with only those schools; on select → POST /api/auth/login-multi/step2 with { schoolId }, then redirect.

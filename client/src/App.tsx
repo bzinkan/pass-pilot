@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 // Authentication is handled via hooks, no provider needed
 import Home from "@/pages/home";
 import Login from "@/pages/login";
+import LoginMulti from "@/pages/login-multi";
 import Register from "@/pages/register";
 import RegisterV2 from "@/pages/register-v2";
 import ResetPassword from "@/pages/reset-password";
@@ -20,7 +21,8 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
-      <Route path="/login" component={Login} />
+      <Route path="/login" component={LoginMulti} />
+      <Route path="/login-old" component={Login} />
       <Route path="/register" component={Register} />
       <Route path="/register-v2" component={RegisterV2} />
       <Route path="/reset-password" component={ResetPassword} />
