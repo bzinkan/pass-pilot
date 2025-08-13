@@ -5,6 +5,7 @@ import { registerRoutes } from "./routes";
 import { registerRegistrationV2 } from "./routes-registration-v2";
 import { registerAuthMultiRoutes } from "./routes-auth-multi";
 import { registerSuperAdminRoutes } from "./routes-super-admin";
+import { registerBootstrapRoute } from "./bootstrap";
 import { setupVite, serveStatic, log } from "./vite";
 import "./passResetScheduler"; // Initialize the pass reset scheduler
 
@@ -55,6 +56,9 @@ app.use((req, res, next) => {
 (async () => {
   // Register V2 registration routes
   registerRegistrationV2(app);
+  
+  // Register bootstrap route first (only if BOOTSTRAP_TOKEN is set)
+  registerBootstrapRoute(app);
   
   // Register multi-school authentication routes
   registerAuthMultiRoutes(app);
