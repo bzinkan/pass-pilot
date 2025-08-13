@@ -3536,51 +3536,6 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message || "Failed to cancel subscription" });
     }
   });
-  app2.get("/api/subscription-status", requireAuth, async (req, res) => {
-    try {
-      const user = await storage.getUser(req.userId);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      const school = await storage.getSchoolById(user.schoolId);
-      if (!school) {
-        return res.status(404).json({ message: "School not found" });
-      }
-      const isTrialAccount = school.plan === "free_trial";
-      const hasActiveSubscription = school.plan !== "free_trial" && !school.subscriptionCancelledAt;
-      let subscriptionInfo = {
-        hasActiveSubscription,
-        isTrialAccount,
-        plan: school.plan,
-        maxTeachers: school.maxTeachers,
-        cancelled: !!school.subscriptionCancelledAt,
-        currentPeriodEnd: null,
-        amount: null,
-        currency: null,
-        interval: null
-      };
-      if (school.stripeSubscriptionId && hasActiveSubscription) {
-        try {
-          const Stripe3 = __require("stripe");
-          const stripe3 = new Stripe3(process.env.STRIPE_SECRET_KEY);
-          const subscription = await stripe3.subscriptions.retrieve(school.stripeSubscriptionId);
-          subscriptionInfo.currentPeriodEnd = new Date(subscription.current_period_end * 1e3);
-          subscriptionInfo.amount = subscription.items.data[0]?.price?.unit_amount || 0;
-          subscriptionInfo.currency = subscription.currency;
-          subscriptionInfo.interval = subscription.items.data[0]?.price?.recurring?.interval || "month";
-        } catch (error) {
-          console.warn("Failed to fetch Stripe subscription details:", error);
-        }
-      }
-      if (school.subscriptionCancelledAt && school.subscriptionEndsAt) {
-        subscriptionInfo.currentPeriodEnd = school.subscriptionEndsAt;
-      }
-      res.json(subscriptionInfo);
-    } catch (error) {
-      console.error("Subscription status error:", error);
-      res.status(500).json({ message: error.message || "Failed to get subscription status" });
-    }
-  });
   app2.post("/api/subscription/reactivate", requireAuth, async (req, res) => {
     try {
       const user = await storage.getUser(req.userId);
