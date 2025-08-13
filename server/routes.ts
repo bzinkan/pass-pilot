@@ -1606,8 +1606,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get subscription status endpoint
-  app.get("/api/subscription-status", requireAuth, async (req: any, res) => {
+  // Import billing functions
+  const billingModule = await import('./routes-billing');
+  const { getSubscriptionStatus, cancelSubscription, reactivateSubscription, createPortalSession: portalSession } = billingModule;
+
+  // Get subscription status endpoint  
+  app.get("/api/subscription-status", requireAuth, getSubscriptionStatus);
+
+  // Subscription management endpoints
+  app.post("/api/subscription/cancel", requireAuth, cancelSubscription);
+  app.post("/api/subscription/reactivate", requireAuth, reactivateSubscription);
+  app.post("/api/create-portal-session", requireAuth, portalSession);
+
+  // Legacy subscription status (keep for compatibility)
+  app.get("/api/subscription-status-legacy", requireAuth, async (req: any, res) => {
     if (!stripe) {
       return res.status(500).json({ message: "Stripe not configured" });
     }
@@ -2943,11 +2955,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerAdminRoutes(app);
 
   // Import billing routes
-  const { register, stripeWebhook, createPortalSession } = await import("./routes-billing");
+  const { register, stripeWebhook } = await import("./routes-billing");
   
   // Stripe billing endpoints (webhook already registered in index.ts)
   app.post("/api/register", register);
-  app.post("/api/billing/portal", requireAuth, createPortalSession);
 
   const httpServer = createServer(app);
   return httpServer;

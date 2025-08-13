@@ -747,10 +747,13 @@ var init_session = __esm({
 // server/routes-billing.ts
 var routes_billing_exports = {};
 __export(routes_billing_exports, {
+  cancelSubscription: () => cancelSubscription,
   createPortalSession: () => createPortalSession,
+  getSubscriptionStatus: () => getSubscriptionStatus,
   handleCheckoutSuccess: () => handleCheckoutSuccess,
   listPayments: () => listPayments,
   listSchools: () => listSchools,
+  reactivateSubscription: () => reactivateSubscription,
   register: () => register,
   stripeWebhook: () => stripeWebhook
 });
@@ -873,6 +876,109 @@ async function handleCheckoutSuccess(req, res) {
     return res.redirect("/register?error=processing_failed");
   }
 }
+async function getSubscriptionStatus(req, res) {
+  try {
+    if (!req.user?.schoolId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const school = await storage.getSchool(req.user.schoolId);
+    if (!school) {
+      return res.status(404).json({ error: "School not found" });
+    }
+    if (school.stripeSubscriptionId && stripe) {
+      try {
+        const subscription = await stripe.subscriptions.retrieve(school.stripeSubscriptionId);
+        const product = await stripe.products.retrieve(subscription.items.data[0].price.product);
+        res.json({
+          hasActiveSubscription: subscription.status === "active",
+          isTrialAccount: school.plan === "TRIAL",
+          plan: school.plan,
+          amount: subscription.items.data[0].price.unit_amount,
+          currency: subscription.currency,
+          interval: subscription.items.data[0].price.recurring?.interval,
+          currentPeriodEnd: new Date(subscription.current_period_end * 1e3),
+          cancelAtPeriodEnd: subscription.cancel_at_period_end,
+          maxTeachers: school.maxTeachers,
+          maxStudents: school.maxStudents,
+          stripeCustomerId: school.stripeCustomerId
+        });
+      } catch (error) {
+        console.error("Error fetching subscription from Stripe:", error);
+        res.json({
+          hasActiveSubscription: school.plan !== "TRIAL",
+          isTrialAccount: school.plan === "TRIAL",
+          plan: school.plan,
+          maxTeachers: school.maxTeachers,
+          maxStudents: school.maxStudents
+        });
+      }
+    } else {
+      res.json({
+        hasActiveSubscription: false,
+        isTrialAccount: school.plan === "TRIAL",
+        plan: school.plan,
+        maxTeachers: school.maxTeachers,
+        maxStudents: school.maxStudents
+      });
+    }
+  } catch (error) {
+    console.error("Subscription status error:", error);
+    res.status(500).json({ error: "Failed to get subscription status" });
+  }
+}
+async function cancelSubscription(req, res) {
+  try {
+    if (!req.user?.schoolId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const school = await storage.getSchool(req.user.schoolId);
+    if (!school?.stripeSubscriptionId) {
+      return res.status(404).json({ error: "No active subscription found" });
+    }
+    if (!stripe) {
+      return res.status(500).json({ error: "Stripe not configured" });
+    }
+    const subscription = await stripe.subscriptions.update(school.stripeSubscriptionId, {
+      cancel_at_period_end: true
+    });
+    await storage.updateSchool(school.id, {
+      subscriptionCancelledAt: /* @__PURE__ */ new Date(),
+      subscriptionEndsAt: new Date(subscription.current_period_end * 1e3)
+    });
+    res.json({
+      message: "Subscription will be cancelled at the end of the current period",
+      endsAt: new Date(subscription.current_period_end * 1e3)
+    });
+  } catch (error) {
+    console.error("Cancel subscription error:", error);
+    res.status(500).json({ error: "Failed to cancel subscription" });
+  }
+}
+async function reactivateSubscription(req, res) {
+  try {
+    if (!req.user?.schoolId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const school = await storage.getSchool(req.user.schoolId);
+    if (!school?.stripeSubscriptionId) {
+      return res.status(404).json({ error: "No subscription found" });
+    }
+    if (!stripe) {
+      return res.status(500).json({ error: "Stripe not configured" });
+    }
+    await stripe.subscriptions.update(school.stripeSubscriptionId, {
+      cancel_at_period_end: false
+    });
+    await storage.updateSchool(school.id, {
+      subscriptionCancelledAt: null,
+      subscriptionEndsAt: null
+    });
+    res.json({ message: "Subscription reactivated successfully" });
+  } catch (error) {
+    console.error("Reactivate subscription error:", error);
+    res.status(500).json({ error: "Failed to reactivate subscription" });
+  }
+}
 async function listSchools(req, res) {
   try {
     const schools3 = await storage.getAllSchools();
@@ -977,7 +1083,7 @@ var init_routes_billing = __esm({
     stripe = null;
     if (STRIPE_SECRET_KEY) {
       stripe = new Stripe(STRIPE_SECRET_KEY, {
-        apiVersion: "2023-10-16"
+        apiVersion: "2025-07-30.basil"
       });
     } else {
       console.warn("STRIPE_SECRET_KEY not set - billing functionality will be disabled");
@@ -2817,7 +2923,13 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: error.message });
     }
   });
-  app2.get("/api/subscription-status", requireAuth, async (req, res) => {
+  const billingModule = await Promise.resolve().then(() => (init_routes_billing(), routes_billing_exports));
+  const { getSubscriptionStatus: getSubscriptionStatus2, cancelSubscription: cancelSubscription2, reactivateSubscription: reactivateSubscription2, createPortalSession: portalSession } = billingModule;
+  app2.get("/api/subscription-status", requireAuth, getSubscriptionStatus2);
+  app2.post("/api/subscription/cancel", requireAuth, cancelSubscription2);
+  app2.post("/api/subscription/reactivate", requireAuth, reactivateSubscription2);
+  app2.post("/api/create-portal-session", requireAuth, portalSession);
+  app2.get("/api/subscription-status-legacy", requireAuth, async (req, res) => {
     if (!stripe2) {
       return res.status(500).json({ message: "Stripe not configured" });
     }
@@ -3873,9 +3985,8 @@ async function registerRoutes(app2) {
     }
   });
   registerAdminRoutes(app2);
-  const { register: register2, stripeWebhook: stripeWebhook2, createPortalSession: createPortalSession2 } = await Promise.resolve().then(() => (init_routes_billing(), routes_billing_exports));
+  const { register: register2, stripeWebhook: stripeWebhook2 } = await Promise.resolve().then(() => (init_routes_billing(), routes_billing_exports));
   app2.post("/api/register", register2);
-  app2.post("/api/billing/portal", requireAuth, createPortalSession2);
   const httpServer = createServer(app2);
   return httpServer;
 }

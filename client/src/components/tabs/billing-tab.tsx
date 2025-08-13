@@ -223,20 +223,46 @@ export function BillingTab({ user }: BillingTabProps) {
                       </Button>
                     </div>
                   ) : (
-                    <Button 
-                      onClick={() => {
-                        if (confirm('Are you sure you want to cancel your subscription? You will retain access until the end of your current billing period.')) {
-                          cancelMutation.mutate();
-                        }
-                      }}
-                      disabled={cancelMutation.isPending}
-                      variant="outline"
-                      className="w-full text-red-600 border-red-200 hover:bg-red-50"
-                      data-testid="button-cancel-subscription"
-                    >
-                      <X className="w-4 h-4 mr-2" />
-                      {cancelMutation.isPending ? 'Cancelling...' : 'Cancel Subscription'}
-                    </Button>
+                    <div className="space-y-3">
+                      <Button 
+                        onClick={() => {
+                          if ((subscriptionData as any)?.stripeCustomerId) {
+                            // Open Stripe customer portal
+                            apiRequest("POST", "/api/create-portal-session", {
+                              customerId: (subscriptionData as any)?.stripeCustomerId
+                            }).then(response => response.json())
+                              .then(data => window.open(data.url, '_blank'))
+                              .catch(error => {
+                                toast({
+                                  title: "Error",
+                                  description: "Failed to open billing portal",
+                                  variant: "destructive"
+                                });
+                              });
+                          }
+                        }}
+                        className="w-full"
+                        variant="outline"
+                        data-testid="button-manage-subscription"
+                      >
+                        <CreditCard className="w-4 h-4 mr-2" />
+                        Manage Subscription
+                      </Button>
+                      <Button 
+                        onClick={() => {
+                          if (confirm('Are you sure you want to cancel your subscription? You will retain access until the end of your current billing period.')) {
+                            cancelMutation.mutate();
+                          }
+                        }}
+                        disabled={cancelMutation.isPending}
+                        variant="outline"
+                        className="w-full text-red-600 border-red-200 hover:bg-red-50"
+                        data-testid="button-cancel-subscription"
+                      >
+                        <X className="w-4 h-4 mr-2" />
+                        {cancelMutation.isPending ? 'Cancelling...' : 'Cancel Subscription'}
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>

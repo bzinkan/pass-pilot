@@ -71,7 +71,7 @@ let stripe: Stripe | null = null;
 
 if (STRIPE_SECRET_KEY) {
   stripe = new Stripe(STRIPE_SECRET_KEY, {
-    apiVersion: '2023-10-16',
+    apiVersion: '2025-07-30.basil',
   });
 } else {
   console.warn('STRIPE_SECRET_KEY not set - billing functionality will be disabled');
@@ -360,6 +360,133 @@ export async function handleCheckoutSuccess(req: Request, res: Response) {
   } catch (error: any) {
     console.error('Checkout success error:', error);
     return res.redirect('/register?error=processing_failed');
+  }
+}
+
+// Subscription Management Endpoints
+export async function getSubscriptionStatus(req: Request, res: Response) {
+  try {
+    if (!req.user?.schoolId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const school = await storage.getSchool(req.user.schoolId);
+    if (!school) {
+      return res.status(404).json({ error: 'School not found' });
+    }
+
+    // Get subscription details from Stripe if active
+    if (school.stripeSubscriptionId && stripe) {
+      try {
+        const subscription = await stripe.subscriptions.retrieve(school.stripeSubscriptionId);
+        const product = await stripe.products.retrieve(subscription.items.data[0].price.product as string);
+        
+        res.json({
+          hasActiveSubscription: subscription.status === 'active',
+          isTrialAccount: school.plan === 'TRIAL',
+          plan: school.plan,
+          amount: subscription.items.data[0].price.unit_amount,
+          currency: subscription.currency,
+          interval: subscription.items.data[0].price.recurring?.interval,
+          currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+          cancelAtPeriodEnd: subscription.cancel_at_period_end,
+          maxTeachers: school.maxTeachers,
+          maxStudents: school.maxStudents,
+          stripeCustomerId: school.stripeCustomerId
+        });
+      } catch (error) {
+        console.error('Error fetching subscription from Stripe:', error);
+        // Fallback to database info
+        res.json({
+          hasActiveSubscription: school.plan !== 'TRIAL',
+          isTrialAccount: school.plan === 'TRIAL',
+          plan: school.plan,
+          maxTeachers: school.maxTeachers,
+          maxStudents: school.maxStudents
+        });
+      }
+    } else {
+      // No active subscription
+      res.json({
+        hasActiveSubscription: false,
+        isTrialAccount: school.plan === 'TRIAL',
+        plan: school.plan,
+        maxTeachers: school.maxTeachers,
+        maxStudents: school.maxStudents
+      });
+    }
+  } catch (error: any) {
+    console.error('Subscription status error:', error);
+    res.status(500).json({ error: 'Failed to get subscription status' });
+  }
+}
+
+export async function cancelSubscription(req: Request, res: Response) {
+  try {
+    if (!req.user?.schoolId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const school = await storage.getSchool(req.user.schoolId);
+    if (!school?.stripeSubscriptionId) {
+      return res.status(404).json({ error: 'No active subscription found' });
+    }
+
+    if (!stripe) {
+      return res.status(500).json({ error: 'Stripe not configured' });
+    }
+
+    // Cancel at period end (don't immediately cancel)
+    const subscription = await stripe.subscriptions.update(school.stripeSubscriptionId, {
+      cancel_at_period_end: true
+    });
+
+    // Update database
+    await storage.updateSchool(school.id, {
+      subscriptionCancelledAt: new Date(),
+      subscriptionEndsAt: new Date(subscription.current_period_end * 1000)
+    });
+
+    res.json({ 
+      message: 'Subscription will be cancelled at the end of the current period',
+      endsAt: new Date(subscription.current_period_end * 1000)
+    });
+  } catch (error: any) {
+    console.error('Cancel subscription error:', error);
+    res.status(500).json({ error: 'Failed to cancel subscription' });
+  }
+}
+
+export async function reactivateSubscription(req: Request, res: Response) {
+  try {
+    if (!req.user?.schoolId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const school = await storage.getSchool(req.user.schoolId);
+    if (!school?.stripeSubscriptionId) {
+      return res.status(404).json({ error: 'No subscription found' });
+    }
+
+    if (!stripe) {
+      return res.status(500).json({ error: 'Stripe not configured' });
+    }
+
+    // Reactivate subscription
+    await stripe.subscriptions.update(school.stripeSubscriptionId, {
+      cancel_at_period_end: false
+    });
+
+    // Update database
+    await storage.updateSchool(school.id, {
+      subscriptionCancelledAt: null,
+      subscriptionEndsAt: null
+    });
+
+    res.json({ message: 'Subscription reactivated successfully' });
+  } catch (error: any) {
+    console.error('Reactivate subscription error:', error);
+    res.status(500).json({ error: 'Failed to reactivate subscription' });
   }
 }
 
