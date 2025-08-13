@@ -41,8 +41,8 @@ function getMaxStudentsForPlan(plan: string): number {
     'TRIAL': { maxStudents: 100 },
     'TEACHER_MONTHLY': { maxStudents: 100 },
     'TEACHER_ANNUAL': { maxStudents: 100 },
-    'SMALL_TEAM_MONTHLY': { maxStudents: 150 },
-    'SMALL_TEAM_ANNUAL': { maxStudents: 150 },
+    'SMALL_TEAM_MONTHLY': { maxStudents: 200 },
+    'SMALL_TEAM_ANNUAL': { maxStudents: 200 },
     'SMALL_SCHOOL': { maxStudents: 500 },
     'MEDIUM_SCHOOL': { maxStudents: 1000 },
     'LARGE_SCHOOL': { maxStudents: 2000 }
