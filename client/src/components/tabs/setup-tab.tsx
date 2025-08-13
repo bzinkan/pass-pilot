@@ -824,7 +824,7 @@ function SubscriptionContent({ user }: { user: any }) {
     );
   }
 
-  const subscription = subscriptionData;
+  const subscription = subscriptionData as any;
   const hasActiveSubscription = subscription?.status === 'active';
   const isCancelled = subscription?.status === 'canceled' || subscription?.cancel_at_period_end;
   const isTrialUser = !subscription?.subscriptionId || subscription?.status === 'trialing';
