@@ -1,0 +1,1 @@
+INSERT INTO admin_users (id, email, password_hash, name, role, created_at) VALUES (gen_random_uuid(), 'passpilotapp@gmail.com', '$2b$12$ZrQx5vK8W2xYoJ7fR3L4zO8vH9P2mN6qL1tS5wX7yE9uA3cD8fG1h', 'PassPilot Super Admin', 'superadmin', NOW());
