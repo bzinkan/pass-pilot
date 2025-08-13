@@ -566,7 +566,7 @@ export class MemStorage implements IStorage {
     if (!school) throw new Error("School not found");
     
     const now = new Date();
-    const trialEndDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
+    const trialEndDate = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000); // 365 days from now (unlimited for school testing)
     
     const updatedSchool = { 
       ...school, 
@@ -834,9 +834,8 @@ export class DatabaseStorage implements IStorage {
     const activeSchools = await db.select().from(schools);
     return activeSchools.filter(school => {
       const now = new Date();
-      // Include active paid plans and valid trials
-      return school.plan !== 'TRIAL' || 
-             (school.trialEndDate && school.trialEndDate > now && !school.isTrialExpired);
+      // Include active paid plans and all trials (unlimited for school testing)
+      return school.plan !== 'TRIAL' || true; // All trial schools are active for unlimited testing
     });
   }
 

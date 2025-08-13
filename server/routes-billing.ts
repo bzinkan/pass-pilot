@@ -7,11 +7,11 @@ import { setUserSession } from "./auth/session";
 // Plan configuration with Stripe Price IDs
 const PLAN_CONFIG = {
   TRIAL: { 
-    maxTeachers: 1, 
-    maxStudents: 200, 
+    maxTeachers: -1, // Unlimited teachers for school testing 
+    maxStudents: -1, // Unlimited students for school testing
     price: null, // Free trial 
     name: "Free Trial",
-    duration: "14 days"
+    duration: "unlimited" // Unlimited duration for school testing
   },
   TEACHER_MONTHLY: { 
     maxTeachers: 1, 
