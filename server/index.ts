@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import bodyParser from "body-parser";
 import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
+import { registerRegistrationV2 } from "./routes-registration-v2";
 import { setupVite, serveStatic, log } from "./vite";
 import "./passResetScheduler"; // Initialize the pass reset scheduler
 
@@ -50,6 +51,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Register V2 registration routes
+  registerRegistrationV2(app);
+  
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Home from "@/pages/home";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
+import RegisterV2 from "@/pages/register-v2";
 import ResetPassword from "@/pages/reset-password";
 
 import Kiosk from "./pages/kiosk";
@@ -21,6 +22,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
+      <Route path="/register-v2" component={RegisterV2} />
       <Route path="/reset-password" component={ResetPassword} />
 
       <Route path="/kiosk" component={Kiosk} />

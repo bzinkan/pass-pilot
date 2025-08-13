@@ -595,7 +595,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/auth/register-school", async (req, res) => {
+  // Disable old registration endpoint - use V2 instead
+  app.post("/api/auth/register-school", (_req, res) =>
+    res.status(410).json({ error: "REGISTRATION_ENDPOINT_MOVED", use: "/api/registration/v2/register" })
+  );
+
+  app.post("/api/auth/register-school-old", async (req, res) => {
     try {
       // CRITICAL: Extract current form data immediately to prevent step-back issues
       const { schoolName, district, adminName, adminEmail, adminPassword, plan = 'TRIAL' } = req.body;
