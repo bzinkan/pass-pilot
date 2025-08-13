@@ -1,4 +1,4 @@
-import { pgTable, text, varchar, timestamp, integer, boolean, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, pgEnum, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -86,7 +86,7 @@ export const students = pgTable("students", {
 
 // Passes table
 export const passes = pgTable("passes", {
-  id: varchar("id").primaryKey(),
+  id: uuid("id").defaultRandom().primaryKey(),
   studentId: varchar("student_id").notNull().references(() => students.id),
   teacherId: varchar("teacher_id").notNull().references(() => users.id),
   schoolId: varchar("school_id").notNull().references(() => schools.id),

@@ -37,7 +37,7 @@ __export(schema_exports, {
   userStatusEnum: () => userStatusEnum,
   users: () => users
 });
-import { pgTable, text, varchar, timestamp, integer, boolean, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, pgEnum, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 var userStatusEnum, planEnum, passStatusEnum, schools, users, grades, students, passes, payments, adminUsers, subscriptionEvents, insertUserSchema, insertSchoolSchema, insertGradeSchema, insertStudentSchema, insertPassSchema, insertPaymentSchema, insertAdminUserSchema, insertSubscriptionEventSchema;
 var init_schema = __esm({
@@ -123,7 +123,7 @@ var init_schema = __esm({
       updatedAt: timestamp("updated_at").defaultNow()
     });
     passes = pgTable("passes", {
-      id: varchar("id").primaryKey(),
+      id: uuid("id").defaultRandom().primaryKey(),
       studentId: varchar("student_id").notNull().references(() => students.id),
       teacherId: varchar("teacher_id").notNull().references(() => users.id),
       schoolId: varchar("school_id").notNull().references(() => schools.id),
@@ -3096,11 +3096,12 @@ async function registerRoutes(app2) {
         return res.status(404).json({ message: "User not found" });
       }
       console.log("Found user:", user.name, user.email);
+      const { id: _ignore, ...requestBody } = req.body;
       const passData = insertPassSchema.parse({
-        ...req.body,
+        ...requestBody,
         teacherId: req.userId,
         schoolId: user.schoolId,
-        destination: req.body.destination || "Restroom",
+        destination: requestBody.destination || "Restroom",
         // Default destination
         checkoutTime: /* @__PURE__ */ new Date(),
         // Set checkout time to now

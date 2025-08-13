@@ -2054,11 +2054,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log('Found user:', user.name, user.email);
 
+      // Remove any id from request body to let database generate it
+      const { id: _ignore, ...requestBody } = req.body;
+      
       const passData = insertPassSchema.parse({
-        ...req.body,
+        ...requestBody,
         teacherId: req.userId,
         schoolId: user.schoolId,
-        destination: req.body.destination || "Restroom", // Default destination
+        destination: requestBody.destination || "Restroom", // Default destination
         checkoutTime: new Date(), // Set checkout time to now
         timeOut: new Date(), // Set time out to now
         issuingTeacher: user.name, // Set issuing teacher to current user
