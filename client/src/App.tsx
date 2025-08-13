@@ -21,8 +21,8 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
-      <Route path="/login" component={LoginMulti} />
-      <Route path="/login-old" component={Login} />
+      <Route path="/login" component={Login} />
+      <Route path="/login-multi" component={LoginMulti} />
       <Route path="/register" component={Register} />
       <Route path="/register-v2" component={RegisterV2} />
       <Route path="/reset-password" component={ResetPassword} />

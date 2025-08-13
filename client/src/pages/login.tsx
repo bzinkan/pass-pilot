@@ -52,8 +52,8 @@ export default function Login() {
       console.log("LOGIN - FROM STATE:", loginForm);
       console.log("LOGIN - FROM FORM:", { email, password: '***' });
       
-      // Direct API call to handle multi-school response
-      const response = await fetch('/api/auth/login', {
+      // Use new multi-school login endpoint
+      const response = await fetch('/api/auth/login-multi/step1', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -66,7 +66,7 @@ export default function Login() {
         throw new Error(data.error || 'Login failed');
       }
       
-      if (data.requiresSchool) {
+      if (data.needSchoolPick) {
         // User has multiple schools - show school selector
         setRequiresSchool(true);
         setAvailableSchools(data.schools || []);
@@ -77,12 +77,12 @@ export default function Login() {
           title: "Multiple Schools Found",
           description: "Please select which school you want to access.",
         });
-      } else if (data.success) {
+      } else if (data.ok) {
         // Single school login success - redirect to app
         setLocation('/');
         toast({
           title: "Welcome!",
-          description: "Successfully logged in!",
+          description: `Successfully logged into ${data.user.schoolName}!`,
         });
       }
       
@@ -102,20 +102,18 @@ export default function Login() {
     
     setIsLoading(true);
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch('/api/auth/login-multi/step2', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ 
-          email: loginForm.email, 
-          password: loginForm.password, 
           schoolId: selectedSchoolId 
         })
       });
       
       const data = await response.json();
       
-      if (!response.ok || !data.success) {
+      if (!response.ok || !data.ok) {
         throw new Error(data.error || 'Login failed');
       }
       
