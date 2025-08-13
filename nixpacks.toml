@@ -1,0 +1,15 @@
+[phases.setup]
+nixPkgs = ["nodejs_20"]
+
+[phases.install]
+# avoid EBUSY on node_modules/.cache
+cmds = [
+  "rm -rf node_modules/.cache/* || true",
+  "npm i --no-audit --no-fund"
+]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "NODE_ENV=production node dist/index.js"
