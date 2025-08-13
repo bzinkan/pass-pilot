@@ -1,8 +1,11 @@
 import { type User, type InsertUser, type School, type InsertSchool, type Grade, type InsertGrade, type Student, type InsertStudent, type Pass, type InsertPass, type Payment, type InsertPayment } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, schools, grades, students, passes, payments } from "@shared/schema";
-import { eq, and, lt } from "drizzle-orm";
+import { users, schools, grades, students, passes, payments, adminUsers } from "@shared/schema";
+import { eq, and, lt, count, desc } from "drizzle-orm";
+
+export type AdminUser = typeof adminUsers.$inferSelect;
+export type InsertAdminUser = typeof adminUsers.$inferInsert;
 
 export interface IStorage {
   // Users
@@ -65,6 +68,25 @@ export interface IStorage {
   createPayment(payment: InsertPayment): Promise<Payment>;
   getPaymentsBySchool(schoolId: string): Promise<Payment[]>;
   getAllPayments(): Promise<Payment[]>;
+  
+  // Multi-school user lookup
+  getUsersByEmail(email: string): Promise<User[]>;
+  
+  // Super Admin functions
+  getAdminUserByEmail(email: string): Promise<AdminUser | undefined>;
+  getAllAdminUsers(): Promise<AdminUser[]>;
+  createAdminUser(adminUser: InsertAdminUser): Promise<AdminUser>;
+  getAllSchoolsWithStats(): Promise<(School & { userCount: number; studentCount: number; activePassCount: number })[]>;
+  getPlatformStats(): Promise<{
+    totalSchools: number;
+    totalUsers: number;
+    totalStudents: number;
+    activePasses: number;
+    totalPasses: number;
+  }>;
+  updateSchoolAsAdmin(schoolId: string, updates: Partial<School>): Promise<School | undefined>;
+  deleteSchoolCompletely(schoolId: string): Promise<{ success: boolean; deletedCounts: any }>;
+  getRecentPlatformActivity(limit: number): Promise<any[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -74,6 +96,7 @@ export class MemStorage implements IStorage {
   private students = new Map<string, Student>();
   private passes = new Map<string, Pass>();
   private payments = new Map<string, Payment>();
+  private adminUsers = new Map<string, AdminUser>();
 
   constructor() {
     // Initialize with demo data
@@ -826,6 +849,158 @@ export class MemStorage implements IStorage {
   async getAllPayments(): Promise<Payment[]> {
     return Array.from(this.payments.values());
   }
+
+  // Multi-school user lookup
+  async getUsersByEmail(email: string): Promise<User[]> {
+    return Array.from(this.users.values()).filter(user => 
+      user.email.toLowerCase() === email.toLowerCase()
+    );
+  }
+
+  // Super Admin methods
+  async getAdminUserByEmail(email: string): Promise<AdminUser | undefined> {
+    for (const admin of this.adminUsers.values()) {
+      if (admin.email.toLowerCase() === email.toLowerCase()) {
+        return admin;
+      }
+    }
+    return undefined;
+  }
+
+  async getAllAdminUsers(): Promise<AdminUser[]> {
+    return Array.from(this.adminUsers.values());
+  }
+
+  async createAdminUser(insertAdminUser: InsertAdminUser): Promise<AdminUser> {
+    const id = randomUUID();
+    const adminUser: AdminUser = {
+      ...insertAdminUser,
+      id,
+      createdAt: new Date(),
+    };
+    this.adminUsers.set(id, adminUser);
+    return adminUser;
+  }
+
+  async getAllSchoolsWithStats(): Promise<(School & { userCount: number; studentCount: number; activePassCount: number })[]> {
+    const schools = Array.from(this.schools.values());
+    return schools.map(school => {
+      const userCount = Array.from(this.users.values()).filter(u => u.schoolId === school.id).length;
+      const studentCount = Array.from(this.students.values()).filter(s => s.schoolId === school.id).length;
+      const activePassCount = Array.from(this.passes.values()).filter(p => 
+        p.schoolId === school.id && p.status === "active"
+      ).length;
+      
+      return {
+        ...school,
+        userCount,
+        studentCount,
+        activePassCount
+      };
+    });
+  }
+
+  async getPlatformStats(): Promise<{
+    totalSchools: number;
+    totalUsers: number;
+    totalStudents: number;
+    activePasses: number;
+    totalPasses: number;
+  }> {
+    return {
+      totalSchools: this.schools.size,
+      totalUsers: this.users.size,
+      totalStudents: this.students.size,
+      activePasses: Array.from(this.passes.values()).filter(p => p.status === "active").length,
+      totalPasses: this.passes.size,
+    };
+  }
+
+  async updateSchoolAsAdmin(schoolId: string, updates: Partial<School>): Promise<School | undefined> {
+    const school = this.schools.get(schoolId);
+    if (!school) return undefined;
+    
+    const updatedSchool = { ...school, ...updates, updatedAt: new Date() };
+    this.schools.set(schoolId, updatedSchool);
+    return updatedSchool;
+  }
+
+  async deleteSchoolCompletely(schoolId: string): Promise<{ success: boolean; deletedCounts: any }> {
+    const school = this.schools.get(schoolId);
+    if (!school) return { success: false, deletedCounts: {} };
+
+    // Count what we're deleting
+    const userCount = Array.from(this.users.values()).filter(u => u.schoolId === schoolId).length;
+    const studentCount = Array.from(this.students.values()).filter(s => s.schoolId === schoolId).length;
+    const passCount = Array.from(this.passes.values()).filter(p => p.schoolId === schoolId).length;
+    const gradeCount = Array.from(this.grades.values()).filter(g => g.schoolId === schoolId).length;
+    const paymentCount = Array.from(this.payments.values()).filter(p => p.schoolId === schoolId).length;
+
+    // Delete all related data
+    for (const [id, user] of this.users.entries()) {
+      if (user.schoolId === schoolId) this.users.delete(id);
+    }
+    for (const [id, student] of this.students.entries()) {
+      if (student.schoolId === schoolId) this.students.delete(id);
+    }
+    for (const [id, pass] of this.passes.entries()) {
+      if (pass.schoolId === schoolId) this.passes.delete(id);
+    }
+    for (const [id, grade] of this.grades.entries()) {
+      if (grade.schoolId === schoolId) this.grades.delete(id);
+    }
+    for (const [id, payment] of this.payments.entries()) {
+      if (payment.schoolId === schoolId) this.payments.delete(id);
+    }
+    
+    // Delete the school itself
+    this.schools.delete(schoolId);
+
+    return {
+      success: true,
+      deletedCounts: {
+        school: 1,
+        users: userCount,
+        students: studentCount,
+        passes: passCount,
+        grades: gradeCount,
+        payments: paymentCount
+      }
+    };
+  }
+
+  async getRecentPlatformActivity(limit: number): Promise<any[]> {
+    // Combine recent activities from different entities
+    const activities = [];
+    
+    // Recent schools
+    const recentSchools = Array.from(this.schools.values())
+      .sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0))
+      .slice(0, 5)
+      .map(school => ({
+        type: 'school_created',
+        timestamp: school.createdAt,
+        description: `School "${school.name}" was created`,
+        data: { schoolId: school.id, schoolName: school.name }
+      }));
+
+    // Recent users  
+    const recentUsers = Array.from(this.users.values())
+      .sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0))
+      .slice(0, 10)
+      .map(user => ({
+        type: 'user_created',
+        timestamp: user.createdAt,
+        description: `User "${user.name}" joined`,
+        data: { userId: user.id, userName: user.name, schoolId: user.schoolId }
+      }));
+
+    activities.push(...recentSchools, ...recentUsers);
+    
+    return activities
+      .sort((a, b) => (b.timestamp?.getTime() || 0) - (a.timestamp?.getTime() || 0))
+      .slice(0, limit);
+  }
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1260,6 +1435,170 @@ export class DatabaseStorage implements IStorage {
 
   async getAllPayments(): Promise<Payment[]> {
     return await db.select().from(payments);
+  }
+
+  // Multi-school user lookup
+  async getUsersByEmail(email: string): Promise<User[]> {
+    return await db.select().from(users).where(eq(users.email, email.toLowerCase()));
+  }
+
+  // Super Admin methods
+  async getAdminUserByEmail(email: string): Promise<AdminUser | undefined> {
+    const [admin] = await db.select().from(adminUsers).where(eq(adminUsers.email, email.toLowerCase()));
+    return admin || undefined;
+  }
+
+  async getAllAdminUsers(): Promise<AdminUser[]> {
+    return await db.select().from(adminUsers);
+  }
+
+  async createAdminUser(insertAdminUser: InsertAdminUser): Promise<AdminUser> {
+    const [admin] = await db.insert(adminUsers).values({
+      ...insertAdminUser,
+      id: randomUUID(),
+    }).returning();
+    return admin;
+  }
+
+  async getAllSchoolsWithStats(): Promise<(School & { userCount: number; studentCount: number; activePassCount: number })[]> {
+    const allSchools = await db.select().from(schools);
+    
+    const schoolsWithStats = await Promise.all(
+      allSchools.map(async (school) => {
+        const [userCountResult] = await db
+          .select({ count: count() })
+          .from(users)
+          .where(eq(users.schoolId, school.id));
+        
+        const [studentCountResult] = await db
+          .select({ count: count() })
+          .from(students)
+          .where(eq(students.schoolId, school.id));
+        
+        const [activePassCountResult] = await db
+          .select({ count: count() })
+          .from(passes)
+          .where(and(eq(passes.schoolId, school.id), eq(passes.status, "active")));
+        
+        return {
+          ...school,
+          userCount: userCountResult.count || 0,
+          studentCount: studentCountResult.count || 0,
+          activePassCount: activePassCountResult.count || 0,
+        };
+      })
+    );
+    
+    return schoolsWithStats;
+  }
+
+  async getPlatformStats(): Promise<{
+    totalSchools: number;
+    totalUsers: number;
+    totalStudents: number;
+    activePasses: number;
+    totalPasses: number;
+  }> {
+    const [schoolCount] = await db.select({ count: count() }).from(schools);
+    const [userCount] = await db.select({ count: count() }).from(users);
+    const [studentCount] = await db.select({ count: count() }).from(students);
+    const [activePassCount] = await db.select({ count: count() }).from(passes).where(eq(passes.status, "active"));
+    const [totalPassCount] = await db.select({ count: count() }).from(passes);
+
+    return {
+      totalSchools: schoolCount.count || 0,
+      totalUsers: userCount.count || 0,
+      totalStudents: studentCount.count || 0,
+      activePasses: activePassCount.count || 0,
+      totalPasses: totalPassCount.count || 0,
+    };
+  }
+
+  async updateSchoolAsAdmin(schoolId: string, updates: Partial<School>): Promise<School | undefined> {
+    const [updatedSchool] = await db
+      .update(schools)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(schools.id, schoolId))
+      .returning();
+    
+    return updatedSchool || undefined;
+  }
+
+  async deleteSchoolCompletely(schoolId: string): Promise<{ success: boolean; deletedCounts: any }> {
+    try {
+      // Count before deletion
+      const [userCount] = await db.select({ count: count() }).from(users).where(eq(users.schoolId, schoolId));
+      const [studentCount] = await db.select({ count: count() }).from(students).where(eq(students.schoolId, schoolId));
+      const [passCount] = await db.select({ count: count() }).from(passes).where(eq(passes.schoolId, schoolId));
+      const [gradeCount] = await db.select({ count: count() }).from(grades).where(eq(grades.schoolId, schoolId));
+      const [paymentCount] = await db.select({ count: count() }).from(payments).where(eq(payments.schoolId, schoolId));
+
+      // Delete all related data (CASCADE should handle this, but explicit deletion for counting)
+      await db.delete(users).where(eq(users.schoolId, schoolId));
+      await db.delete(students).where(eq(students.schoolId, schoolId));
+      await db.delete(passes).where(eq(passes.schoolId, schoolId));
+      await db.delete(grades).where(eq(grades.schoolId, schoolId));
+      await db.delete(payments).where(eq(payments.schoolId, schoolId));
+      
+      // Delete the school
+      const deletedSchools = await db.delete(schools).where(eq(schools.id, schoolId)).returning();
+      
+      if (deletedSchools.length === 0) {
+        return { success: false, deletedCounts: {} };
+      }
+
+      return {
+        success: true,
+        deletedCounts: {
+          school: 1,
+          users: userCount.count || 0,
+          students: studentCount.count || 0,
+          passes: passCount.count || 0,
+          grades: gradeCount.count || 0,
+          payments: paymentCount.count || 0,
+        }
+      };
+    } catch (error) {
+      console.error("Delete school error:", error);
+      return { success: false, deletedCounts: {} };
+    }
+  }
+
+  async getRecentPlatformActivity(limit: number): Promise<any[]> {
+    const activities = [];
+    
+    // Recent schools
+    const recentSchools = await db
+      .select()
+      .from(schools)
+      .orderBy(desc(schools.createdAt))
+      .limit(5);
+    
+    // Recent users
+    const recentUsers = await db
+      .select()
+      .from(users)
+      .orderBy(desc(users.createdAt))
+      .limit(10);
+    
+    activities.push(
+      ...recentSchools.map(school => ({
+        type: 'school_created',
+        timestamp: school.createdAt,
+        description: `School "${school.name}" was created`,
+        data: { schoolId: school.id, schoolName: school.name }
+      })),
+      ...recentUsers.map(user => ({
+        type: 'user_created',
+        timestamp: user.createdAt,
+        description: `User "${user.name}" joined`,
+        data: { userId: user.id, userName: user.name, schoolId: user.schoolId }
+      }))
+    );
+    
+    return activities
+      .sort((a, b) => (b.timestamp?.getTime() || 0) - (a.timestamp?.getTime() || 0))
+      .slice(0, limit);
   }
 }
 

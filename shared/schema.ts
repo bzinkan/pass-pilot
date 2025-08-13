@@ -121,7 +121,7 @@ export const payments = pgTable("payments", {
 export const adminUsers = pgTable("admin_users", {
   id: varchar("id").primaryKey(),
   email: text("email").notNull().unique(),
-  password: text("password").notNull(),
+  passwordHash: text("password_hash").notNull(),
   name: text("name").notNull(),
   role: text("role").notNull().default("superadmin"),
   createdAt: timestamp("created_at").defaultNow(),

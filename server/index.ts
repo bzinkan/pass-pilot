@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
 import { registerRegistrationV2 } from "./routes-registration-v2";
 import { registerAuthMultiRoutes } from "./routes-auth-multi";
+import { registerSuperAdminRoutes } from "./routes-super-admin";
 import { setupVite, serveStatic, log } from "./vite";
 import "./passResetScheduler"; // Initialize the pass reset scheduler
 
@@ -57,6 +58,9 @@ app.use((req, res, next) => {
   
   // Register multi-school authentication routes
   registerAuthMultiRoutes(app);
+  
+  // Register super admin routes
+  registerSuperAdminRoutes(app);
   
   const server = await registerRoutes(app);
 

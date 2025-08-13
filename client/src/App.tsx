@@ -10,6 +10,8 @@ import LoginMulti from "@/pages/login-multi";
 import Register from "@/pages/register";
 import RegisterV2 from "@/pages/register-v2";
 import ResetPassword from "@/pages/reset-password";
+import SuperAdminLogin from "@/pages/super-admin-login";
+import SuperAdminDashboard from "@/pages/super-admin-dashboard";
 
 import Kiosk from "./pages/kiosk";
 import Guide from "./pages/guide";
@@ -32,6 +34,8 @@ function Router() {
       <Route path="/features" component={Features} />
       <Route path="/billing-success" component={BillingSuccess} />
       <Route path="/admin" component={AdminDashboard} />
+      <Route path="/super-admin/login" component={SuperAdminLogin} />
+      <Route path="/super-admin/dashboard" component={SuperAdminDashboard} />
       {/* Catch-all route for unmatched paths */}
       <Route>
         <Home />
