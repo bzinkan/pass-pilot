@@ -2,7 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import bodyParser from "body-parser";
 import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
-import { registerRegistrationV2 } from "./routes-registration-v2";
+
 import { registerAuthMultiRoutes } from "./routes-auth-multi";
 import { registerSuperAdminRoutes } from "./routes-super-admin";
 import { registerBootstrapRoute } from "./bootstrap";
@@ -57,9 +57,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // Register V2 registration routes
-  registerRegistrationV2(app);
-  
+
   // Register bootstrap route first (only if BOOTSTRAP_TOKEN is set)
   registerBootstrapRoute(app);
   

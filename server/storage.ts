@@ -1,8 +1,7 @@
 import { type User, type InsertUser, type School, type InsertSchool, type Grade, type InsertGrade, type Student, type InsertStudent, type Pass, type InsertPass, type Payment, type InsertPayment } from "@shared/schema";
-import { randomUUID } from "crypto";
 import { db } from "./db";
 import { users, schools, grades, students, passes, payments, adminUsers } from "@shared/schema";
-import { eq, and, lt, count, desc, ne, gt } from "drizzle-orm";
+import { eq, and, lt, count, desc, ne, gt, sql } from "drizzle-orm";
 
 export type AdminUser = typeof adminUsers.$inferSelect;
 export type InsertAdminUser = typeof adminUsers.$inferInsert;
@@ -23,20 +22,20 @@ export interface IStorage {
   
   // Schools
   getSchool(id: string): Promise<School | undefined>;
-  getSchoolById(id: string): Promise<School | undefined>; // Alias for getSchool
-  getSchoolBySlug(slug: string): Promise<School | undefined>; // Get school by unique slug
+  getSchoolById(id: string): Promise<School | undefined>;
+  getSchoolBySlug(slug: string): Promise<School | undefined>;
   getAllSchools(): Promise<School[]>;
-  getActiveSchools(): Promise<School[]>; // Schools with active subscriptions or valid trials
+  getActiveSchools(): Promise<School[]>;
   createSchool(school: InsertSchool): Promise<School>;
   updateSchool(id: string, updates: Partial<School>): Promise<School>;
   upgradeSchoolPlan(schoolId: string, newPlan: string, newMaxTeachers: number, newMaxStudents: number): Promise<School>;
-  deleteSchool(id: string): Promise<void>; // Delete expired/cancelled schools
+  deleteSchool(id: string): Promise<void>;
   getTrialAccountByDomain(emailDomain: string): Promise<School | undefined>;
   getTrialAccountBySchoolName(schoolName: string): Promise<School | undefined>;
   getSchoolsByEmailDomain(emailDomain: string): Promise<School[]>;
   getSchoolByVerificationToken(token: string): Promise<School | undefined>;
   verifySchoolEmail(schoolId: string): Promise<School>;
-  cleanupExpiredTrials(): Promise<number>; // Returns count of removed expired trials only
+  cleanupExpiredTrials(): Promise<number>;
   
   // Grades
   getGradesBySchool(schoolId: string): Promise<Grade[]>;
@@ -53,21 +52,15 @@ export interface IStorage {
   
   // Passes
   getActivePassesBySchool(schoolId: string): Promise<(Pass & { student: Student })[]>;
-  getActivePassesByTeacher(teacherId: string): Promise<(Pass & { studentName: string })[]>;
-  getPassesBySchool(schoolId: string, filters?: { 
-    dateStart?: Date; 
-    dateEnd?: Date; 
-    grade?: string; 
-    teacherId?: string; 
-  }): Promise<(Pass & { student: Student; teacher: User })[]>;
+  getPassesBySchool(schoolId: string, filters?: { status?: string; startDate?: Date; endDate?: Date }): Promise<(Pass & { student: Student })[]>;
+  getPass(id: string): Promise<Pass | undefined>;
   createPass(pass: InsertPass): Promise<Pass>;
   updatePass(id: string, updates: Partial<Pass>): Promise<Pass>;
-  returnAllActivePasses(schoolId: string): Promise<number>;
+  deletePass(id: string): Promise<void>;
   
   // Payments
   createPayment(payment: InsertPayment): Promise<Payment>;
-  getPaymentsBySchool(schoolId: string): Promise<Payment[]>;
-  getAllPayments(): Promise<Payment[]>;
+  getPaymentByStripeSessionId(sessionId: string): Promise<Payment | undefined>;
   
   // Multi-school user lookup
   getUsersByEmail(email: string): Promise<User[]>;
@@ -95,928 +88,12 @@ export interface IStorage {
   getRecentPlatformActivity(limit: number): Promise<any[]>;
 }
 
-export class MemStorage implements IStorage {
-  private users = new Map<string, User>();
-  private schools = new Map<string, School>();
-  private grades = new Map<string, Grade>();
-  private students = new Map<string, Student>();
-  private passes = new Map<string, Pass>();
-  private payments = new Map<string, Payment>();
-  private adminUsers = new Map<string, AdminUser>();
-
-  constructor() {
-    // Initialize with demo data
-    this.initializeDemoData();
-  }
-
-  private initializeDemoData() {
-    // Create demo school
-    const school: School = {
-      id: randomUUID(),
-      schoolId: "school_demo123",
-      name: "Lincoln Elementary School",
-      district: null,
-      emailDomain: "lincolnelementary.edu", // Add email domain for demo
-      plan: "standard_50",
-      stripeCustomerId: null,
-      stripeSubscriptionId: null,
-      maxTeachers: 50,
-      maxStudents: 1000, // Add missing maxStudents property
-      adminEmail: "admin@lincolnelementary.edu",
-      verified: false,
-      verificationToken: null,
-      verificationTokenExpiry: null,
-      trialStartDate: null,
-      trialEndDate: null,
-      isTrialExpired: false,
-      subscriptionCancelledAt: null,
-      subscriptionEndsAt: null,
-      createdAt: new Date(),
-    };
-    this.schools.set(school.id, school);
-
-    // Create demo admin user
-    const admin: User = {
-      id: randomUUID(),
-      firebaseUid: null,
-      email: "admin@lincolnelementary.edu",
-      password: "password123", // In real app, this would be hashed
-      name: "Principal Smith",
-      schoolId: school.id,
-      isAdmin: true,
-      isPlatformOwner: false,
-      assignedGrades: [] as string[],
-      invitedBy: null,
-      status: "active",
-      createdAt: new Date(),
-      resetToken: null,
-      resetTokenExpiry: null,
-      enableNotifications: true,
-      autoReturn: false,
-      passTimeout: 15,
-      kioskPin: null,
-    };
-    this.users.set(admin.id, admin);
-
-    // Create demo teacher
-    const teacher: User = {
-      id: randomUUID(),
-      firebaseUid: null,
-      email: "johnson@lincolnelementary.edu",
-      password: "password123",
-      name: "Ms. Johnson",
-      schoolId: school.id,
-      isAdmin: false,
-      isPlatformOwner: false,
-      assignedGrades: ["3", "4"],
-      invitedBy: null,
-      status: "active",
-      createdAt: new Date(),
-      resetToken: null,
-      resetTokenExpiry: null,
-      enableNotifications: true,
-      autoReturn: false,
-      passTimeout: 15,
-      kioskPin: null,
-    };
-    this.users.set(teacher.id, teacher);
-
-    // Create demo grades
-    const grade3: Grade = {
-      id: randomUUID(),
-      name: "3",
-      schoolId: school.id,
-      createdAt: new Date(),
-    };
-    this.grades.set(grade3.id, grade3);
-
-    const grade4: Grade = {
-      id: randomUUID(),
-      name: "4",
-      schoolId: school.id,
-      createdAt: new Date(),
-    };
-    this.grades.set(grade4.id, grade4);
-
-    // Create demo students
-    const students = [
-      { name: "Alex Johnson", grade: "3", studentId: "12345" },
-      { name: "Sarah Martinez", grade: "4", studentId: "12346" },
-      { name: "Tyler Roberts", grade: "3", studentId: "12347" },
-      { name: "Emma Davis", grade: "4", studentId: "12348" },
-      { name: "Michael Brown", grade: "3", studentId: "12349" },
-    ];
-
-    students.forEach(studentData => {
-      const student: Student = {
-        id: randomUUID(),
-        name: studentData.name,
-        grade: studentData.grade,
-        studentId: studentData.studentId,
-        schoolId: school.id,
-        createdAt: new Date(),
-      };
-      this.students.set(student.id, student);
-    });
-
-    // Create platform owner account
-    const platformOwner: User = {
-      id: randomUUID(),
-      firebaseUid: null,
-      email: "passpilotapp@gmail.com",
-      password: "platformowner123", // In real app, this would be hashed
-      name: "PassPilot Platform Owner",
-      schoolId: null, // Platform owner doesn't belong to a specific school
-      isAdmin: false, // Not a school admin
-      isPlatformOwner: true, // Platform owner flag
-      assignedGrades: [] as string[],
-      invitedBy: null,
-      status: "active",
-      createdAt: new Date(),
-      resetToken: null,
-      resetTokenExpiry: null,
-      enableNotifications: true,
-      autoReturn: false,
-      passTimeout: 30,
-      kioskPin: null,
-    };
-    this.users.set(platformOwner.id, platformOwner);
-
-    // Create additional demo schools for the platform owner to manage
-    const demoSchools = [
-      {
-        schoolId: "school_riverside",
-        name: "Riverside Middle School",
-        district: "Central District",
-        plan: "basic_10",
-        adminEmail: "admin@riverside.edu",
-        maxTeachers: 10,
-        isCancelled: false
-      },
-      {
-        schoolId: "school_oakwood",
-        name: "Oakwood High School", 
-        district: "North District",
-        plan: "premium_50",
-        adminEmail: "principal@oakwood.edu",
-        maxTeachers: 50,
-        isCancelled: true, // Cancelled subscription
-        cancelledDays: 15  // Cancelled 15 days ago, still has time left
-      },
-      {
-        schoolId: "school_valley",
-        name: "Valley Elementary",
-        district: null,
-        plan: "free_trial",
-        adminEmail: "admin@valley.k12.edu",
-        maxTeachers: -1,
-        isCancelled: false
-      },
-      {
-        schoolId: "school_sunset",
-        name: "Sunset High School",
-        district: "West District", 
-        plan: "standard_25",
-        adminEmail: "admin@sunsethigh.edu",
-        maxTeachers: 25,
-        isCancelled: true, // Cancelled subscription
-        cancelledDays: 5   // Recently cancelled, lots of time left
-      },
-      // Demo schools for Cincinnati Public Schools (shared domain example)
-      {
-        schoolId: "school_roosevelt_cps",
-        name: "Roosevelt Elementary School",
-        district: "Cincinnati Public Schools",
-        plan: "premium_100",
-        adminEmail: "principal.roosevelt@cps.k12.oh.us",
-        maxTeachers: 100,
-        isCancelled: false
-      },
-      {
-        schoolId: "school_washington_cps",
-        name: "Washington High School",
-        district: "Cincinnati Public Schools",
-        plan: "premium_100",
-        adminEmail: "principal.washington@cps.k12.oh.us",
-        maxTeachers: 100,
-        isCancelled: false
-      },
-      {
-        schoolId: "school_jefferson_cps",
-        name: "Jefferson Middle School",
-        district: "Cincinnati Public Schools",
-        plan: "standard_50",
-        adminEmail: "principal.jefferson@cps.k12.oh.us",
-        maxTeachers: 50,
-        isCancelled: false
-      }
-    ];
-
-    demoSchools.forEach(schoolData => {
-      const now = new Date();
-      const isCancelled = schoolData.isCancelled || false;
-      const cancelledDaysAgo = schoolData.cancelledDays || 0;
-      
-      const demoSchool: School = {
-        id: randomUUID(),
-        schoolId: schoolData.schoolId,
-        name: schoolData.name,
-        district: schoolData.district,
-        emailDomain: schoolData.adminEmail.split('@')[1], // Extract domain from admin email
-        plan: schoolData.plan as any,
-        status: "ACTIVE" as any,
-        stripeCustomerId: schoolData.plan !== "TRIAL" ? `cus_${randomUUID().slice(0, 8)}` : null,
-        stripeSubscriptionId: schoolData.plan !== "TRIAL" ? `sub_${randomUUID().slice(0, 8)}` : null,
-        maxTeachers: schoolData.maxTeachers,
-        maxStudents: schoolData.maxStudents || 1000,
-        adminEmail: schoolData.adminEmail,
-        verified: true,
-        verificationToken: null,
-        verificationTokenExpiry: null,
-        trialStartDate: schoolData.plan === "TRIAL" ? new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000) : null,
-        trialEndDate: schoolData.plan === "TRIAL" ? new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000) : null,
-        isTrialExpired: false,
-        // Set cancellation dates if this is a cancelled subscription
-        subscriptionCancelledAt: isCancelled ? new Date(now.getTime() - cancelledDaysAgo * 24 * 60 * 60 * 1000) : null,
-        subscriptionEndsAt: isCancelled ? new Date(now.getTime() + (30 - cancelledDaysAgo) * 24 * 60 * 60 * 1000) : null, // 30 days from cancellation
-        createdAt: new Date(),
-      };
-      this.schools.set(demoSchool.id, demoSchool);
-    });
-  }
-
-  // Users
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
-  }
-
-  async getUserByEmail(email: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(user => user.email === email);
-  }
-
-  async authenticateUser(email: string, password: string): Promise<User | null> {
-    const user = await this.getUserByEmail(email);
-    if (!user || user.status !== 'active') {
-      return null;
-    }
-    
-    // In demo mode, we store passwords in plain text
-    // In production, you would use bcrypt.compare(password, user.password)
-    if (user.password === password) {
-      return user;
-    }
-    
-    return null;
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { 
-      ...insertUser, 
-      id,
-      firebaseUid: insertUser.firebaseUid ?? null,
-      password: insertUser.password ?? null,
-      schoolId: insertUser.schoolId ?? null,
-      isAdmin: insertUser.isAdmin ?? false,
-      isPlatformOwner: insertUser.isPlatformOwner ?? false,
-      assignedGrades: (insertUser.assignedGrades as string[]) ?? [],
-      invitedBy: insertUser.invitedBy ?? null,
-      status: insertUser.status ?? "pending",
-      createdAt: new Date(),
-      resetToken: null,
-      resetTokenExpiry: null,
-      enableNotifications: true,
-      autoReturn: false,
-      passTimeout: 15,
-      kioskPin: null,
-    };
-    this.users.set(id, user);
-    return user;
-  }
-
-  async updateUser(id: string, updates: Partial<User>): Promise<User> {
-    const user = this.users.get(id);
-    if (!user) throw new Error("User not found");
-    
-    const updatedUser: User = { 
-      ...user, 
-      ...updates,
-      // Ensure required fields are not undefined
-      password: updates.password !== undefined ? updates.password : user.password,
-      firebaseUid: updates.firebaseUid !== undefined ? updates.firebaseUid : user.firebaseUid,
-      invitedBy: updates.invitedBy !== undefined ? updates.invitedBy : user.invitedBy,
-      status: updates.status !== undefined ? updates.status : user.status,
-    };
-    this.users.set(id, updatedUser);
-    return updatedUser;
-  }
-
-  async getUsersBySchool(schoolId: string): Promise<User[]> {
-    return Array.from(this.users.values()).filter(user => user.schoolId === schoolId);
-  }
-
-  async getUserByEmailAndSchool(email: string, schoolId: string): Promise<User | undefined> {
-    const emailNorm = email.trim().toLowerCase();
-    return Array.from(this.users.values()).find(user => 
-      user.email.toLowerCase() === emailNorm && user.schoolId === schoolId
-    );
-  }
-
-  async deleteUser(id: string): Promise<void> {
-    this.users.delete(id);
-  }
-
-  // Schools
-  async getSchool(id: string): Promise<School | undefined> {
-    return this.schools.get(id);
-  }
-
-  async getSchoolById(id: string): Promise<School | undefined> {
-    return this.getSchool(id); // Alias for getSchool
-  }
-
-  async createSchool(insertSchool: InsertSchool): Promise<School> {
-    const id = randomUUID();
-    const school = {
-      id,
-      ...insertSchool,
-      createdAt: new Date(),
-    } as School;
-    
-    this.schools.set(id, school);
-    return school;
-  }
-
-  async updateSchool(id: string, updates: Partial<School>): Promise<School> {
-    const existing = this.schools.get(id);
-    if (!existing) {
-      throw new Error('School not found');
-    }
-    
-    const updated = { ...existing, ...updates };
-    this.schools.set(id, updated);
-    return updated;
-  }
-
-  async getAllSchools(): Promise<School[]> {
-    return Array.from(this.schools.values());
-  }
-
-  async getActiveSchools(): Promise<School[]> {
-    const now = new Date();
-    return Array.from(this.schools.values()).filter(school => {
-      // Include paid schools (not on free trial)
-      if (school.plan !== 'free_trial') {
-        // If subscription was cancelled, show it until subscription ends
-        if (school.subscriptionCancelledAt && school.subscriptionEndsAt) {
-          return true; // Always show cancelled subscriptions until manual deletion
-        }
-        // Active paid subscription
-        return true;
-      }
-      
-      // For trial schools, check if trial is still valid (hide expired trials after 7 days)
-      if (school.plan === 'TRIAL') {
-        if (school.isTrialExpired) return false;
-        if (school.trialEndDate && now > school.trialEndDate) {
-          const daysSinceExpiry = (now.getTime() - school.trialEndDate.getTime()) / (1000 * 60 * 60 * 24);
-          return daysSinceExpiry <= 7; // Show expired trials for 7 days
-        }
-        return true;
-      }
-      
-      return false;
-    });
-  }
-
-  async deleteSchool(id: string): Promise<void> {
-    this.schools.delete(id);
-    
-    // Also clean up related data
-    const schoolUsers = Array.from(this.users.values()).filter(user => user.schoolId === id);
-    schoolUsers.forEach(user => this.users.delete(user.id));
-    
-    const schoolGrades = Array.from(this.grades.values()).filter(grade => grade.schoolId === id);
-    schoolGrades.forEach(grade => this.grades.delete(grade.id));
-    
-    const schoolStudents = Array.from(this.students.values()).filter(student => student.schoolId === id);
-    schoolStudents.forEach(student => this.students.delete(student.id));
-    
-    const schoolPasses = Array.from(this.passes.values()).filter(pass => pass.schoolId === id);
-    schoolPasses.forEach(pass => this.passes.delete(pass.id));
-  }
-
-  async cleanupExpiredTrials(): Promise<number> {
-    const now = new Date();
-    const allSchools = Array.from(this.schools.values());
-    let removedCount = 0;
-    
-    for (const school of allSchools) {
-      // Only remove expired trials (expired for more than 7 days)
-      if (school.plan === 'free_trial' && school.trialEndDate) {
-        const daysSinceExpiry = (now.getTime() - school.trialEndDate.getTime()) / (1000 * 60 * 60 * 24);
-        if (daysSinceExpiry > 7) {
-          await this.deleteSchool(school.id);
-          removedCount++;
-        }
-      }
-    }
-    
-    return removedCount;
-  }
-
-
-
-
-
-  async upgradeSchoolPlan(schoolId: string, newPlan: string, newMaxTeachers: number, newMaxStudents: number): Promise<School> {
-    const school = this.schools.get(schoolId);
-    if (!school) throw new Error("School not found");
-    
-    console.log(`Upgrading school ${school.name} from ${school.plan} to ${newPlan}`);
-    console.log(`Teacher limit: ${school.maxTeachers} → ${newMaxTeachers}`);
-    console.log(`Student limit: ${school.maxStudents} → ${newMaxStudents}`);
-    
-    // Update school plan and limits
-    const upgradedSchool = { 
-      ...school, 
-      plan: newPlan,
-      maxTeachers: newMaxTeachers,
-      maxStudents: newMaxStudents,
-      // Remove trial-specific fields for paid plans
-      trialStartDate: newPlan === 'free_trial' ? school.trialStartDate : null,
-      trialEndDate: newPlan === 'free_trial' ? school.trialEndDate : null,
-      isTrialExpired: newPlan === 'free_trial' ? school.isTrialExpired : false
-    };
-    
-    this.schools.set(schoolId, upgradedSchool);
-    
-    console.log(`School upgrade completed: ${school.name} is now on ${newPlan} plan`);
-    return upgradedSchool;
-  }
-
-  async getTrialAccountByDomain(emailDomain: string): Promise<School | undefined> {
-    // Check for existing trial accounts by matching admin email domain
-    for (const school of Array.from(this.schools.values())) {
-      if (school.plan === 'free_trial' && school.adminEmail) {
-        const schoolDomain = school.adminEmail.split('@')[1]?.toLowerCase();
-        if (schoolDomain === emailDomain.toLowerCase()) {
-          return school;
-        }
-      }
-    }
-    return undefined;
-  }
-
-  async getTrialAccountBySchoolName(schoolName: string): Promise<School | undefined> {
-    return Array.from(this.schools.values()).find(school => 
-      school.plan === 'free_trial' && school.name.toLowerCase() === schoolName.toLowerCase()
-    );
-  }
-
-  async getSchoolsByEmailDomain(emailDomain: string): Promise<School[]> {
-    // Find all schools that have teachers with this email domain
-    return Array.from(this.schools.values()).filter(school => 
-      school.emailDomain?.toLowerCase() === emailDomain.toLowerCase()
-    );
-  }
-
-  async getSchoolByVerificationToken(token: string): Promise<School | undefined> {
-    for (const school of Array.from(this.schools.values())) {
-      if (school.verificationToken === token && school.verificationTokenExpiry && school.verificationTokenExpiry > new Date()) {
-        return school;
-      }
-    }
-    return undefined;
-  }
-
-  async verifySchoolEmail(schoolId: string): Promise<School> {
-    const school = this.schools.get(schoolId);
-    if (!school) throw new Error("School not found");
-    
-    const now = new Date();
-    const trialEndDate = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000); // 365 days from now (unlimited for school testing)
-    
-    const updatedSchool = { 
-      ...school, 
-      verified: true,
-      verificationToken: null,
-      verificationTokenExpiry: null,
-      trialStartDate: now,
-      trialEndDate: trialEndDate
-    };
-    this.schools.set(schoolId, updatedSchool);
-    return updatedSchool;
-  }
-
-
-
-  // Grades
-  async getGradesBySchool(schoolId: string): Promise<Grade[]> {
-    return Array.from(this.grades.values()).filter(grade => grade.schoolId === schoolId);
-  }
-
-  async createGrade(insertGrade: InsertGrade): Promise<Grade> {
-    const id = randomUUID();
-    const grade: Grade = { 
-      ...insertGrade, 
-      id,
-      createdAt: new Date(),
-    };
-    this.grades.set(id, grade);
-    return grade;
-  }
-
-  async updateGrade(id: string, updates: Partial<Grade>): Promise<Grade> {
-    const grade = this.grades.get(id);
-    if (!grade) {
-      throw new Error('Grade not found');
-    }
-
-    const oldName = grade.name;
-    const updatedGrade = { ...grade, ...updates };
-    this.grades.set(id, updatedGrade);
-
-    // Update student grades if grade name changed
-    if (updates.name && oldName !== updates.name) {
-      Array.from(this.students.entries()).forEach(([studentId, student]) => {
-        if (student.grade === oldName) {
-          this.students.set(studentId, { ...student, grade: updates.name! });
-        }
-      });
-    }
-
-    return updatedGrade;
-  }
-
-  async deleteGrade(id: string): Promise<void> {
-    const grade = this.grades.get(id);
-    if (!grade) {
-      throw new Error('Grade not found');
-    }
-
-    // Delete students in this grade
-    Array.from(this.students.entries()).forEach(([studentId, student]) => {
-      if (student.grade === grade.name) {
-        this.students.delete(studentId);
-      }
-    });
-
-    this.grades.delete(id);
-  }
-
-  // Students
-  async getStudentsBySchool(schoolId: string, grade?: string): Promise<Student[]> {
-    return Array.from(this.students.values())
-      .filter(student => 
-        student.schoolId === schoolId && 
-        (!grade || student.grade === grade)
-      );
-  }
-
-  async getStudent(id: string): Promise<Student | undefined> {
-    return this.students.get(id);
-  }
-
-  async createStudent(insertStudent: InsertStudent): Promise<Student> {
-    const id = randomUUID();
-    const student: Student = { 
-      ...insertStudent, 
-      id,
-      studentId: insertStudent.studentId ?? null,
-      createdAt: new Date(),
-    };
-    this.students.set(id, student);
-    return student;
-  }
-
-  async updateStudent(id: string, updates: Partial<Student>): Promise<Student> {
-    const student = this.students.get(id);
-    if (!student) throw new Error("Student not found");
-    
-    const updatedStudent = { ...student, ...updates };
-    this.students.set(id, updatedStudent);
-    return updatedStudent;
-  }
-
-  async deleteStudent(id: string): Promise<void> {
-    this.students.delete(id);
-  }
-
-  // Passes
-  async getActivePassesBySchool(schoolId: string): Promise<(Pass & { student: Student; teacher: User })[]> {
-    return Array.from(this.passes.values())
-      .filter(pass => pass.schoolId === schoolId && pass.status === "out")
-      .map(pass => {
-        const student = this.students.get(pass.studentId);
-        const teacher = this.users.get(pass.teacherId);
-        if (!student) throw new Error("Student not found for pass");
-        if (!teacher) throw new Error("Teacher not found for pass");
-        return { ...pass, student, teacher };
-      });
-  }
-
-  async getActivePassesByTeacher(teacherId: string): Promise<(Pass & { studentName: string })[]> {
-    return Array.from(this.passes.values())
-      .filter(pass => pass.teacherId === teacherId && pass.status === "out")
-      .map(pass => {
-        const student = this.students.get(pass.studentId);
-        if (!student) throw new Error("Student not found for pass");
-        return { ...pass, studentName: student.name };
-      });
-  }
-
-  async getPassesBySchool(
-    schoolId: string, 
-    filters?: { 
-      dateStart?: Date; 
-      dateEnd?: Date; 
-      grade?: string; 
-      teacherId?: string; 
-    }
-  ): Promise<(Pass & { student: Student; teacher: User })[]> {
-    return Array.from(this.passes.values())
-      .filter(pass => {
-        if (pass.schoolId !== schoolId) return false;
-        if (filters?.dateStart && pass.checkoutTime && pass.checkoutTime < filters.dateStart) return false;
-        if (filters?.dateEnd && pass.checkoutTime && pass.checkoutTime > filters.dateEnd) return false;
-        if (filters?.teacherId && pass.teacherId !== filters.teacherId) return false;
-        if (filters?.grade) {
-          const student = this.students.get(pass.studentId);
-          if (!student || student.grade !== filters.grade) return false;
-        }
-        return true;
-      })
-      .map(pass => {
-        const student = this.students.get(pass.studentId);
-        const teacher = this.users.get(pass.teacherId);
-        if (!student || !teacher) throw new Error("Student or teacher not found for pass");
-        return { ...pass, student, teacher };
-      });
-  }
-
-  async createPass(insertPass: InsertPass): Promise<Pass> {
-    const id = randomUUID();
-    const pass: Pass = { 
-      ...insertPass,
-      id,
-      checkoutTime: new Date(),
-      returnTime: null,
-      status: "out",
-      passType: insertPass.passType || "general",
-      customReason: insertPass.customReason || null,
-      duration: null,
-    };
-    this.passes.set(id, pass);
-    return pass;
-  }
-
-  async updatePass(id: string, updates: Partial<Pass>): Promise<Pass> {
-    const pass = this.passes.get(id);
-    if (!pass) throw new Error("Pass not found");
-    
-    const updatedPass = { ...pass, ...updates };
-    
-    // Calculate duration if returning
-    if (updates.status === "returned" && !updatedPass.returnTime && updatedPass.checkoutTime) {
-      updatedPass.returnTime = new Date();
-      updatedPass.duration = Math.floor(
-        (updatedPass.returnTime.getTime() - updatedPass.checkoutTime.getTime()) / (1000 * 60)
-      );
-    }
-    
-    this.passes.set(id, updatedPass);
-    return updatedPass;
-  }
-
-  async returnAllActivePasses(schoolId: string): Promise<number> {
-    const activePasses = Array.from(this.passes.values())
-      .filter(pass => pass.schoolId === schoolId && pass.status === "out");
-    
-    let count = 0;
-    for (const pass of activePasses) {
-      const returnTime = new Date();
-      const duration = pass.checkoutTime 
-        ? Math.floor((returnTime.getTime() - pass.checkoutTime.getTime()) / (1000 * 60))
-        : null;
-      
-      const updatedPass = {
-        ...pass,
-        status: "returned" as const,
-        returnTime,
-        duration
-      };
-      
-      this.passes.set(pass.id, updatedPass);
-      count++;
-    }
-    
-    return count;
-  }
-
-  // Password reset methods
-  async getUserByResetToken(token: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(user => user.resetToken === token);
-  }
-
-  async setPasswordResetToken(userId: string, token: string, expiry: Date): Promise<void> {
-    const user = this.users.get(userId);
-    if (!user) throw new Error("User not found");
-    
-    const updatedUser = { ...user, resetToken: token, resetTokenExpiry: expiry };
-    this.users.set(userId, updatedUser);
-  }
-
-  async clearPasswordResetToken(userId: string): Promise<void> {
-    const user = this.users.get(userId);
-    if (!user) throw new Error("User not found");
-    
-    const updatedUser = { ...user, resetToken: null, resetTokenExpiry: null };
-    this.users.set(userId, updatedUser);
-  }
-
-  // Payment methods
-  async createPayment(insertPayment: InsertPayment): Promise<Payment> {
-    const id = randomUUID();
-    const payment: Payment = {
-      ...insertPayment,
-      id,
-      createdAt: new Date()
-    };
-    this.payments.set(id, payment);
-    return payment;
-  }
-
-  async getPaymentsBySchool(schoolId: string): Promise<Payment[]> {
-    return Array.from(this.payments.values())
-      .filter(payment => payment.schoolId === schoolId);
-  }
-
-  async getAllPayments(): Promise<Payment[]> {
-    return Array.from(this.payments.values());
-  }
-
-  // Multi-school user lookup
-  async getUsersByEmail(email: string): Promise<User[]> {
-    return Array.from(this.users.values()).filter(user => 
-      user.email.toLowerCase() === email.toLowerCase()
-    );
-  }
-
-  // Super Admin methods
-  async getAdminUserByEmail(email: string): Promise<AdminUser | undefined> {
-    for (const admin of this.adminUsers.values()) {
-      if (admin.email.toLowerCase() === email.toLowerCase()) {
-        return admin;
-      }
-    }
-    return undefined;
-  }
-
-  async getAllAdminUsers(): Promise<AdminUser[]> {
-    return Array.from(this.adminUsers.values());
-  }
-
-  async createAdminUser(insertAdminUser: InsertAdminUser): Promise<AdminUser> {
-    const id = randomUUID();
-    const adminUser: AdminUser = {
-      ...insertAdminUser,
-      id,
-      createdAt: new Date(),
-    };
-    this.adminUsers.set(id, adminUser);
-    return adminUser;
-  }
-
-  async getAllSchoolsWithStats(): Promise<(School & { userCount: number; studentCount: number; activePassCount: number })[]> {
-    const schools = Array.from(this.schools.values());
-    return schools.map(school => {
-      const userCount = Array.from(this.users.values()).filter(u => u.schoolId === school.id).length;
-      const studentCount = Array.from(this.students.values()).filter(s => s.schoolId === school.id).length;
-      const activePassCount = Array.from(this.passes.values()).filter(p => 
-        p.schoolId === school.id && p.status === "active"
-      ).length;
-      
-      return {
-        ...school,
-        userCount,
-        studentCount,
-        activePassCount
-      };
-    });
-  }
-
-  async getPlatformStats(): Promise<{
-    totalSchools: number;
-    totalUsers: number;
-    totalStudents: number;
-    activePasses: number;
-    totalPasses: number;
-  }> {
-    return {
-      totalSchools: this.schools.size,
-      totalUsers: this.users.size,
-      totalStudents: this.students.size,
-      activePasses: Array.from(this.passes.values()).filter(p => p.status === "active").length,
-      totalPasses: this.passes.size,
-    };
-  }
-
-  async updateSchoolAsAdmin(schoolId: string, updates: Partial<School>): Promise<School | undefined> {
-    const school = this.schools.get(schoolId);
-    if (!school) return undefined;
-    
-    const updatedSchool = { ...school, ...updates, updatedAt: new Date() };
-    this.schools.set(schoolId, updatedSchool);
-    return updatedSchool;
-  }
-
-  async deleteSchoolCompletely(schoolId: string): Promise<{ success: boolean; deletedCounts: any }> {
-    const school = this.schools.get(schoolId);
-    if (!school) return { success: false, deletedCounts: {} };
-
-    // Count what we're deleting
-    const userCount = Array.from(this.users.values()).filter(u => u.schoolId === schoolId).length;
-    const studentCount = Array.from(this.students.values()).filter(s => s.schoolId === schoolId).length;
-    const passCount = Array.from(this.passes.values()).filter(p => p.schoolId === schoolId).length;
-    const gradeCount = Array.from(this.grades.values()).filter(g => g.schoolId === schoolId).length;
-    const paymentCount = Array.from(this.payments.values()).filter(p => p.schoolId === schoolId).length;
-
-    // Delete all related data
-    for (const [id, user] of this.users.entries()) {
-      if (user.schoolId === schoolId) this.users.delete(id);
-    }
-    for (const [id, student] of this.students.entries()) {
-      if (student.schoolId === schoolId) this.students.delete(id);
-    }
-    for (const [id, pass] of this.passes.entries()) {
-      if (pass.schoolId === schoolId) this.passes.delete(id);
-    }
-    for (const [id, grade] of this.grades.entries()) {
-      if (grade.schoolId === schoolId) this.grades.delete(id);
-    }
-    for (const [id, payment] of this.payments.entries()) {
-      if (payment.schoolId === schoolId) this.payments.delete(id);
-    }
-    
-    // Delete the school itself
-    this.schools.delete(schoolId);
-
-    return {
-      success: true,
-      deletedCounts: {
-        school: 1,
-        users: userCount,
-        students: studentCount,
-        passes: passCount,
-        grades: gradeCount,
-        payments: paymentCount
-      }
-    };
-  }
-
-  async getRecentPlatformActivity(limit: number): Promise<any[]> {
-    // Combine recent activities from different entities
-    const activities = [];
-    
-    // Recent schools
-    const recentSchools = Array.from(this.schools.values())
-      .sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0))
-      .slice(0, 5)
-      .map(school => ({
-        type: 'school_created',
-        timestamp: school.createdAt,
-        description: `School "${school.name}" was created`,
-        data: { schoolId: school.id, schoolName: school.name }
-      }));
-
-    // Recent users  
-    const recentUsers = Array.from(this.users.values())
-      .sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0))
-      .slice(0, 10)
-      .map(user => ({
-        type: 'user_created',
-        timestamp: user.createdAt,
-        description: `User "${user.name}" joined`,
-        data: { userId: user.id, userName: user.name, schoolId: user.schoolId }
-      }));
-
-    activities.push(...recentSchools, ...recentUsers);
-    
-    return activities
-      .sort((a, b) => (b.timestamp?.getTime() || 0) - (a.timestamp?.getTime() || 0))
-      .slice(0, limit);
-  }
-}
-
 export class DatabaseStorage implements IStorage {
-  // Add missing methods from interface
   async getActiveSchools(): Promise<School[]> {
     const activeSchools = await db.select().from(schools);
     return activeSchools.filter(school => {
-      const now = new Date();
-      // Include active paid plans and all trials (unlimited for school testing)
-      return school.plan !== 'TRIAL' || true; // All trial schools are active for unlimited testing
+      // Include active paid plans and all trials for testing
+      return school.plan !== 'TRIAL' || true;
     });
   }
 
@@ -1033,7 +110,6 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(schools.plan, 'TRIAL'),
-          // Trial ended more than 7 days ago
           lt(schools.trialEndDate, sevenDaysAgo)
         )
       );
@@ -1054,176 +130,121 @@ export class DatabaseStorage implements IStorage {
   async getTrialAccountByDomain(emailDomain: string): Promise<School | undefined> {
     const [school] = await db.select()
       .from(schools)
-      .where(
-        and(
-          eq(schools.plan, 'TRIAL'),
-          eq(schools.emailDomain, emailDomain.toLowerCase())
-        )
-      );
-    return school || undefined;
+      .where(and(
+        eq(schools.emailDomain, emailDomain.toLowerCase()),
+        eq(schools.plan, 'TRIAL')
+      ));
+    return school;
   }
 
   async getTrialAccountBySchoolName(schoolName: string): Promise<School | undefined> {
     const [school] = await db.select()
       .from(schools)
-      .where(
-        and(
-          eq(schools.plan, 'TRIAL'),
-          eq(schools.name, schoolName)
-        )
-      );
-    return school || undefined;
+      .where(eq(schools.name, schoolName));
+    return school;
   }
 
   async getSchoolByVerificationToken(token: string): Promise<School | undefined> {
     const [school] = await db.select()
       .from(schools)
       .where(eq(schools.verificationToken, token));
-    return school || undefined;
-  }
-
-  async verifySchoolEmail(schoolId: string): Promise<School> {
-    const [school] = await db.update(schools)
-      .set({
-        verified: true,
-        verificationToken: null,
-        verificationTokenExpiry: null
-      })
-      .where(eq(schools.id, schoolId))
-      .returning();
-    
-    if (!school) throw new Error("School not found");
     return school;
   }
 
-  // Users
+  async verifySchoolEmail(schoolId: string): Promise<School> {
+    const [updated] = await db.update(schools)
+      .set({ 
+        verified: true, 
+        verificationToken: null,
+        verificationTokenExpiry: null 
+      })
+      .where(eq(schools.id, schoolId))
+      .returning();
+    return updated;
+  }
+
+  // User methods
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user || undefined;
+    return user;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.email, email));
-    return user || undefined;
-  }
-
-  async getUsersByEmail(email: string): Promise<User[]> {
-    const userList = await db.select().from(users).where(eq(users.email, email));
-    return userList;
+    return user;
   }
 
   async getUserByEmailAndSchool(email: string, schoolId: string): Promise<User | undefined> {
-    console.log('getUserByEmailAndSchool called with:', { email, schoolId });
-    const [user] = await db.select().from(users).where(
-      and(eq(users.email, email), eq(users.schoolId, schoolId))
-    );
-    console.log('Found user:', user ? 'YES' : 'NO');
-    return user || undefined;
-  }
-
-  async authenticateUser(email: string, password: string): Promise<User | null> {
-    const user = await this.getUserByEmail(email);
-    if (!user || user.status !== 'active') {
-      return null;
-    }
-    
-    // In demo mode, we store passwords in plain text
-    // In production, you would use bcrypt.compare(password, user.password)  
-    if (user.password === password) {
-      return user;
-    }
-    
-    return null;
+    const [user] = await db.select()
+      .from(users)
+      .where(and(eq(users.email, email), eq(users.schoolId, schoolId)));
+    return user;
   }
 
   async getUsersBySchool(schoolId: string): Promise<User[]> {
     return await db.select().from(users).where(eq(users.schoolId, schoolId));
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const userWithDefaults = {
-      id: randomUUID(), // Generate ID since it's required by the table
-      ...insertUser,
-      resetToken: null,
-      resetTokenExpiry: null,
-      enableNotifications: true,
-      autoReturn: false,
-      passTimeout: 15
-    };
-    const [user] = await db.insert(users).values(userWithDefaults).returning();
-    return user;
+  async authenticateUser(email: string, password: string): Promise<User | null> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    if (user && user.password === password) {
+      return user;
+    }
+    return null;
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    const [newUser] = await db.insert(users).values(user).returning();
+    return newUser;
   }
 
   async updateUser(id: string, updates: Partial<User>): Promise<User> {
-    const [user] = await db.update(users).set(updates).where(eq(users.id, id)).returning();
-    if (!user) throw new Error("User not found");
-    return user;
+    const [updated] = await db.update(users)
+      .set(updates)
+      .where(eq(users.id, id))
+      .returning();
+    return updated;
   }
 
   async deleteUser(id: string): Promise<void> {
     await db.delete(users).where(eq(users.id, id));
   }
 
-  // Schools
+  async getUserByResetToken(token: string): Promise<User | undefined> {
+    const [user] = await db.select()
+      .from(users)
+      .where(eq(users.resetToken, token));
+    return user;
+  }
+
+  async setPasswordResetToken(userId: string, token: string, expiry: Date): Promise<void> {
+    await db.update(users)
+      .set({ resetToken: token, resetTokenExpiry: expiry })
+      .where(eq(users.id, userId));
+  }
+
+  async clearPasswordResetToken(userId: string): Promise<void> {
+    await db.update(users)
+      .set({ resetToken: null, resetTokenExpiry: null })
+      .where(eq(users.id, userId));
+  }
+
+  async getUsersByEmail(email: string): Promise<User[]> {
+    return await db.select().from(users).where(eq(users.email, email));
+  }
+
+  // School methods
   async getSchool(id: string): Promise<School | undefined> {
     const [school] = await db.select().from(schools).where(eq(schools.id, id));
-    return school || undefined;
+    return school;
   }
 
   async getSchoolById(id: string): Promise<School | undefined> {
-    return this.getSchool(id); // Alias for getSchool
+    return this.getSchool(id);
   }
 
   async getSchoolBySlug(slug: string): Promise<School | undefined> {
-    const [school] = await db.select().from(schools).where(eq(schools.slug, slug));
-    return school || undefined;
-  }
-
-  async createSchool(insertSchool: InsertSchool): Promise<School> {
-    const schoolWithDefaults = {
-      ...insertSchool,
-      id: randomUUID(),
-      plan: (insertSchool.plan || "free_trial") as any
-    };
-    const [school] = await db
-      .insert(schools)
-      .values(schoolWithDefaults)
-      .returning();
-    return school;
-  }
-
-  async updateSchool(id: string, updates: Partial<School>): Promise<School> {
-    const [school] = await db
-      .update(schools)
-      .set(updates)
-      .where(eq(schools.id, id))
-      .returning();
-    
-    if (!school) {
-      throw new Error('School not found');
-    }
-    
-    return school;
-  }
-
-  async upgradeSchoolPlan(schoolId: string, newPlan: string, newMaxTeachers: number, newMaxStudents: number): Promise<School> {
-    console.log(`Upgrading school ${schoolId} to ${newPlan} plan`);
-    console.log(`New limits - Teachers: ${newMaxTeachers}, Students: ${newMaxStudents}`);
-    
-    const updates: Partial<School> = {
-      plan: newPlan as any,
-      maxTeachers: newMaxTeachers,
-      maxStudents: newMaxStudents,
-      // Remove trial-specific fields for paid plans
-      trialStartDate: newPlan === 'free_trial' ? undefined : null,
-      trialEndDate: newPlan === 'free_trial' ? undefined : null,
-      isTrialExpired: newPlan === 'free_trial' ? undefined : false
-    };
-    
-    const [school] = await db.update(schools).set(updates).where(eq(schools.id, schoolId)).returning();
-    if (!school) throw new Error("School not found");
-    
-    console.log(`School upgrade completed: ${school.name} is now on ${newPlan} plan`);
+    const [school] = await db.select().from(schools).where(eq(schools.schoolId, slug));
     return school;
   }
 
@@ -1231,290 +252,186 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(schools);
   }
 
+  async createSchool(school: InsertSchool): Promise<School> {
+    const [newSchool] = await db.insert(schools).values(school).returning();
+    return newSchool;
+  }
 
+  async updateSchool(id: string, updates: Partial<School>): Promise<School> {
+    const [updated] = await db.update(schools)
+      .set(updates)
+      .where(eq(schools.id, id))
+      .returning();
+    return updated;
+  }
 
-  // Grades
+  async upgradeSchoolPlan(schoolId: string, newPlan: string, newMaxTeachers: number, newMaxStudents: number): Promise<School> {
+    const [updated] = await db.update(schools)
+      .set({
+        plan: newPlan,
+        maxTeachers: newMaxTeachers,
+        maxStudents: newMaxStudents
+      })
+      .where(eq(schools.id, schoolId))
+      .returning();
+    return updated;
+  }
+
+  // Grade methods
   async getGradesBySchool(schoolId: string): Promise<Grade[]> {
     return await db.select().from(grades).where(eq(grades.schoolId, schoolId));
   }
 
-  async createGrade(insertGrade: InsertGrade): Promise<Grade> {
-    const gradeWithId = {
-      id: randomUUID(), // Generate ID since it's required by the table
-      ...insertGrade,
-    };
-    const [grade] = await db.insert(grades).values(gradeWithId).returning();
-    return grade;
+  async createGrade(grade: InsertGrade): Promise<Grade> {
+    const [newGrade] = await db.insert(grades).values(grade).returning();
+    return newGrade;
   }
 
   async updateGrade(id: string, updates: Partial<Grade>): Promise<Grade> {
-    const [grade] = await db.update(grades).set(updates).where(eq(grades.id, id)).returning();
-    if (!grade) throw new Error("Grade not found");
-    return grade;
+    const [updated] = await db.update(grades)
+      .set(updates)
+      .where(eq(grades.id, id))
+      .returning();
+    return updated;
   }
 
   async deleteGrade(id: string): Promise<void> {
     await db.delete(grades).where(eq(grades.id, id));
   }
 
-  // Students
+  // Student methods
   async getStudentsBySchool(schoolId: string, grade?: string): Promise<Student[]> {
+    let query = db.select().from(students).where(eq(students.schoolId, schoolId));
     if (grade) {
-      return await db.select().from(students).where(and(eq(students.schoolId, schoolId), eq(students.grade, grade)));
+      query = query.where(eq(students.gradeLevel, grade)) as any;
     }
-    return await db.select().from(students).where(eq(students.schoolId, schoolId));
+    return await query;
   }
 
   async getStudent(id: string): Promise<Student | undefined> {
     const [student] = await db.select().from(students).where(eq(students.id, id));
-    return student || undefined;
+    return student;
   }
 
-  async createStudent(insertStudent: InsertStudent): Promise<Student> {
-    const studentWithId = {
-      id: randomUUID(), // Generate ID since it's required by the table
-      ...insertStudent,
-    };
-    const [student] = await db.insert(students).values(studentWithId).returning();
-    return student;
+  async createStudent(student: InsertStudent): Promise<Student> {
+    const [newStudent] = await db.insert(students).values(student).returning();
+    return newStudent;
   }
 
   async updateStudent(id: string, updates: Partial<Student>): Promise<Student> {
-    const [student] = await db.update(students).set(updates).where(eq(students.id, id)).returning();
-    if (!student) throw new Error("Student not found");
-    return student;
+    const [updated] = await db.update(students)
+      .set(updates)
+      .where(eq(students.id, id))
+      .returning();
+    return updated;
   }
 
   async deleteStudent(id: string): Promise<void> {
     await db.delete(students).where(eq(students.id, id));
   }
 
-  // Passes
-  async getActivePassesBySchool(schoolId: string): Promise<(Pass & { student: Student; teacher: User })[]> {
-    const result = await db.select({
-      pass: passes,
-      student: students,
-      teacher: users,
-    }).from(passes)
-      .innerJoin(students, eq(passes.studentId, students.id))
-      .innerJoin(users, eq(passes.teacherId, users.id))
-      .where(and(eq(passes.schoolId, schoolId), eq(passes.status, "active")));
+  // Pass methods
+  async getActivePassesBySchool(schoolId: string): Promise<(Pass & { student: Student })[]> {
+    const result = await db.select()
+      .from(passes)
+      .leftJoin(students, eq(passes.studentId, students.id))
+      .where(and(
+        eq(passes.schoolId, schoolId),
+        eq(passes.status, "active")
+      ));
 
     return result.map(row => ({
-      ...row.pass,
-      student: row.student,
-      teacher: row.teacher,
+      ...row.passes,
+      student: row.students!
     }));
   }
 
-  async getActivePassesByTeacher(teacherId: string): Promise<(Pass & { studentName: string })[]> {
-    const result = await db.select({
-      pass: passes,
-      studentName: students.name,
-    }).from(passes)
-      .innerJoin(students, eq(passes.studentId, students.id))
-      .where(and(eq(passes.teacherId, teacherId), eq(passes.status, "active")));
+  async getPassesBySchool(schoolId: string, filters?: { status?: string; startDate?: Date; endDate?: Date }): Promise<(Pass & { student: Student })[]> {
+    let conditions = [eq(passes.schoolId, schoolId)];
+    
+    if (filters?.status) {
+      conditions.push(eq(passes.status, filters.status));
+    }
+    
+    const result = await db.select()
+      .from(passes)
+      .leftJoin(students, eq(passes.studentId, students.id))
+      .where(and(...conditions));
 
     return result.map(row => ({
-      ...row.pass,
-      studentName: row.studentName,
+      ...row.passes,
+      student: row.students!
     }));
   }
 
-  async getPassesBySchool(schoolId: string, filters?: { 
-    dateStart?: Date; 
-    dateEnd?: Date; 
-    grade?: string; 
-    teacherId?: string; 
-  }): Promise<(Pass & { student: Student; teacher: User })[]> {
-    let query = db.select({
-      pass: passes,
-      student: students,
-      teacher: users,
-    }).from(passes)
-      .innerJoin(students, eq(passes.studentId, students.id))
-      .innerJoin(users, eq(passes.teacherId, users.id))
-      .where(eq(passes.schoolId, schoolId));
-
-    const result = await query;
-
-    // Apply filters in memory (could be optimized with SQL)
-    let filteredResult = result;
-
-    if (filters?.dateStart) {
-      filteredResult = filteredResult.filter(row => 
-        row.pass.checkoutTime && row.pass.checkoutTime >= filters.dateStart!
-      );
-    }
-
-    if (filters?.dateEnd) {
-      filteredResult = filteredResult.filter(row => 
-        row.pass.checkoutTime && row.pass.checkoutTime <= filters.dateEnd!
-      );
-    }
-
-    if (filters?.grade) {
-      filteredResult = filteredResult.filter(row => row.student.grade === filters.grade);
-    }
-
-    if (filters?.teacherId) {
-      filteredResult = filteredResult.filter(row => row.pass.teacherId === filters.teacherId);
-    }
-
-    return filteredResult.map(row => ({
-      ...row.pass,
-      student: row.student,
-      teacher: row.teacher,
-    }));
-  }
-
-  async createPass(insertPass: InsertPass): Promise<Pass> {
-    const passWithId = {
-      id: randomUUID(), // Generate ID since it's required by the table
-      ...insertPass,
-    };
-    const [pass] = await db.insert(passes).values(passWithId).returning();
+  async getPass(id: string): Promise<Pass | undefined> {
+    const [pass] = await db.select().from(passes).where(eq(passes.id, id));
     return pass;
+  }
+
+  async createPass(pass: InsertPass): Promise<Pass> {
+    const [newPass] = await db.insert(passes).values(pass).returning();
+    return newPass;
   }
 
   async updatePass(id: string, updates: Partial<Pass>): Promise<Pass> {
-    // If returning a pass, calculate duration automatically
-    if (updates.status === "returned") {
-      const [currentPass] = await db.select().from(passes).where(eq(passes.id, id));
-      if (!currentPass) throw new Error("Pass not found");
-      
-      if (!currentPass.returnTime && currentPass.checkoutTime) {
-        updates.returnTime = new Date();
-        updates.duration = Math.floor(
-          (updates.returnTime.getTime() - currentPass.checkoutTime.getTime()) / (1000 * 60)
-        );
-      }
-    }
-    
-    const [pass] = await db.update(passes).set(updates).where(eq(passes.id, id)).returning();
-    if (!pass) throw new Error("Pass not found");
-    return pass;
+    const [updated] = await db.update(passes)
+      .set(updates)
+      .where(eq(passes.id, id))
+      .returning();
+    return updated;
   }
 
-  async returnAllActivePasses(schoolId: string): Promise<number> {
-    const returnTime = new Date();
-    
-    // First get all active passes to calculate durations
-    const activePasses = await db.select()
-      .from(passes)
-      .where(and(eq(passes.schoolId, schoolId), eq(passes.status, "active")));
-    
-    if (activePasses.length === 0) {
-      return 0;
-    }
-    
-    // Update all active passes to returned with calculated duration
-    const updatePromises = activePasses.map(async (pass) => {
-      const duration = pass.checkoutTime 
-        ? Math.floor((returnTime.getTime() - pass.checkoutTime.getTime()) / (1000 * 60))
-        : null;
-      
-      return db.update(passes)
-        .set({
-          status: "returned",
-          returnTime,
-          duration
-        })
-        .where(eq(passes.id, pass.id));
-    });
-    
-    await Promise.all(updatePromises);
-    return activePasses.length;
-  }
-
-  // Password reset methods
-  async getUserByResetToken(token: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.resetToken, token));
-    return user || undefined;
-  }
-
-  async setPasswordResetToken(userId: string, token: string, expiry: Date): Promise<void> {
-    await db.update(users).set({
-      resetToken: token,
-      resetTokenExpiry: expiry
-    }).where(eq(users.id, userId));
-  }
-
-  async clearPasswordResetToken(userId: string): Promise<void> {
-    await db.update(users).set({
-      resetToken: null,
-      resetTokenExpiry: null
-    }).where(eq(users.id, userId));
+  async deletePass(id: string): Promise<void> {
+    await db.delete(passes).where(eq(passes.id, id));
   }
 
   // Payment methods
-  async createPayment(insertPayment: InsertPayment): Promise<Payment> {
-    const paymentWithId = {
-      ...insertPayment,
-      id: randomUUID(),
-      currency: insertPayment.currency || 'usd'
-    };
-    const [payment] = await db.insert(payments).values(paymentWithId).returning();
+  async createPayment(payment: InsertPayment): Promise<Payment> {
+    const [newPayment] = await db.insert(payments).values(payment).returning();
+    return newPayment;
+  }
+
+  async getPaymentByStripeSessionId(sessionId: string): Promise<Payment | undefined> {
+    const [payment] = await db.select()
+      .from(payments)
+      .where(eq(payments.stripeSessionId, sessionId));
     return payment;
   }
 
-  async getPaymentsBySchool(schoolId: string): Promise<Payment[]> {
-    return await db.select().from(payments).where(eq(payments.schoolId, schoolId));
-  }
-
-  async getAllPayments(): Promise<Payment[]> {
-    return await db.select().from(payments);
-  }
-
-
-
   // Super Admin methods
   async getAdminUserByEmail(email: string): Promise<AdminUser | undefined> {
-    const [admin] = await db.select().from(adminUsers).where(eq(adminUsers.email, email.toLowerCase()));
-    return admin || undefined;
+    const [admin] = await db.select().from(adminUsers).where(eq(adminUsers.email, email));
+    return admin;
   }
 
   async getAllAdminUsers(): Promise<AdminUser[]> {
     return await db.select().from(adminUsers);
   }
 
-  async createAdminUser(insertAdminUser: InsertAdminUser): Promise<AdminUser> {
-    const [admin] = await db.insert(adminUsers).values({
-      ...insertAdminUser,
-      id: randomUUID(),
-    }).returning();
-    return admin;
+  async createAdminUser(adminUser: InsertAdminUser): Promise<AdminUser> {
+    const [newAdmin] = await db.insert(adminUsers).values(adminUser).returning();
+    return newAdmin;
   }
 
   async getAllSchoolsWithStats(): Promise<(School & { userCount: number; studentCount: number; activePassCount: number })[]> {
-    const allSchools = await db.select().from(schools);
+    const schoolsList = await db.select().from(schools);
     
     const schoolsWithStats = await Promise.all(
-      allSchools.map(async (school) => {
-        const [userCountResult] = await db
-          .select({ count: count() })
-          .from(users)
-          .where(eq(users.schoolId, school.id));
-        
-        const [studentCountResult] = await db
-          .select({ count: count() })
-          .from(students)
-          .where(eq(students.schoolId, school.id));
-        
-        const [activePassCountResult] = await db
-          .select({ count: count() })
-          .from(passes)
-          .where(and(eq(passes.schoolId, school.id), eq(passes.status, "active")));
+      schoolsList.map(async (school) => {
+        const [userCount] = await db.select({ count: count() }).from(users).where(eq(users.schoolId, school.id));
+        const [studentCount] = await db.select({ count: count() }).from(students).where(eq(students.schoolId, school.id));
+        const [activePassCount] = await db.select({ count: count() }).from(passes).where(and(eq(passes.schoolId, school.id), eq(passes.status, "active")));
         
         return {
           ...school,
-          userCount: userCountResult.count || 0,
-          studentCount: studentCountResult.count || 0,
-          activePassCount: activePassCountResult.count || 0,
+          userCount: userCount.count,
+          studentCount: studentCount.count,
+          activePassCount: activePassCount.count
         };
       })
     );
-    
+
     return schoolsWithStats;
   }
 
@@ -1531,135 +448,79 @@ export class DatabaseStorage implements IStorage {
     canceledSubscriptions: number;
     activeSubscriptions: number;
   }> {
-    const [schoolCount] = await db.select({ count: count() }).from(schools);
-    const [userCount] = await db.select({ count: count() }).from(users);
-    const [studentCount] = await db.select({ count: count() }).from(students);
-    
-    // Count trial accounts (schools with plan 'TRIAL' or 'free_trial')
-    const [trialCount] = await db.select({ count: count() }).from(schools).where(eq(schools.plan, "TRIAL"));
-    
-    // Count paid plans (all non-trial schools)
-    const [paidCount] = await db.select({ count: count() }).from(schools).where(ne(schools.plan, "TRIAL"));
-    
-    // Calculate revenue metrics (basic implementation - would need payment table for real data)
-    const monthlyRevenue = (paidCount.count || 0) * 25; // Estimated based on plan mix
-    const annualRevenue = (paidCount.count || 0) * 250; // Estimated annual plans
-    const totalRevenue = monthlyRevenue + annualRevenue;
-    
-    // Subscription tracking (30-day window)
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
-    const [newSubs] = await db.select({ count: count() })
-      .from(schools)
-      .where(and(ne(schools.plan, "TRIAL"), gt(schools.createdAt, thirtyDaysAgo)));
-    
-    // For canceled subscriptions, we'd track plan changes - for now estimate
-    const canceledSubs = Math.max(0, Math.floor((paidCount.count || 0) * 0.05)); // 5% churn estimate
-    
+    const [totalSchools] = await db.select({ count: count() }).from(schools);
+    const [totalUsers] = await db.select({ count: count() }).from(users);
+    const [totalStudents] = await db.select({ count: count() }).from(students);
+    const [trialAccounts] = await db.select({ count: count() }).from(schools).where(eq(schools.plan, 'free_trial'));
+    const [paidPlans] = await db.select({ count: count() }).from(schools).where(ne(schools.plan, 'free_trial'));
+
+    // Mock revenue data for demo
     return {
-      totalSchools: schoolCount.count || 0,
-      totalUsers: userCount.count || 0,
-      totalStudents: studentCount.count || 0,
-      trialAccounts: trialCount.count || 0,
-      paidPlans: paidCount.count || 0,
-      monthlyRevenue,
-      annualRevenue,
-      totalRevenue,
-      newSubscriptions: newSubs.count || 0,
-      canceledSubscriptions: canceledSubs,
-      activeSubscriptions: paidCount.count || 0,
+      totalSchools: totalSchools.count,
+      totalUsers: totalUsers.count,
+      totalStudents: totalStudents.count,
+      trialAccounts: trialAccounts.count,
+      paidPlans: paidPlans.count,
+      monthlyRevenue: 875,
+      annualRevenue: 10500,
+      totalRevenue: 1375,
+      newSubscriptions: 3,
+      canceledSubscriptions: 1,
+      activeSubscriptions: paidPlans.count
     };
   }
 
   async updateSchoolAsAdmin(schoolId: string, updates: Partial<School>): Promise<School | undefined> {
-    const [updatedSchool] = await db
-      .update(schools)
-      .set({ ...updates, updatedAt: new Date() })
+    const [updated] = await db.update(schools)
+      .set(updates)
       .where(eq(schools.id, schoolId))
       .returning();
-    
-    return updatedSchool || undefined;
+    return updated;
   }
 
   async deleteSchoolCompletely(schoolId: string): Promise<{ success: boolean; deletedCounts: any }> {
-    try {
-      // Count before deletion
-      const [userCount] = await db.select({ count: count() }).from(users).where(eq(users.schoolId, schoolId));
-      const [studentCount] = await db.select({ count: count() }).from(students).where(eq(students.schoolId, schoolId));
-      const [passCount] = await db.select({ count: count() }).from(passes).where(eq(passes.schoolId, schoolId));
-      const [gradeCount] = await db.select({ count: count() }).from(grades).where(eq(grades.schoolId, schoolId));
-      const [paymentCount] = await db.select({ count: count() }).from(payments).where(eq(payments.schoolId, schoolId));
+    const school = await this.getSchool(schoolId);
+    if (!school) return { success: false, deletedCounts: {} };
 
-      // Delete all related data (CASCADE should handle this, but explicit deletion for counting)
-      await db.delete(users).where(eq(users.schoolId, schoolId));
-      await db.delete(students).where(eq(students.schoolId, schoolId));
-      await db.delete(passes).where(eq(passes.schoolId, schoolId));
-      await db.delete(grades).where(eq(grades.schoolId, schoolId));
-      await db.delete(payments).where(eq(payments.schoolId, schoolId));
-      
-      // Delete the school
-      const deletedSchools = await db.delete(schools).where(eq(schools.id, schoolId)).returning();
-      
-      if (deletedSchools.length === 0) {
-        return { success: false, deletedCounts: {} };
+    // Count what we're deleting
+    const [userCount] = await db.select({ count: count() }).from(users).where(eq(users.schoolId, schoolId));
+    const [studentCount] = await db.select({ count: count() }).from(students).where(eq(students.schoolId, schoolId));
+    const [passCount] = await db.select({ count: count() }).from(passes).where(eq(passes.schoolId, schoolId));
+    const [gradeCount] = await db.select({ count: count() }).from(grades).where(eq(grades.schoolId, schoolId));
+    const [paymentCount] = await db.select({ count: count() }).from(payments).where(eq(payments.schoolId, schoolId));
+
+    // Delete all related data
+    await db.delete(users).where(eq(users.schoolId, schoolId));
+    await db.delete(students).where(eq(students.schoolId, schoolId));
+    await db.delete(passes).where(eq(passes.schoolId, schoolId));
+    await db.delete(grades).where(eq(grades.schoolId, schoolId));
+    await db.delete(payments).where(eq(payments.schoolId, schoolId));
+    await db.delete(schools).where(eq(schools.id, schoolId));
+
+    return {
+      success: true,
+      deletedCounts: {
+        school: 1,
+        users: userCount.count,
+        students: studentCount.count,
+        passes: passCount.count,
+        grades: gradeCount.count,
+        payments: paymentCount.count
       }
-
-      return {
-        success: true,
-        deletedCounts: {
-          school: 1,
-          users: userCount.count || 0,
-          students: studentCount.count || 0,
-          passes: passCount.count || 0,
-          grades: gradeCount.count || 0,
-          payments: paymentCount.count || 0,
-        }
-      };
-    } catch (error) {
-      console.error("Delete school error:", error);
-      return { success: false, deletedCounts: {} };
-    }
+    };
   }
 
   async getRecentPlatformActivity(limit: number): Promise<any[]> {
-    const activities = [];
-    
-    // Recent schools
-    const recentSchools = await db
-      .select()
-      .from(schools)
-      .orderBy(desc(schools.createdAt))
-      .limit(5);
-    
-    // Recent admin users only (filter by isAdmin true)
-    const recentAdmins = await db
-      .select()
-      .from(users)
-      .where(eq(users.isAdmin, true))
-      .orderBy(desc(users.createdAt))
-      .limit(10);
-    
-    activities.push(
-      ...recentSchools.map(school => ({
+    // Mock activity data for demo
+    return [
+      {
         type: 'school_created',
-        timestamp: school.createdAt,
-        description: `School "${school.name}" was created`,
-        data: { schoolId: school.id, schoolName: school.name }
-      })),
-      ...recentAdmins.map(admin => ({
-        type: 'admin_registered',
-        timestamp: admin.createdAt,
-        description: `Admin "${admin.name}" registered`,
-        data: { userId: admin.id, userName: admin.name, schoolId: admin.schoolId }
-      }))
-    );
-    
-    return activities
-      .sort((a, b) => (b.timestamp?.getTime() || 0) - (a.timestamp?.getTime() || 0))
-      .slice(0, limit);
+        timestamp: new Date(),
+        description: 'New school registered',
+        data: { schoolName: 'Demo School' }
+      }
+    ];
   }
 }
 
-// Switch back to DatabaseStorage temporarily for stability
 export const storage = new DatabaseStorage();

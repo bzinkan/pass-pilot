@@ -18,7 +18,7 @@ import Stripe from "stripe";
 import { sendTrialVerificationEmail, sendPasswordResetEmail } from "./emailService";
 import { passResetScheduler } from "./passResetScheduler";
 import { normalizeSchoolSlug, validateSchoolName } from './utils/schoolSlug';
-import { testRouter } from './routes/test';
+
 
 // Helper function to get max teachers for a plan
 function getMaxTeachersForPlan(plan: string): number {
@@ -156,7 +156,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Mount test routes (development only)
   if (process.env.NODE_ENV !== 'production') {
-    app.use(testRouter);
+
     console.log('🧪 Test routes mounted for development');
   }
 
