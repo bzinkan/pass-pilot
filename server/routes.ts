@@ -1948,6 +1948,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         teacherId: req.userId,
         schoolId: user.schoolId,
+        destination: req.body.destination || "Restroom", // Default destination
+        checkoutTime: new Date(), // Set checkout time to now
+        timeOut: new Date(), // Set time out to now
+        issuingTeacher: user.name, // Set issuing teacher to current user
+        status: "active", // Use correct enum value
       });
 
       console.log('Creating pass with data:', passData);

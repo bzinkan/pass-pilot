@@ -1287,7 +1287,7 @@ export class DatabaseStorage implements IStorage {
     }).from(passes)
       .innerJoin(students, eq(passes.studentId, students.id))
       .innerJoin(users, eq(passes.teacherId, users.id))
-      .where(and(eq(passes.schoolId, schoolId), eq(passes.status, "out")));
+      .where(and(eq(passes.schoolId, schoolId), eq(passes.status, "active")));
 
     return result.map(row => ({
       ...row.pass,
@@ -1302,7 +1302,7 @@ export class DatabaseStorage implements IStorage {
       studentName: students.name,
     }).from(passes)
       .innerJoin(students, eq(passes.studentId, students.id))
-      .where(and(eq(passes.teacherId, teacherId), eq(passes.status, "out")));
+      .where(and(eq(passes.teacherId, teacherId), eq(passes.status, "active")));
 
     return result.map(row => ({
       ...row.pass,
@@ -1358,7 +1358,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createPass(insertPass: InsertPass): Promise<Pass> {
-    const [pass] = await db.insert(passes).values(insertPass).returning();
+    const passWithId = {
+      id: randomUUID(), // Generate ID since it's required by the table
+      ...insertPass,
+    };
+    const [pass] = await db.insert(passes).values(passWithId).returning();
     return pass;
   }
 
@@ -1387,7 +1391,7 @@ export class DatabaseStorage implements IStorage {
     // First get all active passes to calculate durations
     const activePasses = await db.select()
       .from(passes)
-      .where(and(eq(passes.schoolId, schoolId), eq(passes.status, "out")));
+      .where(and(eq(passes.schoolId, schoolId), eq(passes.status, "active")));
     
     if (activePasses.length === 0) {
       return 0;
