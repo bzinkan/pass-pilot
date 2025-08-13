@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, UserPlus, UserMinus, Users, Mail, Crown, AlertTriangle } from "lucide-react";
+import { Trash2, UserPlus, UserMinus, Users, Mail, Crown, AlertTriangle, Lock, Key } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -23,6 +23,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 interface SetupTabProps {
   user: any;
@@ -39,6 +46,9 @@ export function SetupTab({ user }: SetupTabProps) {
   const [newTeacherEmail, setNewTeacherEmail] = useState('');
   const [newTeacherName, setNewTeacherName] = useState('');
   const [isAddingTeacher, setIsAddingTeacher] = useState(false);
+  const [resetPasswordTeacher, setResetPasswordTeacher] = useState<any>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const { toast } = useToast();
 
   const { data: grades = [] } = useQuery<any[]>({
@@ -171,6 +181,32 @@ export function SetupTab({ user }: SetupTabProps) {
     },
   });
 
+  const resetPasswordMutation = useMutation({
+    mutationFn: async ({ teacherId, newPassword }: { teacherId: string; newPassword: string }) => {
+      const response = await apiRequest('POST', '/api/admin/reset-teacher-password', {
+        teacherId,
+        newPassword,
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Password Reset",
+        description: data.message || "Teacher password has been reset successfully.",
+      });
+      setResetPasswordTeacher(null);
+      setNewPassword('');
+      setConfirmPassword('');
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to reset password",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleAddTeacher = () => {
     if (!newTeacherEmail || !newTeacherName) {
       toast({
@@ -194,6 +230,40 @@ export function SetupTab({ user }: SetupTabProps) {
     addTeacherMutation.mutate({ 
       email: newTeacherEmail, 
       name: newTeacherName
+    });
+  };
+
+  const handleResetPassword = () => {
+    if (!newPassword || !confirmPassword) {
+      toast({
+        title: "Error",
+        description: "Please enter and confirm the new password",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: "Error",
+        description: "Passwords do not match",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      toast({
+        title: "Error",
+        description: "Password must be at least 6 characters long",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    resetPasswordMutation.mutate({
+      teacherId: resetPasswordTeacher.id,
+      newPassword: newPassword,
     });
   };
 
@@ -433,6 +503,70 @@ export function SetupTab({ user }: SetupTabProps) {
                                   </AlertDialogContent>
                                 </AlertDialog>
                               )}
+                              
+                              {/* Reset Password Button */}
+                              <Dialog open={resetPasswordTeacher?.id === teacher.id} onOpenChange={(open) => !open && setResetPasswordTeacher(null)}>
+                                <DialogTrigger asChild>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    className="text-blue-600 hover:text-blue-700"
+                                    onClick={() => {
+                                      setResetPasswordTeacher(teacher);
+                                      setNewPassword('');
+                                      setConfirmPassword('');
+                                    }}
+                                    data-testid={`button-reset-password-${teacher.email}`}
+                                  >
+                                    <Key className="w-4 h-4" />
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>Reset Password for {teacher.name}</DialogTitle>
+                                  </DialogHeader>
+                                  <div className="space-y-4">
+                                    <div>
+                                      <Label htmlFor="newPassword">New Password</Label>
+                                      <Input
+                                        id="newPassword"
+                                        type="password"
+                                        value={newPassword}
+                                        onChange={(e) => setNewPassword(e.target.value)}
+                                        placeholder="Enter new password (min 6 characters)"
+                                        data-testid="input-new-password"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor="confirmPassword">Confirm Password</Label>
+                                      <Input
+                                        id="confirmPassword"
+                                        type="password"
+                                        value={confirmPassword}
+                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                        placeholder="Confirm new password"
+                                        data-testid="input-confirm-password"
+                                      />
+                                    </div>
+                                    <div className="flex gap-2">
+                                      <Button 
+                                        onClick={handleResetPassword}
+                                        disabled={resetPasswordMutation.isPending}
+                                        data-testid="button-confirm-reset-password"
+                                      >
+                                        {resetPasswordMutation.isPending ? 'Resetting...' : 'Reset Password'}
+                                      </Button>
+                                      <Button 
+                                        variant="outline" 
+                                        onClick={() => setResetPasswordTeacher(null)}
+                                        data-testid="button-cancel-reset-password"
+                                      >
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </DialogContent>
+                              </Dialog>
                               
                               {/* Remove Teacher/Admin - Allow removal if not the last admin */}
                               {(!teacher.isAdmin || teachers.filter((t: any) => t.isAdmin).length > 1) && (
