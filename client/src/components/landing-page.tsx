@@ -233,20 +233,6 @@ export function LandingPage() {
               <p className="text-sm text-gray-400 mt-2">
                 Adding pics for troubleshooting highly recommended
               </p>
-              
-              {/* Simple cancellation link */}
-              <div className="mt-4 pt-4 border-t border-gray-700">
-                <a 
-                  href="/cancel-subscription"
-                  className="text-red-400 hover:text-red-300 text-sm"
-                  data-testid="link-cancel-subscription"
-                >
-                  Cancel Subscription
-                </a>
-                <p className="text-xs text-gray-500 mt-1">
-                  Must be logged in to access
-                </p>
-              </div>
             </div>
             
             <div className="border-t border-gray-800 pt-8">
