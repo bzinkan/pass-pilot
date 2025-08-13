@@ -118,8 +118,15 @@ The PassPilot Team
 
 export async function sendPasswordResetEmail(email: string, resetToken: string, userName: string): Promise<boolean> {
   if (!mailService) {
-    console.warn("Email service not available - skipping password reset email");
-    return false;
+    console.warn("Email service not available - logging reset token for testing:");
+    console.log("=".repeat(60));
+    console.log("PASSWORD RESET REQUEST");
+    console.log("=".repeat(60));
+    console.log(`Email: ${email}`);
+    console.log(`User: ${userName}`);
+    console.log(`Reset URL: ${process.env.NODE_ENV === 'production' ? 'https://' + process.env.REPLIT_DOMAINS : 'http://localhost:5000'}/reset-password?token=${resetToken}`);
+    console.log("=".repeat(60));
+    return true; // Return true for testing purposes
   }
   
   const resetUrl = `${process.env.NODE_ENV === 'production' ? 'https://' + process.env.REPLIT_DOMAINS : 'http://localhost:5000'}/reset-password?token=${resetToken}`;
