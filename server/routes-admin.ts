@@ -3,7 +3,7 @@ import { eq, desc, count } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { db } from "./db";
-import { schools, payments, adminUsers, subscriptionEvents } from "@shared/schema";
+import { schools, payments, adminUsers, subscriptionEvents, students, grades, users, passes } from "@shared/schema";
 
 // JWT helpers for admin authentication
 function signAdmin(email: string) {
@@ -74,7 +74,12 @@ export function registerAdminRoutes(app: Express) {
       const hash = await bcrypt.hash(password, 10);
       
       try {
-        await db.insert(adminUsers).values({ email, passwordHash: hash });
+        await db.insert(adminUsers).values({ 
+          email, 
+          passwordHash: hash,
+          name: 'Bootstrap Admin',
+          role: 'superadmin'
+        });
       } catch {
         return res.status(409).json({ ok: false, error: 'email-exists' });
       }
@@ -179,8 +184,8 @@ export function registerAdminRoutes(app: Express) {
   app.delete('/api/admin/schools/:id', async (req, res) => {
     const id = String(req.params.id || '');
     
-    // Validate UUID format for security
-    if (!/^[0-9a-fA-F-]{36}$/.test(id)) {
+    // Validate ID format for security (supports both UUID and school_* formats)
+    if (!/^(school_[a-zA-Z0-9_-]+|[0-9a-fA-F-]{36})$/.test(id)) {
       return res.status(400).json({ error: 'bad_id' });
     }
 
@@ -194,7 +199,7 @@ export function registerAdminRoutes(app: Express) {
       // Try to cancel Stripe subscription (non-blocking, handle failures gracefully)
       if (target.stripeSubscriptionId && process.env.STRIPE_SECRET_KEY) {
         try { 
-          const stripe = await import('stripe').then(m => new m.default(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2023-10-16' }));
+          const stripe = await import('stripe').then(m => new m.default(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-07-30.basil' }));
           await stripe.subscriptions.cancel(target.stripeSubscriptionId); 
           console.log(`✅ Stripe subscription cancelled: ${target.stripeSubscriptionId}`);
         } catch (e: any) { 
@@ -205,8 +210,13 @@ export function registerAdminRoutes(app: Express) {
         }
       }
 
-      // Transaction: delete parent (cascades to children via ON DELETE CASCADE)
+      // Transaction: delete all related data first, then school
       await db.transaction(async (tx) => {
+        // Delete in order to avoid foreign key constraint violations
+        await tx.delete(passes).where(eq(passes.schoolId, id));
+        await tx.delete(students).where(eq(students.schoolId, id));
+        await tx.delete(grades).where(eq(grades.schoolId, id));
+        await tx.delete(users).where(eq(users.schoolId, id));
         await tx.delete(schools).where(eq(schools.id, id));
       });
 
