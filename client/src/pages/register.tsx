@@ -320,8 +320,7 @@ export default function Register() {
                     {plan.price === 0 ? 'Free' : `$${plan.price}`}
                   </div>
                   <div className="text-sm text-gray-500">
-                    {plan.id.includes('annual') ? 'per year' : 
-                     plan.id.includes('school') && !plan.id.includes('team') ? 'annually' :
+                    {plan.id.includes('annual') || (plan.id.includes('SCHOOL') && !plan.id.includes('team')) ? 'annually' : 
                      plan.price === 0 ? '14 days' : 'per month'}
                   </div>
                   <div className="text-sm text-gray-600 mt-2">
