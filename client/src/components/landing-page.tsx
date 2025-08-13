@@ -50,6 +50,13 @@ export function LandingPage() {
               >
                 Log In
               </Button>
+              <Button 
+                onClick={() => setLocation('/trial')}
+                className="bg-white text-primary px-8 py-4 rounded-lg font-semibold hover:bg-gray-50 transition duration-200 shadow-lg"
+                data-testid="button-start-trial"
+              >
+                Start Free Trial
+              </Button>
             </div>
             
             <div className="flex flex-col items-center gap-2 mb-12">
@@ -183,13 +190,6 @@ export function LandingPage() {
             more organized learning environments.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button 
-              onClick={() => setLocation('/trial')}
-              className="bg-white text-primary px-8 py-4 rounded-lg font-semibold hover:bg-gray-50 transition duration-200 shadow-lg"
-              data-testid="button-start-trial"
-            >
-              Start Free Trial
-            </Button>
             <Button 
               onClick={() => setLocation('/register')}
               variant="outline"
