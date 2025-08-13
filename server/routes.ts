@@ -72,12 +72,12 @@ if (process.env.STRIPE_SECRET_KEY) {
 }
 
 // Auth middleware that supports both Bearer tokens and session cookies
-const requireAuth = (req: any, res: any, next: any) => {
+const requireAuth = async (req: any, res: any, next: any) => {
   // First check for session cookie (preferred method)
   const sessionToken = req.cookies?.pp_session;
   if (sessionToken) {
-    // Import getUserFromSession here to avoid circular dependencies
-    const { getUserFromSession } = require('./auth/session');
+    // Import getUserFromSession dynamically to avoid circular dependencies
+    const { getUserFromSession } = await import('./auth/session.js');
     const sessionData = getUserFromSession(sessionToken);
     if (sessionData) {
       req.user = sessionData;
