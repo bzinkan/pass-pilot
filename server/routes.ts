@@ -2185,8 +2185,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'A user with this email already exists' });
       }
 
-      const userData = insertUserSchema.parse({
-        id: randomUUID(),
+      // Create teacher data using the insert schema pattern
+      const teacherData = {
         email: req.body.email,
         name: req.body.name,
         password: 'temp_password', // Temporary password, teacher sets real one on first login
@@ -2195,9 +2195,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         assignedGrades: [],
         invitedBy: admin.id,
         status: 'pending', // Teacher sets password on first login
-      });
+      };
 
-      const teacher = await storage.createUser(userData);
+      const teacher = await storage.createUser(teacherData);
       
       // Teacher invitation sent, they'll set password on first login
       console.log(`Teacher invitation sent to ${teacher.email}`);

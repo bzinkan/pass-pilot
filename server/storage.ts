@@ -1136,6 +1136,7 @@ export class DatabaseStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const userWithDefaults = {
+      id: randomUUID(), // Generate ID since it's required by the table
       ...insertUser,
       resetToken: null,
       resetTokenExpiry: null,
