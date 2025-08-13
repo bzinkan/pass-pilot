@@ -1,0 +1,104 @@
+That error means your API tried to insert a row into passes with id = NULL. Two common causes:
+
+The table has no DB default for id (so omitting id inserts NULL).
+
+Your route is explicitly sending id: null, which overrides any DB default.
+
+Here’s a fast, safe fix set you can apply right now.
+
+A) DB hotfix (make id auto-generate)
+Run these SQL statements on the same Neon DB your app uses:
+
+sql
+Copy
+Edit
+-- 1) Ensure UUID generator exists
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- 2) Give passes.id a default UUID v4
+ALTER TABLE passes
+  ALTER COLUMN id SET DATA TYPE uuid USING id::uuid,
+  ALTER COLUMN id SET DEFAULT gen_random_uuid(),
+  ALTER COLUMN id SET NOT NULL;
+
+-- 3) Verify
+SELECT column_default, is_nullable, data_type
+FROM information_schema.columns
+WHERE table_name='passes' AND column_name='id';
+Expected: column_default shows gen_random_uuid() and is_nullable = NO.
+
+If id isn’t convertible to uuid because it’s an integer from an older schema, drop the USING part and just:
+
+sql
+Copy
+Edit
+ALTER TABLE passes ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE passes ALTER COLUMN id TYPE uuid USING gen_random_uuid();
+ALTER TABLE passes ALTER COLUMN id SET DEFAULT gen_random_uuid();
+B) Drizzle schema (so future migrations stay correct)
+Make sure your passes table looks like:
+
+ts
+Copy
+Edit
+export const passes = pgTable('passes', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  schoolId: uuid('school_id').notNull().references(() => schools.id, { onDelete: 'cascade' }),
+  studentId: uuid('student_id').notNull().references(() => students.id, { onDelete: 'cascade' }),
+  // ...other columns...
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+Then generate/apply a migration that includes:
+
+sql
+Copy
+Edit
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+ALTER TABLE passes ALTER COLUMN id SET DEFAULT gen_random_uuid();
+C) API hotfix (don’t send id: null)
+In the handler that creates a pass, omit id entirely (or generate it in code). Example:
+
+ts
+Copy
+Edit
+import crypto from "node:crypto";
+import { db } from "../db";
+import { passes } from "../db/schema";
+
+export async function createPass(req, res) {
+  const { studentId, schoolId, ...rest } = req.body;
+
+  // If you want DB default to handle IDs (preferred):
+  const newPass = await db.insert(passes).values({
+    schoolId,
+    studentId,
+    // id: undefined  // don't include id at all
+    ...rest,
+  }).returning();
+
+  // OR generate in code (also fine):
+  // const newPass = await db.insert(passes).values({
+  //   id: crypto.randomUUID(),
+  //   schoolId, studentId, ...rest,
+  // }).returning();
+
+  res.json(newPass[0]);
+}
+Also sanitize request bodies so a stray id from the client can’t override defaults:
+
+ts
+Copy
+Edit
+const { id: _ignore, ...payload } = req.body; // drop client-sent id
+D) Quick verification
+From SQL:
+
+sql
+Copy
+Edit
+INSERT INTO passes (school_id, student_id /*, ... */) 
+VALUES ('<school-uuid>','<student-uuid>')
+RETURNING id;
+You should get a non-null UUID back.
+
+From app: mark a student “Out” once—no red error toasts.
