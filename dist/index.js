@@ -4404,8 +4404,6 @@ app.post("/api/stripe/webhook", bodyParser.raw({ type: "application/json" }), as
 app.use(express2.json());
 app.use(express2.urlencoded({ extended: false }));
 app.use(cookieParser(process.env.SESSION_SECRET));
-var { sanitizeBody: sanitizeBody2 } = await Promise.resolve().then(() => (init_sanitize(), sanitize_exports));
-app.use(sanitizeBody2);
 app.use((req, res, next) => {
   const start = Date.now();
   const path3 = req.path;
@@ -4435,6 +4433,8 @@ app.use((req, res, next) => {
   registerAuthMultiRoutes(app);
   registerSuperAdminRoutes(app);
   const server = await registerRoutes(app);
+  const { sanitizeBody: sanitizeBody2 } = await Promise.resolve().then(() => (init_sanitize(), sanitize_exports));
+  app.use(sanitizeBody2);
   const { errorHandler: errorHandler2 } = await Promise.resolve().then(() => (init_errorHandler(), errorHandler_exports));
   app.use(errorHandler2);
   app.use((err, _req, res, _next) => {

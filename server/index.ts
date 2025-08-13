@@ -26,9 +26,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser(process.env.SESSION_SECRET)); // Add signed cookie parsing for admin authentication
 
-// Add sanitization middleware to prevent null/undefined values
-const { sanitizeBody } = await import("./middleware/sanitize");
-app.use(sanitizeBody);
+// Middleware will be added after async setup
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -73,6 +71,10 @@ app.use((req, res, next) => {
   
   const server = await registerRoutes(app);
 
+  // Add sanitization middleware
+  const { sanitizeBody } = await import("./middleware/sanitize");
+  app.use(sanitizeBody);
+  
   // Use enhanced error handler
   const { errorHandler } = await import("./middleware/errorHandler");
   app.use(errorHandler);
