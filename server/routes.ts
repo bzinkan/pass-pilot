@@ -71,24 +71,33 @@ if (process.env.STRIPE_SECRET_KEY) {
   });
 }
 
-// Auth middleware
+// Auth middleware that supports both Bearer tokens and session cookies
 const requireAuth = (req: any, res: any, next: any) => {
+  // First check for session cookie (preferred method)
+  const sessionToken = req.cookies?.pp_session;
+  if (sessionToken) {
+    // Import getUserFromSession here to avoid circular dependencies
+    const { getUserFromSession } = require('./auth/session');
+    const sessionData = getUserFromSession(sessionToken);
+    if (sessionData) {
+      req.user = sessionData;
+      req.userId = sessionData.userId;
+      return next();
+    }
+  }
+  
+  // Fallback to Bearer token (for API clients)
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'Authentication required' });
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    if (token) {
+      console.log('Auth middleware - using Bearer token:', token.substring(0, 8) + '...');
+      req.userId = token;
+      return next();
+    }
   }
   
-  const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-  if (!token) {
-    return res.status(401).json({ message: 'Authentication required' });
-  }
-  
-  console.log('Auth middleware - token:', token.substring(0, 8) + '...');
-  
-  // In a real app, verify JWT token here
-  // For demo, we'll decode a simple format: userId
-  req.userId = token;
-  next();
+  return res.status(401).json({ message: 'Authentication required' });
 };
 
 // Trial check middleware
@@ -130,6 +139,7 @@ const checkTrialStatus = async (req: any, res: any, next: any) => {
 };
 
 import { registerAdminRoutes } from "./routes-admin";
+import { requireUser, optionalUser } from "./auth/requireUser";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health endpoints FIRST (from playbook)
