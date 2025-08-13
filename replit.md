@@ -39,6 +39,9 @@ Preferred communication style: Simple, everyday language.
 - **Print Integration**: Modal-based pass printing with formatted layouts
 - **Statistics Dashboard**: Real-time metrics on active passes, daily totals, and overdue tracking
 - **Settings Management**: Configurable school settings, default values, and system preferences
+- **Subscription Management**: Complete Stripe integration for paid plans with trial periods
+- **Multi-School Support**: Platform-wide super admin with individual school isolation
+- **Billing & Payments**: Secure payment processing, subscription management, and customer portal
 
 ## Shared Code Organization
 - **Schema Definitions**: Unified TypeScript types and Zod validators in `/shared`
@@ -58,6 +61,12 @@ Preferred communication style: Simple, everyday language.
 - **Drizzle ORM**: Type-safe database operations with PostgreSQL dialect
 - **Neon Database**: Serverless PostgreSQL database integration
 - **Database Migration**: Drizzle Kit for schema management and migrations
+
+## Payment Processing & Billing
+- **Stripe**: Complete payment processing infrastructure with subscriptions
+- **@stripe/stripe-js**: Frontend Stripe JavaScript SDK for payment forms
+- **@stripe/react-stripe-js**: React components for Stripe Elements
+- **Stripe API**: Backend integration for customer management, subscriptions, and webhooks
 
 ## UI & Styling
 - **Radix UI**: Accessible UI primitives (dialogs, forms, navigation, etc.)

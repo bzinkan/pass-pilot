@@ -18,6 +18,8 @@ import Guide from "./pages/guide";
 import Features from "./pages/features";
 import BillingSuccess from "./pages/billing-success";
 import AdminDashboard from "./pages/admin-dashboard";
+import Subscribe from "./pages/subscribe";
+import Checkout from "./pages/checkout";
 
 function Router() {
   return (
@@ -34,6 +36,8 @@ function Router() {
       <Route path="/features" component={Features} />
       <Route path="/billing-success" component={BillingSuccess} />
       <Route path="/admin" component={AdminDashboard} />
+      <Route path="/subscribe" component={Subscribe} />
+      <Route path="/checkout" component={Checkout} />
       <Route path="/super-admin/login" component={SuperAdminLogin} />
       <Route path="/super-admin/dashboard" component={SuperAdminDashboard} />
       {/* Catch-all route for unmatched paths */}
