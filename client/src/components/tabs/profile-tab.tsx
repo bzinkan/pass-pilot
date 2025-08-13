@@ -104,9 +104,22 @@ export function ProfileTab({ user }: ProfileTabProps) {
       setShowPasswordDialog(false);
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
     } catch (error: any) {
+      let errorMessage = "Failed to change password";
+      
+      // Handle specific error types
+      if (error.message.includes('current_password_incorrect')) {
+        errorMessage = "Current password is incorrect";
+      } else if (error.message.includes('password_too_short')) {
+        errorMessage = "New password must be at least 6 characters long";
+      } else if (error.message.includes('current_password_and_new_password_required')) {
+        errorMessage = "Both current and new passwords are required";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: "Error",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {

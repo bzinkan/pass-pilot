@@ -353,6 +353,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ success: true });
   });
 
+  // Password change endpoint
+  app.put("/api/users/me/password", requireUser, async (req: any, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ error: 'current_password_and_new_password_required' });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: 'password_too_short' });
+      }
+
+      const user = await storage.getUser(req.user.userId);
+      if (!user) {
+        return res.status(404).json({ error: 'user_not_found' });
+      }
+
+      // Verify current password
+      let currentPasswordValid = false;
+      if (user.password.startsWith('$2a$') || user.password.startsWith('$2b$')) {
+        // Hashed password - use bcrypt
+        const bcrypt = (await import('bcryptjs')).default;
+        currentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+      } else {
+        // Plain text password (demo mode)
+        currentPasswordValid = user.password === currentPassword;
+      }
+
+      if (!currentPasswordValid) {
+        return res.status(401).json({ error: 'current_password_incorrect' });
+      }
+
+      // Hash new password
+      const bcrypt = (await import('bcryptjs')).default;
+      const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+      // Update password
+      await storage.updateUser(user.id, { password: hashedPassword });
+
+      console.log('Password changed for user:', user.email);
+      res.json({ success: true });
+
+    } catch (error: any) {
+      console.error('Password change error:', error);
+      res.status(500).json({ error: 'password_change_failed' });
+    }
+  });
+
   app.get("/api/auth/me", optionalUser, async (req: any, res) => {
     if (!req.user) {
       return res.json({ authenticated: false });
