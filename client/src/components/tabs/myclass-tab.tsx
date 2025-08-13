@@ -62,10 +62,10 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
 
   // Filter grades based on teacher's assigned grades and selected grades
   const teacherAssignedGrades = user?.assignedGrades || [];
-  const availableGrades = grades.filter(grade => 
-    selectedGrades.has(grade.name) && 
+  const availableGrades = grades ? grades.filter(grade => 
+    grade?.name && selectedGrades.has(grade.name) && 
     (teacherAssignedGrades.length === 0 || teacherAssignedGrades.includes(grade.name))
-  );
+  ) : [];
 
   const handleMarkOut = async (studentId: string, studentName: string, passType: string = 'general', customReason: string = '') => {
     try {
@@ -233,16 +233,16 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
     );
   }
 
-  // Get current active grade data
-  const currentActiveGrade = availableGrades.find(g => g.name === activeGrade);
-  const gradeStudents = currentActiveGrade ? students.filter((student: any) => student.grade === currentActiveGrade.name) : [];
-  const gradeOutPasses = currentActiveGrade ? passes.filter((pass: any) => {
-    const student = students.find((s: any) => s.id === pass.studentId);
+  // Get current active grade data with null safety
+  const currentActiveGrade = availableGrades.find(g => g?.name === activeGrade);
+  const gradeStudents = currentActiveGrade && students ? students.filter((student: any) => student?.grade === currentActiveGrade.name) : [];
+  const gradeOutPasses = currentActiveGrade && passes && students ? passes.filter((pass: any) => {
+    const student = students.find((s: any) => s?.id === pass?.studentId);
     return student && student.grade === currentActiveGrade.name;
   }) : [];
-  const availableStudents = gradeStudents.filter(student => 
-    !passes.some(pass => pass.studentId === student.id)
-  );
+  const availableStudents = gradeStudents && passes ? gradeStudents.filter(student => 
+    !passes.some(pass => pass?.studentId === student?.id)
+  ) : [];
 
   return (
     <div className="p-4">
@@ -255,25 +255,25 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
       <div className="mb-6">
         <div className="flex flex-wrap gap-2">
           {availableGrades.map((grade: any) => {
-            const gradeStudents = students.filter(s => s.grade === grade.name);
-            const gradeOutCount = passes.filter(p => {
-              const student = students.find(s => s.id === p.studentId);
+            const gradeStudents = students && grade?.name ? students.filter(s => s?.grade === grade.name) : [];
+            const gradeOutCount = passes && students && grade?.name ? passes.filter(p => {
+              const student = students.find(s => s?.id === p?.studentId);
               return student && student.grade === grade.name;
-            }).length;
+            }).length : 0;
             
-            const isActive = activeGrade === grade.name;
+            const isActive = activeGrade === grade?.name;
             
             return (
-              <div key={grade.id} className="flex items-center gap-1">
+              <div key={grade?.id || Math.random()} className="flex items-center gap-1">
                 <Button
                   variant={isActive ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setActiveGrade(grade.name)}
-                  data-testid={`tab-grade-${grade.name}`}
+                  onClick={() => setActiveGrade(grade?.name || '')}
+                  data-testid={`tab-grade-${grade?.name || 'unknown'}`}
                   className={`flex items-center gap-2 ${isActive ? 'ring-2 ring-primary' : ''}`}
                 >
                   <Users className="w-4 h-4" />
-                  Grade {grade.name}
+                  Grade {grade?.name}
                   {gradeOutCount > 0 && (
                     <span className="ml-1 px-1.5 py-0.5 text-xs bg-red-100 text-red-700 rounded-full">
                       {gradeOutCount}
@@ -285,11 +285,11 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
                   size="sm"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onRemoveGrade?.(grade.name);
+                    onRemoveGrade?.(grade?.name || '');
                   }}
-                  data-testid={`button-remove-grade-${grade.name}`}
+                  data-testid={`button-remove-grade-${grade?.name || 'unknown'}`}
                   className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground hover:bg-red-100 dark:hover:bg-red-900/20"
-                  title={`Remove Grade ${grade.name} from My Class`}
+                  title={`Remove Grade ${grade?.name || 'Unknown'} from My Class`}
                 >
                   <X className="w-4 h-4" />
                 </Button>
@@ -344,7 +344,7 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Clock className="w-5 h-5 text-red-600" />
-                Currently Out - Grade {currentActiveGrade.name}
+                Currently Out - Grade {currentActiveGrade?.name || 'Unknown'}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -355,7 +355,7 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
               ) : (
                 <div className="space-y-3">
                   {gradeOutPasses.map((pass: any) => {
-                    const student = students.find((s: any) => s.id === pass.studentId);
+                    const student = students?.find((s: any) => s?.id === pass?.studentId);
                     if (!student) return null;
                     
                     return (
@@ -397,21 +397,21 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <UserCheck className="w-5 h-5 text-green-600" />
-                Available Students - Grade {currentActiveGrade.name}
+                Available Students - Grade {currentActiveGrade?.name || 'Unknown'}
               </CardTitle>
             </CardHeader>
             <CardContent>
               {availableStudents.length === 0 ? (
                 <p className="text-center text-muted-foreground py-4">
                   {gradeStudents.length === 0 
-                    ? `No students in Grade ${currentActiveGrade.name}. Add students in the Roster tab.`
+                    ? `No students in Grade ${currentActiveGrade?.name || 'Unknown'}. Add students in the Roster tab.`
                     : "All students are currently out of class"
                   }
                 </p>
               ) : (
                 <div className="grid gap-3">
                   {availableStudents.map((student: any) => (
-                    <div key={student.id} className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                    <div key={student?.id || Math.random()} className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
                       <div className="flex items-center space-x-3">
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${getAvatarColor(student.name)}`}>
                           {getInitials(student.name)}
