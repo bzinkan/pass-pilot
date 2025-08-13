@@ -1260,7 +1260,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createStudent(insertStudent: InsertStudent): Promise<Student> {
-    const [student] = await db.insert(students).values(insertStudent).returning();
+    const studentWithId = {
+      id: randomUUID(), // Generate ID since it's required by the table
+      ...insertStudent,
+    };
+    const [student] = await db.insert(students).values(studentWithId).returning();
     return student;
   }
 
