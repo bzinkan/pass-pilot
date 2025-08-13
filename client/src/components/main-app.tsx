@@ -88,9 +88,11 @@ export function MainApp({ user, onLogout }: MainAppProps) {
     { id: 'profile', label: 'Profile', icon: 'fas fa-user' },
   ];
 
-  // Add tabs for all users (no admin restriction)
-  tabs.push({ id: 'admin', label: 'Admin', icon: 'fas fa-cog' });
-  tabs.push({ id: 'billing', label: 'Billing', icon: 'fas fa-credit-card' });
+  // Add admin and billing tabs only for admins
+  if (user.isAdmin) {
+    tabs.push({ id: 'admin', label: 'Admin', icon: 'fas fa-cog' });
+    tabs.push({ id: 'billing', label: 'Billing', icon: 'fas fa-credit-card' });
+  }
 
   const renderTabContent = () => {
     switch (currentTab) {

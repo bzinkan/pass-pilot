@@ -1369,6 +1369,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!user.isAdmin) {
+        return res.status(403).json({ message: 'Only administrators can manage subscriptions' });
+      }
+
+      if (!user.isAdmin) {
         return res.status(403).json({ message: 'Only administrators can cancel subscriptions' });
       }
 
@@ -1419,6 +1423,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.getUser(req.userId);
       if (!user) {
         return res.status(404).json({ message: 'User not found' });
+      }
+
+      if (!user.isAdmin) {
+        return res.status(403).json({ message: 'Only administrators can view subscription status' });
       }
 
       const school = await storage.getSchool(user.schoolId);
@@ -1475,7 +1483,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: 'User not found' });
       }
 
-      // All authenticated users can reactivate subscriptions for their school
+      if (!user.isAdmin) {
+        return res.status(403).json({ message: 'Only administrators can manage subscriptions' });
+      }
 
       const school = await storage.getSchool(user.schoolId);
       if (!school) {
@@ -2002,8 +2012,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/school-info", requireAuth, async (req: any, res) => {
     try {
       const user = await storage.getUser(req.userId);
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
+      if (!user || !user.isAdmin) {
+        return res.status(403).json({ message: 'Admin access required' });
       }
 
       const school = await storage.getSchool(user.schoolId);
@@ -2043,8 +2053,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/teachers", requireAuth, async (req: any, res) => {
     try {
       const user = await storage.getUser(req.userId);
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
+      if (!user || !user.isAdmin) {
+        return res.status(403).json({ message: 'Admin access required' });
       }
 
       const teachers = await storage.getUsersBySchool(user.schoolId);
@@ -2057,8 +2067,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/teachers", requireAuth, async (req: any, res) => {
     try {
       const admin = await storage.getUser(req.userId);
-      if (!admin) {
-        return res.status(404).json({ message: 'User not found' });
+      if (!admin || !admin.isAdmin) {
+        return res.status(403).json({ message: 'Admin access required' });
       }
 
       const school = await storage.getSchool(admin.schoolId);
@@ -2104,8 +2114,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/admin/teachers/:teacherId", requireAuth, async (req: any, res) => {
     try {
       const admin = await storage.getUser(req.userId);
-      if (!admin) {
-        return res.status(404).json({ message: 'User not found' });
+      if (!admin || !admin.isAdmin) {
+        return res.status(403).json({ message: 'Admin access required' });
       }
 
       const teacher = await storage.getUser(req.params.teacherId);
@@ -2138,8 +2148,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/admin/teachers/:teacherId/promote", requireAuth, async (req: any, res) => {
     try {
       const admin = await storage.getUser(req.userId);
-      if (!admin) {
-        return res.status(404).json({ message: 'User not found' });
+      if (!admin || !admin.isAdmin) {
+        return res.status(403).json({ message: 'Admin access required' });
       }
 
       const teacher = await storage.getUser(req.params.teacherId);
@@ -2166,8 +2176,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/admin/teachers/:teacherId/demote", requireAuth, async (req: any, res) => {
     try {
       const admin = await storage.getUser(req.userId);
-      if (!admin) {
-        return res.status(404).json({ message: 'User not found' });
+      if (!admin || !admin.isAdmin) {
+        return res.status(403).json({ message: 'Admin access required' });
       }
 
       const targetUser = await storage.getUser(req.params.teacherId);
@@ -2497,8 +2507,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { teacherId, newPassword } = req.body;
       
       const admin = await storage.getUser(req.userId);
-      if (!admin) {
-        return res.status(404).json({ message: 'User not found' });
+      if (!admin || !admin.isAdmin) {
+        return res.status(403).json({ message: 'Admin access required' });
       }
 
       if (!teacherId || !newPassword) {
