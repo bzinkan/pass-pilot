@@ -25,10 +25,10 @@ export function BillingTab({ user }: BillingTabProps) {
   // Cancel subscription mutation
   const cancelMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/subscription/cancel"),
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       toast({
         title: "Subscription Cancelled",
-        description: data.message
+        description: data?.message || "Subscription cancelled successfully"
       });
       queryClient.invalidateQueries({ queryKey: ['/api/subscription-status'] });
     },
@@ -44,10 +44,10 @@ export function BillingTab({ user }: BillingTabProps) {
   // Reactivate subscription mutation
   const reactivateMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/subscription/reactivate"),
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       toast({
         title: "Subscription Reactivated",
-        description: data.message
+        description: data?.message || "Subscription reactivated successfully"
       });
       queryClient.invalidateQueries({ queryKey: ['/api/subscription-status'] });
     },
@@ -143,7 +143,7 @@ export function BillingTab({ user }: BillingTabProps) {
             <h2 className="text-xl font-semibold text-foreground mb-2">Billing & Subscription</h2>
             <p className="text-sm text-muted-foreground">Manage your subscription and billing information</p>
           </div>
-          {!subscriptionData?.hasActiveSubscription && (
+          {!(subscriptionData as any)?.hasActiveSubscription && (
             <Button 
               onClick={() => window.open('/register', '_blank')}
               className="bg-primary hover:bg-primary/90"
@@ -166,49 +166,49 @@ export function BillingTab({ user }: BillingTabProps) {
                 <h3 className="font-medium text-foreground">Current Subscription</h3>
               </div>
               <Badge 
-                variant={subscriptionData?.hasActiveSubscription ? "default" : "secondary"}
+                variant={(subscriptionData as any)?.hasActiveSubscription ? "default" : "secondary"}
                 data-testid="subscription-status-badge"
               >
-                {subscriptionData?.hasActiveSubscription ? 'Active' : subscriptionData?.isTrialAccount ? 'Free Trial' : 'Free Plan'}
+                {(subscriptionData as any)?.hasActiveSubscription ? 'Active' : (subscriptionData as any)?.isTrialAccount ? 'Free Trial' : 'Free Plan'}
               </Badge>
             </div>
 
-            {subscriptionData?.hasActiveSubscription ? (
+            {(subscriptionData as any)?.hasActiveSubscription ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm font-medium text-foreground">Plan</p>
-                    <p className="text-sm text-muted-foreground capitalize">{subscriptionData.plan?.replace('_', ' ')}</p>
+                    <p className="text-sm text-muted-foreground capitalize">{(subscriptionData as any)?.plan?.replace('_', ' ')}</p>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-foreground">Amount</p>
                     <p className="text-sm text-muted-foreground">
-                      {formatCurrency(subscriptionData.amount, subscriptionData.currency)} 
-                      <span className="text-xs">/{subscriptionData.interval}</span>
+                      {formatCurrency((subscriptionData as any)?.amount || 0, (subscriptionData as any)?.currency || 'usd')} 
+                      <span className="text-xs">/{(subscriptionData as any)?.interval || 'month'}</span>
                     </p>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-foreground">Teacher Licenses</p>
                     <p className="text-sm text-muted-foreground">
-                      {subscriptionData.maxTeachers === -1 ? 'Unlimited' : subscriptionData.maxTeachers}
+                      {(subscriptionData as any)?.maxTeachers === -1 ? 'Unlimited' : (subscriptionData as any)?.maxTeachers}
                     </p>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-foreground">Next Billing</p>
                     <p className="text-sm text-muted-foreground">
-                      {formatDate(subscriptionData.currentPeriodEnd)}
+                      {formatDate((subscriptionData as any)?.currentPeriodEnd)}
                     </p>
                   </div>
                 </div>
 
                 {/* Subscription Actions */}
                 <div className="border-t pt-4">
-                  {subscriptionData.cancelled ? (
+                  {(subscriptionData as any)?.cancelled ? (
                     <div className="space-y-3">
                       <Alert>
                         <AlertCircle className="h-4 w-4" />
                         <AlertDescription>
-                          Your subscription has been cancelled and will end on {formatDate(subscriptionData.currentPeriodEnd)}.
+                          Your subscription has been cancelled and will end on {formatDate((subscriptionData as any)?.currentPeriodEnd)}.
                           You can reactivate it at any time before then.
                         </AlertDescription>
                       </Alert>
@@ -243,7 +243,7 @@ export function BillingTab({ user }: BillingTabProps) {
             ) : (
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  {subscriptionData?.isTrialAccount 
+                  {(subscriptionData as any)?.isTrialAccount 
                     ? 'You are currently on a free trial with unlimited access.' 
                     : 'You are on the free plan with limited features.'}
                 </p>
@@ -266,7 +266,7 @@ export function BillingTab({ user }: BillingTabProps) {
             <h3 className="font-medium text-foreground mb-4">Available Plans</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
               {plans.map((plan) => {
-                const isCurrent = plan.name.toLowerCase().replace(' ', '_') === subscriptionData?.plan;
+                const isCurrent = plan.name.toLowerCase().replace(' ', '_') === (subscriptionData as any)?.plan;
                 return (
                   <Card key={plan.name} className={isCurrent ? "border-primary" : ""}>
                     <CardContent className="p-6">

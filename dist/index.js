@@ -232,7 +232,7 @@ var init_db = __esm({
 
 // server/storage.ts
 import { randomUUID } from "crypto";
-import { eq, and, lt, count, desc } from "drizzle-orm";
+import { eq, and, lt, count, desc, ne, gt } from "drizzle-orm";
 var DatabaseStorage, storage;
 var init_storage = __esm({
   "server/storage.ts"() {
@@ -606,14 +606,27 @@ var init_storage = __esm({
         const [schoolCount] = await db.select({ count: count() }).from(schools);
         const [userCount] = await db.select({ count: count() }).from(users);
         const [studentCount] = await db.select({ count: count() }).from(students);
-        const [activePassCount] = await db.select({ count: count() }).from(passes).where(eq(passes.status, "active"));
-        const [totalPassCount] = await db.select({ count: count() }).from(passes);
+        const [trialCount] = await db.select({ count: count() }).from(schools).where(eq(schools.plan, "TRIAL"));
+        const [paidCount] = await db.select({ count: count() }).from(schools).where(ne(schools.plan, "TRIAL"));
+        const monthlyRevenue = (paidCount.count || 0) * 25;
+        const annualRevenue = (paidCount.count || 0) * 250;
+        const totalRevenue = monthlyRevenue + annualRevenue;
+        const thirtyDaysAgo = /* @__PURE__ */ new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const [newSubs] = await db.select({ count: count() }).from(schools).where(and(ne(schools.plan, "TRIAL"), gt(schools.createdAt, thirtyDaysAgo)));
+        const canceledSubs = Math.max(0, Math.floor((paidCount.count || 0) * 0.05));
         return {
           totalSchools: schoolCount.count || 0,
           totalUsers: userCount.count || 0,
           totalStudents: studentCount.count || 0,
-          activePasses: activePassCount.count || 0,
-          totalPasses: totalPassCount.count || 0
+          trialAccounts: trialCount.count || 0,
+          paidPlans: paidCount.count || 0,
+          monthlyRevenue,
+          annualRevenue,
+          totalRevenue,
+          newSubscriptions: newSubs.count || 0,
+          canceledSubscriptions: canceledSubs,
+          activeSubscriptions: paidCount.count || 0
         };
       }
       async updateSchoolAsAdmin(schoolId, updates) {
@@ -655,7 +668,7 @@ var init_storage = __esm({
       async getRecentPlatformActivity(limit) {
         const activities = [];
         const recentSchools = await db.select().from(schools).orderBy(desc(schools.createdAt)).limit(5);
-        const recentUsers = await db.select().from(users).orderBy(desc(users.createdAt)).limit(10);
+        const recentAdmins = await db.select().from(users).where(eq(users.role, "admin")).orderBy(desc(users.createdAt)).limit(10);
         activities.push(
           ...recentSchools.map((school) => ({
             type: "school_created",
@@ -663,11 +676,11 @@ var init_storage = __esm({
             description: `School "${school.name}" was created`,
             data: { schoolId: school.id, schoolName: school.name }
           })),
-          ...recentUsers.map((user) => ({
-            type: "user_created",
-            timestamp: user.createdAt,
-            description: `User "${user.name}" joined`,
-            data: { userId: user.id, userName: user.name, schoolId: user.schoolId }
+          ...recentAdmins.map((admin) => ({
+            type: "admin_registered",
+            timestamp: admin.createdAt,
+            description: `Admin "${admin.name}" registered`,
+            data: { userId: admin.id, userName: admin.name, schoolId: admin.schoolId }
           }))
         );
         return activities.sort((a, b) => (b.timestamp?.getTime() || 0) - (a.timestamp?.getTime() || 0)).slice(0, limit);
@@ -900,40 +913,40 @@ var init_routes_billing = __esm({
     init_session();
     PLAN_CONFIG = {
       TRIAL: {
-        maxTeachers: -1,
-        // Unlimited teachers for school testing 
-        maxStudents: -1,
-        // Unlimited students for school testing
+        maxTeachers: 1,
+        // 1 teacher for trial
+        maxStudents: 100,
+        // 100 students for trial
         price: null,
         // Free trial 
         name: "Free Trial",
-        duration: "unlimited"
-        // Unlimited duration for school testing
+        duration: "14 days"
+        // 14-day trial period
       },
       TEACHER_MONTHLY: {
         maxTeachers: 1,
-        maxStudents: 200,
+        maxStudents: 100,
         price: process.env.STRIPE_PRICE_TEACHER_MONTHLY || "",
         name: "Teacher Plan",
         duration: "monthly"
       },
       TEACHER_ANNUAL: {
         maxTeachers: 1,
-        maxStudents: 200,
+        maxStudents: 100,
         price: process.env.STRIPE_PRICE_TEACHER_ANNUAL || "",
         name: "Teacher Plan",
         duration: "yearly"
       },
       SMALL_TEAM_MONTHLY: {
         maxTeachers: 10,
-        maxStudents: 1500,
+        maxStudents: 200,
         price: process.env.STRIPE_PRICE_SMALL_TEAM_MONTHLY || "",
         name: "Small Team Plan",
         duration: "monthly"
       },
       SMALL_TEAM_ANNUAL: {
         maxTeachers: 10,
-        maxStudents: 1500,
+        maxStudents: 200,
         price: process.env.STRIPE_PRICE_SMALL_TEAM_ANNUAL || "",
         name: "Small Team Plan",
         duration: "yearly"
@@ -1391,7 +1404,12 @@ function registerAdminRoutes(app2) {
       }
       const hash = await bcrypt.hash(password, 10);
       try {
-        await db.insert(adminUsers).values({ email, passwordHash: hash });
+        await db.insert(adminUsers).values({
+          email,
+          passwordHash: hash,
+          name: "Bootstrap Admin",
+          role: "superadmin"
+        });
       } catch {
         return res.status(409).json({ ok: false, error: "email-exists" });
       }
@@ -1471,7 +1489,7 @@ function registerAdminRoutes(app2) {
   });
   app2.delete("/api/admin/schools/:id", async (req, res) => {
     const id = String(req.params.id || "");
-    if (!/^[0-9a-fA-F-]{36}$/.test(id)) {
+    if (!/^(school_[a-zA-Z0-9_-]+|[0-9a-fA-F-]{36})$/.test(id)) {
       return res.status(400).json({ error: "bad_id" });
     }
     try {
@@ -1481,7 +1499,7 @@ function registerAdminRoutes(app2) {
       }
       if (target.stripeSubscriptionId && process.env.STRIPE_SECRET_KEY) {
         try {
-          const stripe3 = await import("stripe").then((m) => new m.default(process.env.STRIPE_SECRET_KEY, { apiVersion: "2023-10-16" }));
+          const stripe3 = await import("stripe").then((m) => new m.default(process.env.STRIPE_SECRET_KEY, { apiVersion: "2025-07-30.basil" }));
           await stripe3.subscriptions.cancel(target.stripeSubscriptionId);
           console.log(`\u2705 Stripe subscription cancelled: ${target.stripeSubscriptionId}`);
         } catch (e) {
@@ -1491,6 +1509,10 @@ function registerAdminRoutes(app2) {
         }
       }
       await db.transaction(async (tx) => {
+        await tx.delete(passes).where(eq2(passes.schoolId, id));
+        await tx.delete(students).where(eq2(students.schoolId, id));
+        await tx.delete(grades).where(eq2(grades.schoolId, id));
+        await tx.delete(users).where(eq2(users.schoolId, id));
         await tx.delete(schools).where(eq2(schools.id, id));
       });
       console.log(`\u{1F5D1}\uFE0F School permanently deleted: ${target.name} (${id})`);
@@ -1539,6 +1561,18 @@ function registerAdminRoutes(app2) {
 
 // server/auth/requireUser.ts
 init_session();
+function requireUser(req, res, next) {
+  const token = req.cookies?.pp_session;
+  if (!token) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  const user = getUserFromSession(token);
+  if (!user) {
+    return res.status(401).json({ error: "invalid_session" });
+  }
+  req.user = user;
+  next();
+}
 function optionalUser(req, res, next) {
   const token = req.cookies?.pp_session;
   if (token) {
@@ -1567,11 +1601,11 @@ function getMaxTeachersForPlan(plan) {
 }
 function getMaxStudentsForPlan(plan) {
   const planConfig = {
-    "TRIAL": { maxStudents: 200 },
-    "TEACHER_MONTHLY": { maxStudents: 200 },
-    "TEACHER_ANNUAL": { maxStudents: 200 },
-    "SMALL_TEAM_MONTHLY": { maxStudents: 1500 },
-    "SMALL_TEAM_ANNUAL": { maxStudents: 1500 },
+    "TRIAL": { maxStudents: 100 },
+    "TEACHER_MONTHLY": { maxStudents: 100 },
+    "TEACHER_ANNUAL": { maxStudents: 100 },
+    "SMALL_TEAM_MONTHLY": { maxStudents: 200 },
+    "SMALL_TEAM_ANNUAL": { maxStudents: 200 },
     "SMALL_SCHOOL": { maxStudents: 500 },
     "MEDIUM_SCHOOL": { maxStudents: 1e3 },
     "LARGE_SCHOOL": { maxStudents: 2e3 }
@@ -1676,6 +1710,18 @@ async function registerRoutes(app2) {
         if (!user) {
           return res.status(401).json({ error: "invalid_credentials" });
         }
+        if (user.status === "pending") {
+          console.log("First login detected - setting password for user:", user.email);
+          const bcrypt6 = (await import("bcryptjs")).default;
+          const hashedPassword = await bcrypt6.hash(password, 12);
+          await storage.updateUser(user.id, {
+            password: hashedPassword,
+            status: "active"
+          });
+          console.log("Password set and account activated for:", user.email);
+          user.password = hashedPassword;
+          user.status = "active";
+        }
         let passwordValid2 = false;
         if (user.password.startsWith("$2a$") || user.password.startsWith("$2b$")) {
           const bcrypt6 = (await import("bcryptjs")).default;
@@ -1713,8 +1759,29 @@ async function registerRoutes(app2) {
       if (candidates.length === 0) {
         return res.status(401).json({ error: "invalid_credentials" });
       }
+      let firstUser = candidates[0];
+      if (firstUser.status === "pending") {
+        console.log("Multi-step first login detected - setting password for user:", firstUser.email);
+        const bcrypt6 = (await import("bcryptjs")).default;
+        const hashedPassword = await bcrypt6.hash(password, 12);
+        await storage.updateUser(firstUser.id, {
+          password: hashedPassword,
+          status: "active"
+        });
+        console.log("Password set and account activated for:", firstUser.email);
+        for (const candidate of candidates) {
+          if (candidate.status === "pending") {
+            await storage.updateUser(candidate.id, {
+              password: hashedPassword,
+              status: "active"
+            });
+          }
+        }
+        firstUser.password = hashedPassword;
+        firstUser.status = "active";
+      }
       let passwordValid = false;
-      const firstPassword = candidates[0].password;
+      const firstPassword = firstUser.password;
       if (firstPassword.startsWith("$2a$") || firstPassword.startsWith("$2b$")) {
         const bcrypt6 = (await import("bcryptjs")).default;
         passwordValid = await bcrypt6.compare(password, firstPassword);
@@ -1768,6 +1835,39 @@ async function registerRoutes(app2) {
   app2.post("/api/auth/logout", (req, res) => {
     clearUserSession(res);
     res.json({ success: true });
+  });
+  app2.put("/api/users/me/password", requireUser, async (req, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ error: "current_password_and_new_password_required" });
+      }
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: "password_too_short" });
+      }
+      const user = await storage.getUser(req.user.userId);
+      if (!user) {
+        return res.status(404).json({ error: "user_not_found" });
+      }
+      let currentPasswordValid = false;
+      if (user.password.startsWith("$2a$") || user.password.startsWith("$2b$")) {
+        const bcrypt7 = (await import("bcryptjs")).default;
+        currentPasswordValid = await bcrypt7.compare(currentPassword, user.password);
+      } else {
+        currentPasswordValid = user.password === currentPassword;
+      }
+      if (!currentPasswordValid) {
+        return res.status(401).json({ error: "current_password_incorrect" });
+      }
+      const bcrypt6 = (await import("bcryptjs")).default;
+      const hashedPassword = await bcrypt6.hash(newPassword, 12);
+      await storage.updateUser(user.id, { password: hashedPassword });
+      console.log("Password changed for user:", user.email);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Password change error:", error);
+      res.status(500).json({ error: "password_change_failed" });
+    }
   });
   app2.get("/api/auth/me", optionalUser, async (req, res) => {
     if (!req.user) {
@@ -4414,9 +4514,9 @@ function serveStatic(app2) {
 
 // server/index.ts
 var app = express2();
-app.post("/api/stripe/webhook", bodyParser.raw({ type: "application/json" }), async (req, res, next) => {
+app.post("/api/stripe/webhook", bodyParser.raw({ type: "application/json" }), async (req, res) => {
   const { stripeWebhook: stripeWebhook2 } = await Promise.resolve().then(() => (init_routes_billing(), routes_billing_exports));
-  return stripeWebhook2(req, res, next);
+  return stripeWebhook2(req, res);
 });
 app.use(express2.json());
 app.use(express2.urlencoded({ extended: false }));

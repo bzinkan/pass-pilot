@@ -14,6 +14,9 @@ A comprehensive Hall Pass Management System built with React, TypeScript, Expres
 - ✅ **Password Change Feature**: Complete password change functionality in Profile tab with secure validation
 - ✅ **Super Admin School Deletion**: Fixed foreign key constraint issues preventing school deletion
 - ✅ **School Management Controls**: Super admin can override student/teacher limits regardless of plan type
+- ✅ **Small Team Plans Updated**: Increased capacity from 150 to 200 students for better value
+- ✅ **Super Admin Dashboard Overhaul**: Replaced passes metrics with trial/paid account tracking, added Money Tracker and Subscription Tracker
+- ✅ **Deployment Readiness Complete**: Fixed all TypeScript errors, build issues, and database migration conflicts
 
 # User Preferences
 

@@ -12,10 +12,10 @@ import "./passResetScheduler"; // Initialize the pass reset scheduler
 const app = express();
 
 // Stripe webhook FIRST — raw body required  
-app.post('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }), async (req, res, next) => {
+app.post('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }), async (req, res) => {
   // Import webhook handler dynamically to avoid circular dependencies
   const { stripeWebhook } = await import("./routes-billing");
-  return stripeWebhook(req, res, next);
+  return stripeWebhook(req, res);
 });
 
 // Now regular parsers
