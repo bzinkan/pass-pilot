@@ -75,12 +75,10 @@ export function AuthModal({ open, onOpenChange, mode: initialMode = 'login' }: A
       onOpenChange(false);
       setLoginForm({ email: '', password: '' });
       
-      if (result?.message) {
-        toast({
-          title: "Welcome!",
-          description: result.message,
-        });
-      }
+      toast({
+        title: "Welcome!",
+        description: "Login successful",
+      });
     } catch (error: any) {
       toast({
         title: "Error",

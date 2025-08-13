@@ -240,10 +240,10 @@ export default function Register() {
     try {
       // CRITICAL: Use current form data to prevent step-back issues
       const currentFormData = {
+        email: schoolData.adminEmail,
+        password: schoolData.password,
+        name: schoolData.adminName,
         schoolName: schoolData.name,
-        adminEmail: schoolData.adminEmail,
-        adminName: schoolData.adminName,
-        adminPassword: schoolData.password,
         plan: selectedPlan.id
       };
       
