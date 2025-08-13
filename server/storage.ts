@@ -1228,7 +1228,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createGrade(insertGrade: InsertGrade): Promise<Grade> {
-    const [grade] = await db.insert(grades).values(insertGrade).returning();
+    const gradeWithId = {
+      id: randomUUID(), // Generate ID since it's required by the table
+      ...insertGrade,
+    };
+    const [grade] = await db.insert(grades).values(gradeWithId).returning();
     return grade;
   }
 
