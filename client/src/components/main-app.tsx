@@ -88,11 +88,9 @@ export function MainApp({ user, onLogout }: MainAppProps) {
     { id: 'profile', label: 'Profile', icon: 'fas fa-user' },
   ];
 
-  // Add admin-only tabs
-  if (user.isAdmin) {
-    tabs.push({ id: 'admin', label: 'Admin', icon: 'fas fa-cog' });
-    tabs.push({ id: 'billing', label: 'Billing', icon: 'fas fa-credit-card' });
-  }
+  // Add tabs for all users (no admin restriction)
+  tabs.push({ id: 'admin', label: 'Admin', icon: 'fas fa-cog' });
+  tabs.push({ id: 'billing', label: 'Billing', icon: 'fas fa-credit-card' });
 
   const renderTabContent = () => {
     switch (currentTab) {
@@ -137,11 +135,11 @@ export function MainApp({ user, onLogout }: MainAppProps) {
       case 'reports':
         return <ReportsTab user={user} />;
       case 'admin':
-        return user.isAdmin ? <SetupTab user={user} /> : null;
+        return <SetupTab user={user} />;
       case 'profile':
         return <ProfileTab user={user} />;
       case 'billing':
-        return user.isAdmin ? <BillingTab user={user} /> : null;
+        return <BillingTab user={user} />;
       default:
         return <PassesTab user={user} />;
     }

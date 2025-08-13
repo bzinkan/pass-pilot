@@ -302,11 +302,8 @@ export function RosterTab({ user, selectedGrades = new Set(), onGradeClick }: Ro
     return colors[index];
   };
 
-  // Filter grades based on teacher's assigned grades
-  const teacherAssignedGrades = user?.assignedGrades || [];
-  const filteredGrades = teacherAssignedGrades.length === 0 
-    ? grades 
-    : grades.filter(grade => teacherAssignedGrades.includes(grade.name));
+  // All authenticated users can see all grades
+  const filteredGrades = grades;
 
   if (isLoading) {
     return (

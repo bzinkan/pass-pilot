@@ -235,23 +235,8 @@ export async function registerFirebaseRoutes(app: Express): Promise<Server> {
       const { grade } = req.query;
       let students;
 
-      if (req.user.isAdmin) {
-        // Admins can see all students
-        students = await storage.getStudentsBySchool(req.user.schoolId, grade as string);
-      } else {
-        // Teachers can only see students in their assigned grades
-        if (grade && req.user.assignedGrades.includes(grade as string)) {
-          students = await storage.getStudentsBySchool(req.user.schoolId, grade as string);
-        } else if (!grade) {
-          // Get students from all assigned grades
-          const allStudents = await storage.getStudentsBySchool(req.user.schoolId);
-          students = allStudents.filter(student => 
-            req.user.assignedGrades.includes(student.grade)
-          );
-        } else {
-          students = []; // No access to this grade
-        }
-      }
+      // All authenticated users can see all students in their school
+      students = await storage.getStudentsBySchool(req.user.schoolId, grade as string);
 
       res.json(students);
     } catch (error: any) {
@@ -272,10 +257,7 @@ export async function registerFirebaseRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'Invalid student data', errors: result.error.errors });
       }
 
-      // Check if teacher has access to this grade
-      if (!req.user.isAdmin && !req.user.assignedGrades.includes(result.data.grade)) {
-        return res.status(403).json({ message: 'No access to this grade' });
-      }
+      // All authenticated users can create students in any grade
 
       const student = await storage.createStudent(result.data);
       res.json(student);
@@ -289,13 +271,8 @@ export async function registerFirebaseRoutes(app: Express): Promise<Server> {
     try {
       const activePasses = await storage.getActivePassesBySchool(req.user.schoolId);
       
-      // Filter by assigned grades for teachers
+      // All authenticated users can see all active passes in their school
       let filteredPasses = activePasses;
-      if (!req.user.isAdmin) {
-        filteredPasses = activePasses.filter(pass => 
-          req.user.assignedGrades.includes(pass.student.grade)
-        );
-      }
 
       res.json(filteredPasses);
     } catch (error: any) {
@@ -334,17 +311,9 @@ export async function registerFirebaseRoutes(app: Express): Promise<Server> {
       if (startDate) filters.dateStart = startDate;
       if (endDate) filters.dateEnd = endDate;
       if (grade) filters.grade = grade as string;
-      if (!req.user.isAdmin) filters.teacherId = req.userId;
-
+      // All authenticated users can see all passes in their school
       const passes = await storage.getPassesBySchool(req.user.schoolId, filters);
-      
-      // Additional filtering for teachers by assigned grades
       let filteredPasses = passes;
-      if (!req.user.isAdmin) {
-        filteredPasses = passes.filter(pass => 
-          req.user.assignedGrades.includes(pass.student.grade)
-        );
-      }
 
       res.json(filteredPasses);
     } catch (error: any) {
@@ -372,9 +341,7 @@ export async function registerFirebaseRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: 'Student not found' });
       }
 
-      if (!req.user.isAdmin && !req.user.assignedGrades.includes(student.grade)) {
-        return res.status(403).json({ message: 'No access to this student' });
-      }
+      // All authenticated users can create passes for students in their school
 
       const pass = await storage.createPass(result.data);
       res.json(pass);
