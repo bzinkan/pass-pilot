@@ -18,16 +18,16 @@ const subscriptionPlans = [
     id: 'TRIAL',
     name: 'Free Trial',
     price: 0,
-    teachers: 'Unlimited',
-    students: 'Unlimited',
-    description: 'Unlimited school testing trial',
+    teachers: '1',
+    students: '200',
+    description: '14-day free trial',
     priceId: 'TRIAL',
     popular: true,
     features: [
-      'Unlimited duration for school testing',
+      '14 days trial period',
       'No credit card required',
-      'Unlimited teachers',
-      'Unlimited students',
+      '1 teacher account',
+      'Up to 200 students',
       'All features included',
       'Email support'
     ]
