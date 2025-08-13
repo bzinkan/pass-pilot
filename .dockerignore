@@ -1,0 +1,10 @@
+.git
+.gitignore
+Dockerfile
+nixpacks.toml
+node_modules
+npm-debug.log*
+pnpm-lock.yaml
+yarn.lock
+*.log
+.cache
