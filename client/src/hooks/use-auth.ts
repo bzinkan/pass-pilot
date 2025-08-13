@@ -64,6 +64,40 @@ export function useAuth() {
     await logoutMutation.mutateAsync();
   };
 
+  // Register school mutation
+  const registerSchoolMutation = useMutation({
+    mutationFn: async (formData: {
+      schoolName: string;
+      adminName: string;
+      adminEmail: string;
+      adminPassword: string;
+      plan?: string;
+    }) => {
+      const response = await apiRequest('POST', '/api/auth/register-school', {
+        email: formData.adminEmail,
+        password: formData.adminPassword,
+        name: formData.adminName,
+        schoolName: formData.schoolName,
+        plan: formData.plan || 'free_trial'
+      });
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
+    },
+  });
+
+  const registerSchool = async (formData: {
+    schoolName: string;
+    adminName: string;
+    adminEmail: string;
+    adminPassword: string;
+    plan?: string;
+  }) => {
+    const result = await registerSchoolMutation.mutateAsync(formData);
+    return result;
+  };
+
   return {
     user,
     isAuthenticated,
@@ -71,9 +105,12 @@ export function useAuth() {
     isInitialized,
     login,
     logout,
+    registerSchool,
     loginError: loginMutation.error,
+    registerError: registerSchoolMutation.error,
     isLoggingIn: loginMutation.isPending,
     isLoggingOut: logoutMutation.isPending,
+    isRegistering: registerSchoolMutation.isPending,
   };
 }
 
