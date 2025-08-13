@@ -8,7 +8,8 @@ const JWT_SECRET = process.env.JWT_SECRET || "super-secret-key";
 // Super admin authentication middleware
 export async function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
   try {
-    const token = req.cookies?.adminToken;
+    // Check both cookie names for compatibility
+    const token = req.cookies?.admin || req.cookies?.adminToken;
     if (!token) {
       return res.status(401).json({ error: "No admin token provided" });
     }
@@ -74,13 +75,15 @@ export function registerSuperAdminRoutes(app: Express) {
         role: 'superadmin'
       });
 
-      // Sign token and set cookie
+      // Sign token and set cookie (using 'admin' to match other routes)
       const token = signAdminToken(adminUser.email);
-      res.cookie('adminToken', token, {
+      const isProd = process.env.NODE_ENV === 'production';
+      res.cookie('admin', token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: isProd,
         sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        path: '/'
       });
 
       console.log(`[Super Admin] Bootstrap completed for: ${adminUser.email}`);
@@ -124,11 +127,13 @@ export function registerSuperAdminRoutes(app: Express) {
       }
 
       const token = signAdminToken(adminUser.email);
-      res.cookie('adminToken', token, {
+      const isProd = process.env.NODE_ENV === 'production';
+      res.cookie('admin', token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: isProd,
         sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60 * 1000
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        path: '/'
       });
 
       console.log(`[Super Admin] Login successful: ${adminUser.email}`);
@@ -151,10 +156,12 @@ export function registerSuperAdminRoutes(app: Express) {
 
   // Super admin logout
   app.post("/api/super-admin/logout", (req: Request, res: Response) => {
-    res.clearCookie('adminToken', {
+    const isProd = process.env.NODE_ENV === 'production';
+    res.clearCookie('admin', {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax'
+      secure: isProd,
+      sameSite: 'lax',
+      path: '/'
     });
     
     return res.json({ success: true });
@@ -171,6 +178,18 @@ export function registerSuperAdminRoutes(app: Express) {
         name: adminUser.name,
         role: adminUser.role
       }
+    });
+  });
+
+  // Debug endpoint to help diagnose auth issues
+  app.get("/api/super-admin/debug", (req: Request, res: Response) => {
+    return res.json({
+      hasCookie: Boolean(req.headers.cookie),
+      cookiesSeen: req.headers.cookie ?? null,
+      adminCookie: req.cookies?.admin ?? null,
+      adminTokenCookie: req.cookies?.adminToken ?? null,
+      protocol: req.protocol,
+      nodeEnv: process.env.NODE_ENV,
     });
   });
 

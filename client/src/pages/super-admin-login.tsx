@@ -31,7 +31,7 @@ export default function SuperAdminLogin() {
 
   // Login mutation
   const loginMutation = useMutation({
-    mutationFn: () => apiRequest('POST', '/api/admin/login', loginForm),
+    mutationFn: () => apiRequest('POST', '/api/super-admin/login', loginForm),
     onSuccess: () => {
       queryClient.invalidateQueries();
       setLocation('/super-admin/dashboard');
@@ -51,7 +51,7 @@ export default function SuperAdminLogin() {
 
   // Bootstrap mutation
   const bootstrapMutation = useMutation({
-    mutationFn: () => apiRequest('POST', '/api/admin/bootstrap', bootstrapForm),
+    mutationFn: () => apiRequest('POST', '/api/super-admin/bootstrap', bootstrapForm),
     onSuccess: () => {
       queryClient.invalidateQueries();
       setLocation('/super-admin/dashboard');

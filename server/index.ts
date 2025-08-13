@@ -11,6 +11,9 @@ import "./passResetScheduler"; // Initialize the pass reset scheduler
 
 const app = express();
 
+// Trust proxy for Replit/Railway deployments - CRITICAL for cookies
+app.set('trust proxy', 1);
+
 // Stripe webhook FIRST — raw body required  
 app.post('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }), async (req, res) => {
   // Import webhook handler dynamically to avoid circular dependencies

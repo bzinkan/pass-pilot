@@ -88,11 +88,13 @@ export function registerAdminRoutes(app: Express) {
       
       // Sign JWT token and set secure cookie
       const jwtToken = signAdmin(email);
+      const isProd = process.env.NODE_ENV === 'production';
       res.cookie('admin', jwtToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+        secure: isProd,
+        sameSite: 'lax', // More permissive for cross-origin scenarios
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        path: '/'
       });
       
       console.log(`✅ Admin user created successfully: ${email}`);
@@ -126,11 +128,13 @@ export function registerAdminRoutes(app: Express) {
       }
       
       const token = signAdmin(email);
+      const isProd = process.env.NODE_ENV === 'production';
       res.cookie('admin', token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 7 * 24 * 60 * 60 * 1000
+        secure: isProd,
+        sameSite: 'lax', // More permissive for cross-origin scenarios
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        path: '/'
       });
       
       res.json({ ok: true });

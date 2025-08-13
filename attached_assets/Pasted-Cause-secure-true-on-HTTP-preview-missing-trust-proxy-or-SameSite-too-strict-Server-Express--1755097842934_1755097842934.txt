@@ -1,0 +1,170 @@
+Cause: secure: true on HTTP preview, missing trust proxy, or SameSite too strict.
+
+Server (Express)
+
+ts
+Copy
+Edit
+// server/index.ts
+app.set('trust proxy', 1); // behind Railway/Replit proxies
+
+const isProd = process.env.NODE_ENV === 'production';
+
+app.use(cookieParser(process.env.SESSION_SECRET));
+
+// If you're using express-session:
+import session from 'express-session';
+app.use(session({
+  secret: process.env.SESSION_SECRET!,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    sameSite: 'lax',        // 'none' only if cross-site, but then must be secure
+    secure: isProd,         // true only on https
+    maxAge: 1000*60*60*8,
+    path: '/',              // ensure wide scope
+  }
+}));
+
+// If you set your own auth cookie:
+function setAuthCookie(res: import('express').Response, token: string) {
+  res.cookie('admin_session', token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: isProd,
+    maxAge: 1000*60*60*8,
+    path: '/',
+  });
+}
+Client fetches must include credentials
+
+ts
+Copy
+Edit
+await fetch('/api/admin/me', { credentials: 'include' });
+Tip: Don’t set the domain attribute on cookies unless you really need subdomain sharing; let it default.
+
+B) Auth guard redirect loop
+Cause: Client checks role, gets 401/403, immediately router.push('/login'); login page auto-redirects back → loop → blank flash.
+
+Fix guard to show states, not instant redirects
+
+tsx
+Copy
+Edit
+// SuperAdminGuard.tsx
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+
+type State = { status: 'loading'|'ok'|'forbidden'|'error'; me?: any; err?: string };
+
+export default function SuperAdminGuard({ children }: { children: React.ReactNode }) {
+  const [s, setS] = useState<State>({ status: 'loading' });
+  const router = useRouter();
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/admin/me', { credentials: 'include' });
+        if (!res.ok) { setS({ status: res.status === 403 ? 'forbidden' : 'error' }); return; }
+        const me = await res.json();
+        if (!cancelled) setS({ status: me.role === 'SUPER_ADMIN' ? 'ok' : 'forbidden', me });
+      } catch (e:any) {
+        if (!cancelled) setS({ status: 'error', err: String(e) });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (s.status === 'loading') return <div className="p-6">Checking access…</div>;
+  if (s.status === 'forbidden') return <div className="p-6">No access to Super Admin.</div>;
+  if (s.status === 'error') return <div className="p-6">Error loading dashboard.</div>;
+
+  return <>{children}</>;
+}
+Server endpoint with clear 403 (no redirect)
+
+ts
+Copy
+Edit
+// /api/admin/me
+app.get('/api/admin/me', requireAuth, (req, res) => {
+  const me = req.user; // however you attach it
+  if (me?.role !== 'SUPER_ADMIN') return res.status(403).json({ ok:false });
+  res.json({ id: me.id, email: me.email, role: me.role });
+});
+C) Stale service worker / chunk 404 → blank screen
+Symptoms: Console shows 404 on /_next/static/... or assets/*.js. Quick flash → nothing.
+
+Fix now (in browser):
+
+DevTools → Application → Service Workers → Unregister.
+
+Application → Clear storage → Clear site data.
+
+Hard reload.
+
+Fix in code: Version your caches and add a kill-switch.
+
+js
+Copy
+Edit
+// service-worker.js (or sw.ts)
+const CACHE_VERSION = 'v7'; // bump on each deploy
+self.addEventListener('activate', (event) => {
+  event.waitUntil(caches.keys().then(keys =>
+    Promise.all(keys.filter(k => !k.includes(CACHE_VERSION)).map(k => caches.delete(k)))
+  ));
+});
+D) Role mismatch / undefined checks
+Symptoms: Console: Cannot read properties of undefined (reading 'role').
+
+Fix:
+
+Always null-guard user objects before access.
+
+On login, return the role in the JSON so the client doesn’t guess.
+
+Seed your super admin in DB and confirm:
+
+users.email = you@domain
+
+users.role = 'SUPER_ADMIN'
+
+Any tenant filter (schoolId) does not exclude super admin queries.
+
+E) Mixed content / HTTPS redirect
+Symptoms: Cookie set with Secure, but app served on HTTP during preview → cookie silently dropped.
+
+Fix: secure: isProd as shown above, and ensure Railway/your domain is serving HTTPS. In dev/preview, don’t force Secure.
+
+Tiny diagnostic endpoint (copy-paste)
+Drop this in and hit /api/debug/auth right after login.
+
+ts
+Copy
+Edit
+app.get('/api/debug/auth', (req, res) => {
+  res.json({
+    hasCookie: Boolean(req.headers.cookie),
+    cookiesSeen: req.headers.cookie ?? null,
+    user: req.user ? { id: req.user.id, email: req.user.email, role: req.user.role } : null,
+    protocol: req.protocol,
+    proxy: app.get('trust proxy'),
+    nodeEnv: process.env.NODE_ENV,
+  });
+});
+If hasCookie:false or user:null here, the issue is server-side session/cookie. If hasCookie:true and user present but UI is blank, it’s a front-end guard/render issue or stale SW.
+
+Quick sanity list (do these in order)
+Add app.set('trust proxy', 1) and secure: isProd cookie config.
+
+Ensure client fetches use credentials:'include'.
+
+Replace instant redirects with the guard component above.
+
+Unregister service worker + clear storage; redeploy with a bumped cache version.
+
+Confirm your user in DB has role='SUPER_ADMIN' and that /api/admin/me returns 200.
