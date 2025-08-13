@@ -13,7 +13,27 @@ export default function KioskDemo() {
   }
 
   if (currentView === "teacher") {
-    return <TeacherApprovalPanel onBack={() => setCurrentView("menu")} />;
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50 p-4">
+        <div className="max-w-md mx-auto pt-20">
+          <Card className="shadow-lg">
+            <CardHeader className="text-center">
+              <CardTitle className="text-2xl text-green-600">Teacher Approval Panel</CardTitle>
+              <p className="text-slate-600">Demo view for teacher approval workflow</p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="text-center text-slate-600">
+                <p>This feature demonstrates how teachers would approve student pass requests.</p>
+                <p className="mt-4 text-sm">The approval panel would show incoming requests here.</p>
+              </div>
+              <Button onClick={() => setCurrentView("menu")} variant="outline" className="w-full">
+                ← Back to Demo Menu
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
   }
 
   return (
