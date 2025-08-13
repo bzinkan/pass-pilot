@@ -253,9 +253,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: 'invalid_credentials' });
       }
 
+      // Handle first-login password setting for pending users
+      let firstUser = candidates[0];
+      if (firstUser.status === 'pending') {
+        console.log('Multi-step first login detected - setting password for user:', firstUser.email);
+        const bcrypt = (await import('bcryptjs')).default;
+        const hashedPassword = await bcrypt.hash(password, 12);
+        
+        // Update user with their chosen password and activate account
+        await storage.updateUser(firstUser.id, {
+          password: hashedPassword,
+          status: 'active'
+        });
+        
+        console.log('Password set and account activated for:', firstUser.email);
+        
+        // Update all candidates with same email to have the new password
+        for (const candidate of candidates) {
+          if (candidate.status === 'pending') {
+            await storage.updateUser(candidate.id, {
+              password: hashedPassword,
+              status: 'active'
+            });
+          }
+        }
+        
+        // Update the first user object for verification
+        firstUser.password = hashedPassword;
+        firstUser.status = 'active';
+      }
+
       // Verify password against first user (prevents leaking account existence)
       let passwordValid = false;
-      const firstPassword = candidates[0].password;
+      const firstPassword = firstUser.password;
       if (firstPassword.startsWith('$2a$') || firstPassword.startsWith('$2b$')) {
         // Hashed password - use bcrypt
         const bcrypt = (await import('bcryptjs')).default;
