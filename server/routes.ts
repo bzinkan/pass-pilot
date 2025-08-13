@@ -13,6 +13,7 @@ import { requireUser, optionalUser } from "./auth/requireUser";
 // All school registrations are now allowed without restrictions
 console.log('School validation removed - all registrations allowed');
 import { randomUUID } from "crypto";
+import bcrypt from "bcryptjs";
 import Stripe from "stripe";
 import { sendTrialVerificationEmail, sendPasswordResetEmail } from "./emailService";
 import { passResetScheduler } from "./passResetScheduler";
@@ -595,10 +596,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Disable old registration endpoint - use V2 instead
-  app.post("/api/auth/register-school", (_req, res) =>
-    res.status(410).json({ error: "REGISTRATION_ENDPOINT_MOVED", use: "/api/registration/v2/register" })
-  );
+  // Simple registration endpoint for trial accounts
+  app.post("/api/auth/register-school", async (req: any, res) => {
+    try {
+      const { 
+        email, 
+        password, 
+        name, 
+        schoolName, 
+        plan = 'free_trial' 
+      } = req.body;
+
+      if (!email || !password || !name || !schoolName) {
+        return res.status(400).json({ 
+          error: 'MISSING_FIELDS',
+          message: 'Email, password, name, and school name are required' 
+        });
+      }
+
+      // Check if email already exists
+      const existingUsers = await storage.getUsersByEmail(email);
+      if (existingUsers.length > 0) {
+        return res.status(400).json({ 
+          error: 'EMAIL_EXISTS',
+          message: 'An account with this email already exists' 
+        });
+      }
+
+      // Create school
+      const school = await storage.createSchool({
+        id: randomUUID(),
+        schoolId: randomUUID(),
+        name: schoolName,
+        adminEmail: email.toLowerCase().trim(),
+        emailDomain: email.split('@')[1],
+        plan: plan as any,
+        maxTeachers: plan === 'free_trial' ? 3 : 10,
+        maxStudents: 200,
+        trialStartDate: new Date(),
+        trialEndDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 days
+        verified: true,
+        isTrialExpired: false
+      });
+
+      // Create admin user
+      const hashedPassword = await bcrypt.hash(password, 12);
+      const adminUser = await storage.createUser({
+        id: randomUUID(),
+        email: email.toLowerCase().trim(),
+        password: hashedPassword,
+        name: name.trim(),
+        schoolId: school.id,
+        isAdmin: true,
+        assignedGrades: [],
+        status: "active"
+      });
+
+      // Skip session for now - just return success
+      // setUserSession(res, {
+      //   userId: adminUser.id,
+      //   schoolId: school.id,
+      //   email: adminUser.email,
+      //   role: 'ADMIN'
+      // });
+
+      res.json({
+        success: true,
+        user: {
+          id: adminUser.id,
+          email: adminUser.email,
+          name: adminUser.name,
+          schoolId: school.id,
+          schoolName: school.name,
+          isAdmin: true
+        },
+        school: {
+          id: school.id,
+          name: school.name,
+          plan: school.plan
+        }
+      });
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      res.status(500).json({ 
+        error: 'REGISTRATION_FAILED',
+        message: error.message 
+      });
+    }
+  });
 
   app.post("/api/auth/register-school-old", async (req, res) => {
     try {
