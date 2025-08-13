@@ -8,7 +8,7 @@ import Home from "@/pages/home";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
 import ResetPassword from "@/pages/reset-password";
-import KioskDemo from "@/pages/kiosk-demo";
+
 import Kiosk from "./pages/kiosk";
 import Guide from "./pages/guide";
 import Features from "./pages/features";
@@ -22,7 +22,7 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
       <Route path="/reset-password" component={ResetPassword} />
-      <Route path="/kiosk-demo" component={KioskDemo} />
+
       <Route path="/kiosk" component={Kiosk} />
       <Route path="/guide" component={Guide} />
       <Route path="/features" component={Features} />
