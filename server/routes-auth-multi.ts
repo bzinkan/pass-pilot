@@ -104,8 +104,8 @@ export function registerAuthMultiRoutes(app: Express) {
       };
 
       // Store in session if available (fallback for demo)
-      if (req.session) {
-        (req.session as any).pendingAuth = sessionData;
+      if ((req as any).session) {
+        ((req as any).session as any).pendingAuth = sessionData;
       }
 
       const schools = validMatches.map(m => ({ 
@@ -145,7 +145,7 @@ export function registerAuthMultiRoutes(app: Express) {
       console.log(`[Multi-Login Step 2] School selection: ${schoolId}`);
 
       // Try to get pending auth from session or temp token
-      let pending = req.session ? (req.session as any).pendingAuth : null;
+      let pending = (req as any).session ? ((req as any).session as any).pendingAuth : null;
       
       if (!pending && tempToken) {
         try {
@@ -182,8 +182,8 @@ export function registerAuthMultiRoutes(app: Express) {
       });
 
       // Clear pending auth from session
-      if (req.session) {
-        delete (req.session as any).pendingAuth;
+      if ((req as any).session) {
+        delete ((req as any).session as any).pendingAuth;
       }
 
       console.log(`[Multi-Login Step 2] Successfully logged into: ${school.name}`);

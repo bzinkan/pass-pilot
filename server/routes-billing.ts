@@ -121,7 +121,6 @@ export async function register(req: Request, res: Response) {
       await storage.updateSchool(schoolId, { 
         name: schoolName,
         plan: plan as any,
-        status: 'PENDING' as any,
         maxTeachers: planConfig.maxTeachers,
         maxStudents: planConfig.maxStudents
       });
@@ -132,7 +131,6 @@ export async function register(req: Request, res: Response) {
         name: schoolName,
         emailDomain: email.split('@')[1],
         plan: plan as any,
-        status: 'PENDING' as any,
         maxTeachers: planConfig.maxTeachers,
         maxStudents: planConfig.maxStudents,
         adminEmail: email,
@@ -142,7 +140,7 @@ export async function register(req: Request, res: Response) {
     }
 
     // Create or get Stripe customer
-    if (!stripeCustomerId) {
+    if (!stripeCustomerId && stripe) {
       const customer = await stripe.customers.create({ 
         email, 
         name: `${adminName} (${schoolName})`,
@@ -153,9 +151,13 @@ export async function register(req: Request, res: Response) {
     }
 
     // Create Stripe checkout session
+    if (!stripe) {
+      return res.status(500).json({ ok: false, error: 'Stripe not configured' });
+    }
+    
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
-      customer: stripeCustomerId,
+      customer: stripeCustomerId || undefined,
       line_items: [{ 
         price: planConfig.price,
         quantity: 1 
@@ -189,6 +191,10 @@ export const stripeWebhook = async (req: Request, res: Response) => {
   let event: Stripe.Event;
 
   try {
+    if (!stripe) {
+      return res.status(500).json({ error: 'Stripe not configured' });
+    }
+    
     event = stripe.webhooks.constructEvent(
       req.body, 
       sig, 
@@ -210,7 +216,6 @@ export const stripeWebhook = async (req: Request, res: Response) => {
         if (schoolId && plan) {
           // Update school to active status
           await storage.updateSchool(schoolId, {
-            status: 'ACTIVE' as any,
             plan: plan as any,
             stripeSubscriptionId: subId
           });
@@ -218,12 +223,11 @@ export const stripeWebhook = async (req: Request, res: Response) => {
           // Record payment
           await storage.createPayment({
             schoolId,
-            amountCents: session.amount_total || 0,
+            amount: (session.amount_total || 0) / 100, // Convert cents to dollars
             currency: session.currency || 'usd',
-            stripePiId: session.payment_intent as string,
-            stripeSessId: session.id,
-            plan: plan as any,
-            status: 'succeeded'
+            stripePaymentId: session.payment_intent as string,
+            status: 'succeeded',
+            description: `Subscription payment for ${plan}`
           });
 
           console.log(`School ${schoolId} subscription activated with plan ${plan}`);
@@ -241,7 +245,6 @@ export const stripeWebhook = async (req: Request, res: Response) => {
         
         if (school) {
           await storage.updateSchool(school.id, {
-            status: 'CANCELLED' as any,
             subscriptionCancelledAt: new Date(),
             subscriptionEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days from now
           });
@@ -316,6 +319,10 @@ export async function handleCheckoutSuccess(req: Request, res: Response) {
     }
 
     // Retrieve the checkout session from Stripe
+    if (!stripe) {
+      return res.redirect('/register?error=stripe_not_configured');
+    }
+    
     const session = await stripe.checkout.sessions.retrieve(sessionId, {
       expand: ['subscription', 'customer']
     });
@@ -338,7 +345,6 @@ export async function handleCheckoutSuccess(req: Request, res: Response) {
 
     // Update school status to ACTIVE
     await storage.updateSchool(schoolId, {
-      status: 'ACTIVE' as any,
       plan: plan as any,
       stripeSubscriptionId: session.subscription as string,
       verified: true
@@ -366,11 +372,11 @@ export async function handleCheckoutSuccess(req: Request, res: Response) {
 // Subscription Management Endpoints
 export async function getSubscriptionStatus(req: Request, res: Response) {
   try {
-    if (!req.user?.schoolId) {
+    if (!(req as any).user?.schoolId) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    const school = await storage.getSchool(req.user.schoolId);
+    const school = await storage.getSchool((req as any).user.schoolId);
     if (!school) {
       return res.status(404).json({ error: 'School not found' });
     }
@@ -423,11 +429,11 @@ export async function getSubscriptionStatus(req: Request, res: Response) {
 
 export async function cancelSubscription(req: Request, res: Response) {
   try {
-    if (!req.user?.schoolId) {
+    if (!(req as any).user?.schoolId) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    const school = await storage.getSchool(req.user.schoolId);
+    const school = await storage.getSchool((req as any).user.schoolId);
     if (!school?.stripeSubscriptionId) {
       return res.status(404).json({ error: 'No active subscription found' });
     }
@@ -459,11 +465,11 @@ export async function cancelSubscription(req: Request, res: Response) {
 
 export async function reactivateSubscription(req: Request, res: Response) {
   try {
-    if (!req.user?.schoolId) {
+    if (!(req as any).user?.schoolId) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    const school = await storage.getSchool(req.user.schoolId);
+    const school = await storage.getSchool((req as any).user.schoolId);
     if (!school?.stripeSubscriptionId) {
       return res.status(404).json({ error: 'No subscription found' });
     }

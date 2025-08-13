@@ -388,14 +388,18 @@ export class DatabaseStorage implements IStorage {
 
   // Payment methods
   async createPayment(payment: InsertPayment): Promise<Payment> {
-    const [newPayment] = await db.insert(payments).values(payment).returning();
+    const paymentWithId = {
+      ...payment,
+      id: `payment_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+    };
+    const [newPayment] = await db.insert(payments).values(paymentWithId).returning();
     return newPayment;
   }
 
   async getPaymentByStripeSessionId(sessionId: string): Promise<Payment | undefined> {
     const [payment] = await db.select()
       .from(payments)
-      .where(eq(payments.stripeSessionId, sessionId));
+      .where(eq(payments.stripePaymentId, sessionId));
     return payment;
   }
 

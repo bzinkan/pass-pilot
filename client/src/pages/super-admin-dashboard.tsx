@@ -123,11 +123,11 @@ export default function SuperAdminDashboard() {
 
   // Redirect if not authenticated
   useEffect(() => {
-    if (!authLoading && (!(authData as any)?.authenticated || authError)) {
-      console.log('Super Admin Dashboard: Authentication failed', { authData, authError });
+    if (!authLoading && !(authData as any)?.authenticated) {
+      console.log('Super Admin Dashboard: Authentication failed', { authData });
       setLocation('/super-admin/login');
     }
-  }, [authData, authLoading, authError, setLocation]);
+  }, [authData, authLoading, setLocation]);
 
   if (authLoading) {
     return (

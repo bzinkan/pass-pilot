@@ -443,11 +443,15 @@ var init_storage = __esm({
       }
       // Payment methods
       async createPayment(payment) {
-        const [newPayment] = await db.insert(payments).values(payment).returning();
+        const paymentWithId = {
+          ...payment,
+          id: `payment_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+        };
+        const [newPayment] = await db.insert(payments).values(paymentWithId).returning();
         return newPayment;
       }
       async getPaymentByStripeSessionId(sessionId) {
-        const [payment] = await db.select().from(payments).where(eq(payments.stripeSessionId, sessionId));
+        const [payment] = await db.select().from(payments).where(eq(payments.stripePaymentId, sessionId));
         return payment;
       }
       // Super Admin methods
@@ -491,12 +495,16 @@ var init_storage = __esm({
           totalStudents: totalStudents.count,
           trialAccounts: trialAccounts.count,
           paidPlans: paidPlans.count,
-          monthlyRevenue: 875,
-          annualRevenue: 10500,
-          totalRevenue: 1375,
-          newSubscriptions: 3,
-          canceledSubscriptions: 1,
-          activeSubscriptions: paidPlans.count
+          monthlyRevenue: 0,
+          // No paying customers yet
+          annualRevenue: 0,
+          // No paying customers yet
+          totalRevenue: 0,
+          // No paying customers yet
+          newSubscriptions: 0,
+          canceledSubscriptions: 0,
+          activeSubscriptions: 0
+          // All current accounts are trials
         };
       }
       async updateSchoolAsAdmin(schoolId, updates) {
@@ -637,7 +645,6 @@ async function register(req, res) {
       await storage.updateSchool(schoolId, {
         name: schoolName,
         plan,
-        status: "PENDING",
         maxTeachers: planConfig.maxTeachers,
         maxStudents: planConfig.maxStudents
       });
@@ -647,7 +654,6 @@ async function register(req, res) {
         name: schoolName,
         emailDomain: email.split("@")[1],
         plan,
-        status: "PENDING",
         maxTeachers: planConfig.maxTeachers,
         maxStudents: planConfig.maxStudents,
         adminEmail: email,
@@ -655,7 +661,7 @@ async function register(req, res) {
       });
       schoolId = newSchool.id;
     }
-    if (!stripeCustomerId) {
+    if (!stripeCustomerId && stripe) {
       const customer = await stripe.customers.create({
         email,
         name: `${adminName} (${schoolName})`,
@@ -664,9 +670,12 @@ async function register(req, res) {
       stripeCustomerId = customer.id;
       await storage.updateSchool(schoolId, { stripeCustomerId });
     }
+    if (!stripe) {
+      return res.status(500).json({ ok: false, error: "Stripe not configured" });
+    }
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
-      customer: stripeCustomerId,
+      customer: stripeCustomerId || void 0,
       line_items: [{
         price: planConfig.price,
         quantity: 1
@@ -697,6 +706,9 @@ async function handleCheckoutSuccess(req, res) {
     if (!sessionId) {
       return res.redirect("/register?error=missing_session");
     }
+    if (!stripe) {
+      return res.redirect("/register?error=stripe_not_configured");
+    }
     const session = await stripe.checkout.sessions.retrieve(sessionId, {
       expand: ["subscription", "customer"]
     });
@@ -712,7 +724,6 @@ async function handleCheckoutSuccess(req, res) {
       return res.redirect("/register?error=account_not_found");
     }
     await storage.updateSchool(schoolId, {
-      status: "ACTIVE",
       plan,
       stripeSubscriptionId: session.subscription,
       verified: true
@@ -946,6 +957,9 @@ var init_routes_billing = __esm({
       const sig = req.headers["stripe-signature"];
       let event;
       try {
+        if (!stripe) {
+          return res.status(500).json({ error: "Stripe not configured" });
+        }
         event = stripe.webhooks.constructEvent(
           req.body,
           sig,
@@ -964,18 +978,17 @@ var init_routes_billing = __esm({
             const subId = session.subscription;
             if (schoolId && plan) {
               await storage.updateSchool(schoolId, {
-                status: "ACTIVE",
                 plan,
                 stripeSubscriptionId: subId
               });
               await storage.createPayment({
                 schoolId,
-                amountCents: session.amount_total || 0,
+                amount: (session.amount_total || 0) / 100,
+                // Convert cents to dollars
                 currency: session.currency || "usd",
-                stripePiId: session.payment_intent,
-                stripeSessId: session.id,
-                plan,
-                status: "succeeded"
+                stripePaymentId: session.payment_intent,
+                status: "succeeded",
+                description: `Subscription payment for ${plan}`
               });
               console.log(`School ${schoolId} subscription activated with plan ${plan}`);
             }
@@ -988,7 +1001,6 @@ var init_routes_billing = __esm({
             const school = schools3.find((s) => s.stripeSubscriptionId === subscriptionId);
             if (school) {
               await storage.updateSchool(school.id, {
-                status: "CANCELLED",
                 subscriptionCancelledAt: /* @__PURE__ */ new Date(),
                 subscriptionEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1e3)
                 // 30 days from now
@@ -1177,7 +1189,15 @@ var PassResetScheduler = class {
       const schools3 = await this.getAllSchools();
       let totalReturned = 0;
       for (const school of schools3) {
-        const returned = await storage.returnAllActivePasses(school.schoolId);
+        const activePasses = await storage.getActivePassesBySchool(school.id);
+        const returned = activePasses.length;
+        for (const pass of activePasses) {
+          await storage.updatePass(pass.id, {
+            status: "returned",
+            timeIn: /* @__PURE__ */ new Date(),
+            returnTime: /* @__PURE__ */ new Date()
+          });
+        }
         totalReturned += returned;
         if (returned > 0) {
           console.log(`Daily reset: Returned ${returned} active passes for school ${school.name}`);
@@ -1199,7 +1219,15 @@ var PassResetScheduler = class {
   // Manual reset for testing
   async manualReset(schoolId) {
     console.log(`Manual pass reset initiated for school ${schoolId}`);
-    const returned = await storage.returnAllActivePasses(schoolId);
+    const activePasses = await storage.getActivePassesBySchool(schoolId);
+    const returned = activePasses.length;
+    for (const pass of activePasses) {
+      await storage.updatePass(pass.id, {
+        status: "returned",
+        timeIn: /* @__PURE__ */ new Date(),
+        returnTime: /* @__PURE__ */ new Date()
+      });
+    }
     console.log(`Manual reset completed. Returned ${returned} passes for school ${schoolId}`);
     return returned;
   }

@@ -45,7 +45,18 @@ class PassResetScheduler {
       
       let totalReturned = 0;
       for (const school of schools) {
-        const returned = await storage.returnAllActivePasses(school.schoolId);
+        // Return all active passes for the school
+        const activePasses = await storage.getActivePassesBySchool(school.id);
+        const returned = activePasses.length;
+        
+        // Update all active passes to returned status
+        for (const pass of activePasses) {
+          await storage.updatePass(pass.id, {
+            status: 'returned',
+            timeIn: new Date(),
+            returnTime: new Date()
+          });
+        }
         totalReturned += returned;
         
         if (returned > 0) {
@@ -72,7 +83,20 @@ class PassResetScheduler {
   // Manual reset for testing
   async manualReset(schoolId: string): Promise<number> {
     console.log(`Manual pass reset initiated for school ${schoolId}`);
-    const returned = await storage.returnAllActivePasses(schoolId);
+    
+    // Return all active passes for the school
+    const activePasses = await storage.getActivePassesBySchool(schoolId);
+    const returned = activePasses.length;
+    
+    // Update all active passes to returned status
+    for (const pass of activePasses) {
+      await storage.updatePass(pass.id, {
+        status: 'returned',
+        timeIn: new Date(),
+        returnTime: new Date()
+      });
+    }
+    
     console.log(`Manual reset completed. Returned ${returned} passes for school ${schoolId}`);
     return returned;
   }
