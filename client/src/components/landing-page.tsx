@@ -51,7 +51,7 @@ export function LandingPage() {
                 Log In
               </Button>
               <Button 
-                onClick={() => setLocation('/trial')}
+                onClick={() => setLocation('/register')}
                 className="bg-white text-primary px-8 py-4 rounded-lg font-semibold hover:bg-gray-50 transition duration-200 shadow-lg"
                 data-testid="button-start-trial"
               >
