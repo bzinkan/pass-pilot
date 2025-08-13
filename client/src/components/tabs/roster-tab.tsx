@@ -48,6 +48,9 @@ export function RosterTab({ user, selectedGrades = new Set(), onGradeClick }: Ro
 
   const isLoading = studentsLoading || gradesLoading;
 
+  // Get teacher's assigned grades from user data
+  const teacherAssignedGrades = user?.assignedGrades || [];
+
   const handleAddGrade = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!gradeForm.name) {
