@@ -2614,62 +2614,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get subscription status endpoint
-  app.get("/api/subscription-status", requireAuth, async (req: any, res) => {
-    try {
-      const user = await storage.getUser(req.userId);
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
-
-      const school = await storage.getSchoolById(user.schoolId);
-      if (!school) {
-        return res.status(404).json({ message: 'School not found' });
-      }
-
-      const isTrialAccount = school.plan === 'free_trial';
-      const hasActiveSubscription = school.plan !== 'free_trial' && !school.subscriptionCancelledAt;
-
-      let subscriptionInfo = {
-        hasActiveSubscription: hasActiveSubscription,
-        isTrialAccount: isTrialAccount,
-        plan: school.plan,
-        maxTeachers: school.maxTeachers,
-        cancelled: !!school.subscriptionCancelledAt,
-        currentPeriodEnd: null,
-        amount: null,
-        currency: null,
-        interval: null,
-      };
-
-      // If it's a paid subscription, get more details from Stripe
-      if (school.stripeSubscriptionId && hasActiveSubscription) {
-        try {
-          const Stripe = require('stripe');
-          const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-          const subscription = await stripe.subscriptions.retrieve(school.stripeSubscriptionId);
-          
-          subscriptionInfo.currentPeriodEnd = new Date(subscription.current_period_end * 1000);
-          subscriptionInfo.amount = subscription.items.data[0]?.price?.unit_amount || 0;
-          subscriptionInfo.currency = subscription.currency;
-          subscriptionInfo.interval = subscription.items.data[0]?.price?.recurring?.interval || 'month';
-        } catch (error) {
-          console.warn('Failed to fetch Stripe subscription details:', error);
-        }
-      }
-
-      // If subscription is cancelled, use the stored end date
-      if (school.subscriptionCancelledAt && school.subscriptionEndsAt) {
-        subscriptionInfo.currentPeriodEnd = school.subscriptionEndsAt;
-      }
-
-      res.json(subscriptionInfo);
-
-    } catch (error: any) {
-      console.error('Subscription status error:', error);
-      res.status(500).json({ message: error.message || 'Failed to get subscription status' });
-    }
-  });
+  // REMOVED: Duplicate subscription-status route - using billing routes instead
 
   // Reactivate cancelled subscription endpoint
   app.post("/api/subscription/reactivate", requireAuth, async (req: any, res) => {
