@@ -2054,19 +2054,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log('Found user:', user.name, user.email);
 
-      // Remove any id from request body to let database generate it
-      const { id: _ignore, ...requestBody } = req.body;
+      // Use enhanced validation to prevent null values
+      const { validatePassData } = await import("../shared/validation");
       
-      const passData = insertPassSchema.parse({
-        ...requestBody,
+      const passInput = validatePassData({
+        ...req.body,
         teacherId: req.userId,
         schoolId: user.schoolId,
-        destination: requestBody.destination || "Restroom", // Default destination
-        checkoutTime: new Date(), // Set checkout time to now
-        timeOut: new Date(), // Set time out to now
-        issuingTeacher: user.name, // Set issuing teacher to current user
-        status: "active", // Use correct enum value
+        destination: req.body.destination || "Restroom"
       });
+      
+      // Create complete pass data with required fields
+      const passData = {
+        ...passInput,
+        checkoutTime: new Date(),
+        timeOut: new Date(), 
+        issuingTeacher: user.name,
+        status: "active" as const,
+        printRequested: false
+      };
 
       console.log('Creating pass with data:', passData);
       const pass = await storage.createPass(passData);

@@ -140,7 +140,7 @@ var init_schema = __esm({
       customReason: text("custom_reason"),
       notes: text("notes"),
       printRequested: boolean("print_requested").default(false),
-      createdAt: timestamp("created_at").defaultNow()
+      createdAt: timestamp("created_at").defaultNow().notNull()
     });
     payments = pgTable("payments", {
       id: varchar("id").primaryKey(),
@@ -1052,6 +1052,96 @@ var init_routes_billing = __esm({
         res.status(500).json({ error: "Webhook processing failed" });
       }
     };
+  }
+});
+
+// shared/validation.ts
+var validation_exports = {};
+__export(validation_exports, {
+  CreatePassSchema: () => CreatePassSchema,
+  validatePassData: () => validatePassData
+});
+import { z } from "zod";
+var CreatePassSchema, validatePassData;
+var init_validation = __esm({
+  "shared/validation.ts"() {
+    "use strict";
+    CreatePassSchema = z.object({
+      schoolId: z.string().min(1, "School ID is required"),
+      studentId: z.string().min(1, "Student ID is required"),
+      teacherId: z.string().min(1, "Teacher ID is required"),
+      destination: z.string().min(1, "Destination is required"),
+      customReason: z.string().optional(),
+      duration: z.number().positive().optional(),
+      passType: z.string().default("general"),
+      notes: z.string().optional()
+    }).strict();
+    validatePassData = (data) => {
+      const cleaned = Object.fromEntries(
+        Object.entries(data).filter(([_, value]) => value !== null && value !== void 0).map(([key, value]) => [key, typeof value === "string" ? value.trim() : value]).filter(([_, value]) => value !== "")
+      );
+      return CreatePassSchema.parse(cleaned);
+    };
+  }
+});
+
+// server/middleware/sanitize.ts
+var sanitize_exports = {};
+__export(sanitize_exports, {
+  sanitizeBody: () => sanitizeBody
+});
+function sanitizeBody(req, _res, next) {
+  const clean = (obj) => Object.fromEntries(
+    Object.entries(obj ?? {}).filter(([k, v]) => v !== null && v !== void 0 && k !== "id").map(([k, v]) => [k, typeof v === "string" ? v.trim() : v]).filter(([k, v]) => v !== "")
+    // remove empty strings too
+  );
+  if (req.body && typeof req.body === "object") {
+    req.body = clean(req.body);
+  }
+  next();
+}
+var init_sanitize = __esm({
+  "server/middleware/sanitize.ts"() {
+    "use strict";
+  }
+});
+
+// server/middleware/errorHandler.ts
+var errorHandler_exports = {};
+__export(errorHandler_exports, {
+  errorHandler: () => errorHandler
+});
+function errorHandler(err, _req, res, _next) {
+  if (err?.issues) {
+    return res.status(422).json({
+      message: "Invalid input",
+      issues: err.issues
+    });
+  }
+  if (err?.code === "23502") {
+    return res.status(400).json({
+      message: `Missing required field: ${err.column || "unknown"}`,
+      hint: "Check that all required fields are provided and not null."
+    });
+  }
+  if (err?.code === "23503") {
+    return res.status(400).json({
+      message: "Related record not found. Please verify the referenced IDs exist.",
+      detail: err.detail || "Foreign key constraint violation"
+    });
+  }
+  if (err?.code === "23505") {
+    return res.status(409).json({
+      message: "Duplicate entry. This record already exists.",
+      detail: err.detail || "Unique constraint violation"
+    });
+  }
+  console.error("Unhandled error:", err);
+  res.status(500).json({ message: "Unexpected server error" });
+}
+var init_errorHandler = __esm({
+  "server/middleware/errorHandler.ts"() {
+    "use strict";
   }
 });
 
@@ -3096,22 +3186,21 @@ async function registerRoutes(app2) {
         return res.status(404).json({ message: "User not found" });
       }
       console.log("Found user:", user.name, user.email);
-      const { id: _ignore, ...requestBody } = req.body;
-      const passData = insertPassSchema.parse({
-        ...requestBody,
+      const { validatePassData: validatePassData2 } = await Promise.resolve().then(() => (init_validation(), validation_exports));
+      const passInput = validatePassData2({
+        ...req.body,
         teacherId: req.userId,
         schoolId: user.schoolId,
-        destination: requestBody.destination || "Restroom",
-        // Default destination
-        checkoutTime: /* @__PURE__ */ new Date(),
-        // Set checkout time to now
-        timeOut: /* @__PURE__ */ new Date(),
-        // Set time out to now
-        issuingTeacher: user.name,
-        // Set issuing teacher to current user
-        status: "active"
-        // Use correct enum value
+        destination: req.body.destination || "Restroom"
       });
+      const passData = {
+        ...passInput,
+        checkoutTime: /* @__PURE__ */ new Date(),
+        timeOut: /* @__PURE__ */ new Date(),
+        issuingTeacher: user.name,
+        status: "active",
+        printRequested: false
+      };
       console.log("Creating pass with data:", passData);
       const pass = await storage.createPass(passData);
       console.log("Created pass:", pass);
@@ -4315,6 +4404,8 @@ app.post("/api/stripe/webhook", bodyParser.raw({ type: "application/json" }), as
 app.use(express2.json());
 app.use(express2.urlencoded({ extended: false }));
 app.use(cookieParser(process.env.SESSION_SECRET));
+var { sanitizeBody: sanitizeBody2 } = await Promise.resolve().then(() => (init_sanitize(), sanitize_exports));
+app.use(sanitizeBody2);
 app.use((req, res, next) => {
   const start = Date.now();
   const path3 = req.path;
@@ -4344,6 +4435,8 @@ app.use((req, res, next) => {
   registerAuthMultiRoutes(app);
   registerSuperAdminRoutes(app);
   const server = await registerRoutes(app);
+  const { errorHandler: errorHandler2 } = await Promise.resolve().then(() => (init_errorHandler(), errorHandler_exports));
+  app.use(errorHandler2);
   app.use((err, _req, res, _next) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";

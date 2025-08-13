@@ -102,7 +102,7 @@ export const passes = pgTable("passes", {
   customReason: text("custom_reason"),
   notes: text("notes"),
   printRequested: boolean("print_requested").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // Payments table

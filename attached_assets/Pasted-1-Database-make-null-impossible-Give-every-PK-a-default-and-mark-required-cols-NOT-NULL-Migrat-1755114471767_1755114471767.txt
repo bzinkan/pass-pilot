@@ -1,0 +1,169 @@
+1) Database: make “null” impossible
+Give every PK a default and mark required cols NOT NULL.
+
+Migration SQL (run once):
+
+sql
+Copy
+Edit
+-- UUIDs for all tables
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- Example: passes
+ALTER TABLE passes
+  ALTER COLUMN id SET DATA TYPE uuid USING gen_random_uuid(),
+  ALTER COLUMN id SET DEFAULT gen_random_uuid(),
+  ALTER COLUMN id SET NOT NULL;
+
+-- Required FKs
+ALTER TABLE passes ALTER COLUMN school_id SET NOT NULL;
+ALTER TABLE passes ALTER COLUMN student_id SET NOT NULL;
+
+-- Timestamps that auto-fill
+ALTER TABLE passes
+  ALTER COLUMN created_at SET DEFAULT now(),
+  ALTER COLUMN created_at SET NOT NULL;
+Optional “empty string is invalid” checks (prevents "", which isn’t NULL):
+
+sql
+Copy
+Edit
+ALTER TABLE passes
+  ADD CONSTRAINT passes_reason_not_blank CHECK (reason IS NULL OR length(trim(reason)) > 0);
+2) Drizzle schema: defaults + .notNull()
+ts
+Copy
+Edit
+import { pgTable, uuid, text, timestamp } from "drizzle-orm/pg-core";
+import { schools } from "./schools";
+import { students } from "./students";
+
+export const passes = pgTable("passes", {
+  id: uuid("id").defaultRandom().primaryKey(),              // DB default too
+  schoolId: uuid("school_id").notNull()
+    .references(() => schools.id, { onDelete: "cascade" }),
+  studentId: uuid("student_id").notNull()
+    .references(() => students.id, { onDelete: "cascade" }),
+  reason: text("reason"),                                   // optional; add .notNull() if required
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+3) API: never send id: null, validate input, and sanitize
+Zod + drizzle-zod gives you runtime validation so null never hits the DB.
+
+ts
+Copy
+Edit
+// validation/passSchemas.ts
+import { z } from "zod";
+export const CreatePassSchema = z.object({
+  schoolId: z.string().uuid(),
+  studentId: z.string().uuid(),
+  reason: z.string().trim().min(1).optional(), // make .min(1) required if you want
+});
+export type CreatePassInput = z.infer<typeof CreatePassSchema>;
+Null/unknown key stripper middleware (drop-in):
+
+ts
+Copy
+Edit
+// middleware/sanitize.ts
+export function sanitizeBody(req, _res, next) {
+  const clean = (obj: any) =>
+    Object.fromEntries(
+      Object.entries(obj ?? {})
+        .filter(([k, v]) => v !== null && v !== undefined && k !== "id") // drop id + nulls
+        .map(([k, v]) => [k, typeof v === "string" ? v : v])
+    );
+  if (req.body && typeof req.body === "object") req.body = clean(req.body);
+  next();
+}
+Use it before your routes:
+
+ts
+Copy
+Edit
+import { sanitizeBody } from "./middleware/sanitize";
+app.use(express.json());
+app.use(sanitizeBody);
+Create route with validation + server-generated ID:
+
+ts
+Copy
+Edit
+import { db } from "../db";
+import { passes } from "../db/schema";
+import { CreatePassSchema } from "../validation/passSchemas";
+import crypto from "node:crypto";
+
+app.post("/api/passes", async (req, res, next) => {
+  try {
+    const input = CreatePassSchema.parse(req.body); // 422 if bad
+    const inserted = await db.insert(passes).values({
+      id: crypto.randomUUID(),         // or omit and let DB default fill it
+      ...input,
+    }).returning();
+    res.status(201).json(inserted[0]);
+  } catch (err) { next(err); }
+});
+4) Friendly errors instead of raw 400s
+Map Postgres constraint codes → human messages.
+
+ts
+Copy
+Edit
+// middleware/errorHandler.ts
+export function errorHandler(err, _req, res, _next) {
+  // Zod
+  if (err?.issues) return res.status(422).json({ message: "Invalid input", issues: err.issues });
+
+  // Postgres not-null violation
+  if (err?.code === "23502") {
+    return res.status(400).json({
+      message: `Missing required field: ${err.column || "unknown"}`,
+      hint: "Check request body and DB defaults.",
+    });
+  }
+  // FK violation (bad schoolId/studentId)
+  if (err?.code === "23503") {
+    return res.status(400).json({ message: "Related record not found (foreign key)." });
+  }
+  console.error(err);
+  res.status(500).json({ message: "Unexpected server error" });
+}
+Register it last:
+
+ts
+Copy
+Edit
+app.use(errorHandler);
+5) Frontend: never post nulls
+Disable the submit button until required fields are present and strip empty strings.
+
+ts
+Copy
+Edit
+const payload = {
+  schoolId: selectedSchoolId || undefined,
+  studentId: selectedStudentId || undefined,
+  reason: reason?.trim() || undefined,
+};
+await fetch("/api/passes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+6) Bonus: test that “nulls can’t sneak in”
+A tiny test ensures safety forever:
+
+ts
+Copy
+Edit
+// pseudo-test
+await expect(fetch("/api/passes", { method: "POST", body: JSON.stringify({ schoolId: null, studentId: null }) }))
+  .rejects.toThrow(/Invalid input|Missing required field/);
+TL;DR
+
+DB: NOT NULL + defaults (gen_random_uuid(), now()), optional CHECKs.
+
+ORM: .notNull(), .defaultRandom().
+
+API: sanitize body, drop id, validate with Zod, generate IDs server-side.
+
+Errors: translate 23502/23503 to clear messages.
+Do those and “null value … violates not-null constraint” 

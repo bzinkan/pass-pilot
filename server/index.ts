@@ -26,6 +26,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser(process.env.SESSION_SECRET)); // Add signed cookie parsing for admin authentication
 
+// Add sanitization middleware to prevent null/undefined values
+const { sanitizeBody } = await import("./middleware/sanitize");
+app.use(sanitizeBody);
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -69,6 +73,10 @@ app.use((req, res, next) => {
   
   const server = await registerRoutes(app);
 
+  // Use enhanced error handler
+  const { errorHandler } = await import("./middleware/errorHandler");
+  app.use(errorHandler);
+  
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
