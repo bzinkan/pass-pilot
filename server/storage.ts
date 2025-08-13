@@ -81,8 +81,14 @@ export interface IStorage {
     totalSchools: number;
     totalUsers: number;
     totalStudents: number;
-    activePasses: number;
-    totalPasses: number;
+    trialAccounts: number;
+    paidPlans: number;
+    monthlyRevenue: number;
+    annualRevenue: number;
+    totalRevenue: number;
+    newSubscriptions: number;
+    canceledSubscriptions: number;
+    activeSubscriptions: number;
   }>;
   updateSchoolAsAdmin(schoolId: string, updates: Partial<School>): Promise<School | undefined>;
   deleteSchoolCompletely(schoolId: string): Promise<{ success: boolean; deletedCounts: any }>;
@@ -1174,9 +1180,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSchool(insertSchool: InsertSchool): Promise<School> {
+    const schoolWithDefaults = {
+      ...insertSchool,
+      id: randomUUID(),
+      plan: (insertSchool.plan || "free_trial") as any
+    };
     const [school] = await db
       .insert(schools)
-      .values(insertSchool)
+      .values(schoolWithDefaults)
       .returning();
     return school;
   }
@@ -1200,7 +1211,7 @@ export class DatabaseStorage implements IStorage {
     console.log(`New limits - Teachers: ${newMaxTeachers}, Students: ${newMaxStudents}`);
     
     const updates: Partial<School> = {
-      plan: newPlan,
+      plan: newPlan as any,
       maxTeachers: newMaxTeachers,
       maxStudents: newMaxStudents,
       // Remove trial-specific fields for paid plans
@@ -1438,7 +1449,12 @@ export class DatabaseStorage implements IStorage {
 
   // Payment methods
   async createPayment(insertPayment: InsertPayment): Promise<Payment> {
-    const [payment] = await db.insert(payments).values(insertPayment).returning();
+    const paymentWithId = {
+      ...insertPayment,
+      id: randomUUID(),
+      currency: insertPayment.currency || 'usd'
+    };
+    const [payment] = await db.insert(payments).values(paymentWithId).returning();
     return payment;
   }
 
@@ -1616,11 +1632,11 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(schools.createdAt))
       .limit(5);
     
-    // Recent admin users only (filter by role 'admin')
+    // Recent admin users only (filter by isAdmin true)
     const recentAdmins = await db
       .select()
       .from(users)
-      .where(eq(users.role, 'admin'))
+      .where(eq(users.isAdmin, true))
       .orderBy(desc(users.createdAt))
       .limit(10);
     

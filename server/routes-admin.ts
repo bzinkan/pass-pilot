@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { eq, desc, count } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { randomUUID } from "crypto";
 import { db } from "./db";
 import { schools, payments, adminUsers, subscriptionEvents, students, grades, users, passes } from "@shared/schema";
 
@@ -75,6 +76,7 @@ export function registerAdminRoutes(app: Express) {
       
       try {
         await db.insert(adminUsers).values({ 
+          id: randomUUID(),
           email, 
           passwordHash: hash,
           name: 'Bootstrap Admin',
