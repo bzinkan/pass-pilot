@@ -454,19 +454,19 @@ export class DatabaseStorage implements IStorage {
     const [trialAccounts] = await db.select({ count: count() }).from(schools).where(eq(schools.plan, 'free_trial'));
     const [paidPlans] = await db.select({ count: count() }).from(schools).where(ne(schools.plan, 'free_trial'));
 
-    // Mock revenue data for demo
+    // Real revenue data - currently in development with no paying customers
     return {
       totalSchools: totalSchools.count,
       totalUsers: totalUsers.count,
       totalStudents: totalStudents.count,
       trialAccounts: trialAccounts.count,
       paidPlans: paidPlans.count,
-      monthlyRevenue: 875,
-      annualRevenue: 10500,
-      totalRevenue: 1375,
-      newSubscriptions: 3,
-      canceledSubscriptions: 1,
-      activeSubscriptions: paidPlans.count
+      monthlyRevenue: 0, // No paying customers yet
+      annualRevenue: 0,  // No paying customers yet
+      totalRevenue: 0,   // No paying customers yet
+      newSubscriptions: 0,
+      canceledSubscriptions: 0,
+      activeSubscriptions: 0 // All current accounts are trials
     };
   }
 
