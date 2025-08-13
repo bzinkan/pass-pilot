@@ -21,4 +21,5 @@ COPY --from=build /app /app
 
 # Railway sets PORT; your app must listen to it (your code already does)
 EXPOSE 8080
-CMD ["node","dist/index.js"]
+CMD ["node","dist/server/index.js"]
+
