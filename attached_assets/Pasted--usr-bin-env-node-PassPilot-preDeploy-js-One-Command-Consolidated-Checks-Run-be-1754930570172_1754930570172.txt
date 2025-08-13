@@ -1,0 +1,188 @@
+#!/usr/bin/env node
+/**
+ * PassPilot preDeploy.js — One‑Command Consolidated Checks
+ *
+ * Run before every deploy:
+ *   node scripts/preDeploy.js
+ *
+ * Optional live HTTP checks (if your server is running):
+ *   PREDEPLOY_BASE_URL="http://localhost:3000" \
+ *   TEST_LOGIN_EMAIL="..." \
+ *   TEST_LOGIN_PASSWORD="..." \
+ *   TEST_SCHOOL_ID="..." \
+ *   node scripts/preDeploy.js
+ *
+ * Env expected (Deploy):
+ *   SESSION_SECRET, STRIPE_SECRET_KEY, DATABASE_URL, STRIPE_WEBHOOK_SECRET, SUPERADMIN_PASSWORD? (if used)
+ *
+ * Extras:
+ *   PREDEPLOY_APPLY_CASCADES=1   -> will run generateCascadeMigrations.ts automatically
+ *   PREDEPLOY_TEST_EMAIL=foo@bar -> run fixEmailReset.ts (dry-run) against this email
+ */
+
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const { Client } = require('pg');
+
+const BASE = process.env.PREDEPLOY_BASE_URL || '';
+const APPLY_CASCADES = process.env.PREDEPLOY_APPLY_CASCADES === '1';
+const TEST_EMAIL = process.env.PREDEPLOY_TEST_EMAIL || '';
+
+const requiredEnv = [
+  'SESSION_SECRET',
+  'STRIPE_SECRET_KEY',
+  'DATABASE_URL',
+  'STRIPE_WEBHOOK_SECRET',
+];
+
+const optionalEnv = [
+  'SUPERADMIN_PASSWORD',
+];
+
+const PASS = '✅';
+const WARN = '⚠️ ';
+const FAIL = '❌';
+
+(async function main() {
+  console.log('\n=== PassPilot preDeploy — consolidated checks ===');
+  const results = [];
+
+  // 0) Node & project sanity
+  results.push(await step('Node version >= 18', async () => {
+    const major = parseInt(process.versions.node.split('.')[0], 10);
+    if (major < 18) throw new Error(`Node ${process.versions.node} < 18`);
+  }));
+
+  // 1) Env vars
+  results.push(await step('Required env vars present', async () => {
+    const missing = requiredEnv.filter(k => !process.env[k] || !String(process.env[k]).trim());
+    if (missing.length) throw new Error('Missing: ' + missing.join(', '));
+  }));
+  results.push(await step('Optional env vars (ok if empty)', async () => {
+    optionalEnv.forEach(k => {
+      if (!process.env[k]) console.log(`${WARN} Optional missing: ${k}`);
+    });
+  }));
+
+  // 2) DB connectivity
+  results.push(await step('Database connection', async () => {
+    const client = new Client({ connectionString: process.env.DATABASE_URL });
+    await client.connect();
+    const r = await client.query('select 1 as ok');
+    if (!r || r.rows[0].ok !== 1) throw new Error('DB basic query failed');
+    await client.end();
+  }));
+
+  // 3) ON DELETE CASCADE audit via existing checker
+  results.push(await step('Cascade checker (scripts/checkCascades.ts)', async () => {
+    const checker = resolveScript('scripts/checkCascades.ts');
+    if (!checker) { console.log(`${WARN} Not found, skipping.`); return; }
+    const out = runTsNode(checker, ['--report']);
+    if (out.status !== 0) throw new Error('checkCascades failed');
+    if (/MISSING_CASCADE/i.test(out.stdout)) {
+      console.log(`${WARN} Missing cascades reported.`);
+      if (APPLY_CASCADES) {
+        const gen = resolveScript('scripts/generateCascadeMigrations.ts');
+        if (!gen) throw new Error('generateCascadeMigrations.ts not found');
+        const genOut = runTsNode(gen, ['--apply']);
+        if (genOut.status !== 0) throw new Error('generateCascadeMigrations --apply failed');
+      } else {
+        console.log(`${WARN} Set PREDEPLOY_APPLY_CASCADES=1 to auto-apply fixes.`);
+      }
+    }
+  }));
+
+  // 4) Webhook wiring sanity (HTTP  != 404)
+  results.push(await step('Stripe webhook route reachable', async () => {
+    if (!BASE) { console.log(`${WARN} PREDEPLOY_BASE_URL not set, skipping live HTTP checks.`); return; }
+    const res = await fetchNoThrow(`${BASE}/api/stripe/webhook`, { method: 'HEAD' });
+    if (!res) throw new Error('No response from server');
+    if (res.status === 404) throw new Error('Webhook route returned 404');
+    // 200/400/405 are acceptable depending on raw body parser
+  }));
+
+  // 5) Checkout success redirect to /app (no follow)
+  results.push(await step('Checkout success redirects to /app', async () => {
+    if (!BASE) { console.log(`${WARN} PREDEPLOY_BASE_URL not set, skipping.`); return; }
+    const url = `${BASE}/api/checkout/success?predeploy=1`;
+    const res = await fetch(url, { redirect: 'manual' });
+    if (![301,302,303,307,308].includes(res.status)) throw new Error(`Expected redirect, got ${res.status}`);
+    const loc = res.headers.get('location') || '';
+    if (!loc.startsWith('/app')) throw new Error(`Expected Location:/app, got ${loc}`);
+  }));
+
+  // 6) Login safety shim present (static source scan)
+  results.push(await step('Login page safety shim present', async () => {
+    const candidates = [
+      'src/pages/Login.tsx',
+      'src/pages/Login.jsx',
+      'src/routes/Login.tsx',
+      'app/login/page.tsx',
+    ];
+    const file = candidates.find(f => fs.existsSync(path.resolve(process.cwd(), f)));
+    if (!file) { console.log(`${WARN} Login page file not found — skip static check.`); return; }
+    const src = fs.readFileSync(file, 'utf8');
+    if (!src.includes(`fetch('/api/me'`)) throw new Error(`Missing safety fetch('/api/me') redirect logic in ${file}`);
+  }));
+
+  // 7) fixEmailReset.ts dry-run
+  results.push(await step('fixEmailReset.ts dry-run', async () => {
+    const fixer = resolveScript('scripts/fixEmailReset.ts');
+    if (!fixer) { console.log(`${WARN} Not found, skipping.`); return; }
+    const email = TEST_EMAIL || `predeploy_${Date.now()}@example.com`;
+    const out = runTsNode(fixer, [email]);
+    if (out.status !== 0) throw new Error('fixEmailReset dry-run failed');
+  }));
+
+  // 8) Optional live duplicate-email test (requires BASE + helpers on server)
+  results.push(await step('Duplicate-email flow (optional)', async () => {
+    if (!BASE) { console.log(`${WARN} PREDEPLOY_BASE_URL not set, skipping.`); return; }
+    // This is a placeholder unless you have an internal test endpoint.
+    console.log(`${WARN} Implement app-specific POST /__test__/register to fully automate.`);
+  }));
+
+  // Summary
+  const failed = results.filter(r => r.ok === false);
+  const warned = results.filter(r => r.ok && r.warn);
+  console.log('\n=== Summary ===');
+  results.forEach(r => console.log(`${r.icon} ${r.name}${r.warn ? ' (warn)' : ''}`));
+  if (failed.length) {
+    console.log(`\n${FAIL} ${failed.length} check(s) failed. See logs above.`);
+    process.exit(1);
+  }
+  console.log(`\n${PASS} All critical checks passed${warned.length ? ` with ${warned.length} warning(s)` : ''}.`);
+  process.exit(0);
+})();
+
+function resolveScript(rel) {
+  const p = path.resolve(process.cwd(), rel);
+  return fs.existsSync(p) ? p : null;
+}
+
+function runTsNode(file, args = []) {
+  const cmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+  const run = spawnSync(cmd, ['-y', 'ts-node', file, ...args], { encoding: 'utf8' });
+  if (run.stdout) process.stdout.write(run.stdout);
+  if (run.stderr) process.stderr.write(run.stderr);
+  return run;
+}
+
+async function fetchNoThrow(url, init) {
+  try {
+    const res = await fetch(url, init);
+    return res;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function step(name, fn) {
+  try {
+    const r = await fn();
+    return { name, ok: true, icon: PASS };
+  } catch (e) {
+    console.error(`${FAIL} ${name}:`, e.message || e);
+    return { name, ok: false, icon: FAIL };
+  }
+}

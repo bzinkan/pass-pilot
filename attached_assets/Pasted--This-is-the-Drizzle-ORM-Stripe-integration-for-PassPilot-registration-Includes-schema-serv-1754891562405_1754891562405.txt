@@ -1,0 +1,376 @@
+// This is the Drizzle ORM + Stripe integration for PassPilot registration
+// Includes schema, server routes, registration form, and super admin board
+
+// --- db/schema.ts ---
+import {
+  pgTable, text, integer, timestamp, uuid, pgEnum
+} from "drizzle-orm/pg-core";
+
+export const planEnum = pgEnum('plan', [
+  'TRIAL','BASIC','SMALL','MEDIUM','LARGE','UNLIMITED'
+]);
+export const statusEnum = pgEnum('status', [
+  'PENDING','ACTIVE','CANCELED'
+]);
+
+export const schools = pgTable('schools', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  createdAt: timestamp('created_at', { withTimezone: false }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: false }).defaultNow().notNull(),
+  schoolName: text('school_name').notNull(),
+  adminName: text('admin_name').notNull(),
+  email: text('email').notNull().unique(),
+  plan: planEnum('plan').default('TRIAL').notNull(),
+  status: statusEnum('status').default('PENDING').notNull(),
+  seats: integer('seats').default(3).notNull(),
+  stripeCusId: text('stripe_cus_id'),
+  stripeSubId: text('stripe_sub_id'),
+  notes: text('notes'),
+});
+
+export const payments = pgTable('payments', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  createdAt: timestamp('created_at', { withTimezone: false }).defaultNow().notNull(),
+  schoolId: uuid('school_id').notNull().references(() => schools.id, { onDelete: 'cascade' }),
+  amountCents: integer('amount_cents').notNull(),
+  currency: text('currency').default('usd').notNull(),
+  stripePiId: text('stripe_pi_id'),
+  stripeSessId: text('stripe_sess_id'),
+  plan: planEnum('plan').notNull(),
+  status: text('status').notNull(),
+});
+
+// --- db/client.ts ---
+import { drizzle } from 'drizzle-orm/node-postgres';
+import pg from 'pg';
+export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+export const db = drizzle(pool);
+
+// --- server/routes/billing.ts ---
+import type { Request, Response } from 'express';
+import Stripe from 'stripe';
+import { db } from '../db/client';
+import { schools, payments, planEnum } from '../db/schema';
+import { eq } from 'drizzle-orm';
+import bodyParser from 'body-parser';
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2024-06-20' });
+
+type Plan = typeof planEnum.enumValues[number];
+
+const PLAN_MAP: Record<Plan, { price: string; seats: number }> = {
+  TRIAL:     { price: process.env.STRIPE_PRICE_TRIAL!,     seats: 3 },
+  BASIC:     { price: process.env.STRIPE_PRICE_BASIC!,     seats: 3 },
+  SMALL:     { price: process.env.STRIPE_PRICE_SMALL!,     seats: 10 },
+  MEDIUM:    { price: process.env.STRIPE_PRICE_MEDIUM!,    seats: 25 },
+  LARGE:     { price: process.env.STRIPE_PRICE_LARGE!,     seats: 50 },
+  UNLIMITED: { price: process.env.STRIPE_PRICE_UNLIMITED!, seats: 9999 },
+};
+
+export async function register(req: Request, res: Response) {
+  try {
+    const { schoolName, adminName, email, plan } = req.body as {
+      schoolName: string; adminName: string; email: string; plan: Plan;
+    };
+    if (!schoolName || !adminName || !email) return res.status(400).json({ ok: false, error: 'Missing fields' });
+
+    const mapped = PLAN_MAP[plan || 'TRIAL'] ?? PLAN_MAP.TRIAL;
+
+    const existing = await db.select().from(schools).where(eq(schools.email, email)).limit(1);
+    let schoolId: string;
+    let stripeCusId = existing[0]?.stripeCusId || null;
+
+    if (existing.length === 0) {
+      const inserted = await db.insert(schools).values({
+        schoolName, adminName, email, plan: plan || 'TRIAL',
+        status: 'PENDING', seats: mapped.seats,
+      }).returning({ id: schools.id });
+      schoolId = inserted[0].id;
+    } else {
+      schoolId = existing[0].id;
+      await db.update(schools)
+        .set({ schoolName, adminName, plan: plan || 'TRIAL', status: 'PENDING', seats: mapped.seats, updatedAt: new Date() })
+        .where(eq(schools.id, schoolId));
+    }
+
+    if (!stripeCusId) {
+      const customer = await stripe.customers.create({ email, name: `${adminName} (${schoolName})` });
+      stripeCusId = customer.id;
+      await db.update(schools).set({ stripeCusId }).where(eq(schools.id, schoolId));
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      customer: stripeCusId!,
+      line_items: [{ price: mapped.price, quantity: 1 }],
+      success_url: `${process.env.APP_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.APP_URL}/billing-canceled`,
+      metadata: { schoolId, email, plan: plan || 'TRIAL' },
+    });
+
+    return res.json({ ok: true, checkoutUrl: session.url });
+  } catch (e) {
+    console.error('register error', e);
+    return res.status(500).json({ ok: false });
+  }
+}
+
+export const stripeWebhook = [
+  bodyParser.raw({ type: 'application/json' }),
+  async (req: Request, res: Response) => {
+    const sig = req.headers['stripe-signature'] as string;
+    let event: Stripe.Event;
+
+    try {
+      event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
+    } catch (err) {
+      console.error('Webhook signature failed', err);
+      return res.status(400).send('Webhook Error');
+    }
+
+    try {
+      if (event.type === 'checkout.session.completed') {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const schoolId = session.metadata?.schoolId as string | undefined;
+        const plan = (session.metadata?.plan as Plan | undefined) ?? 'TRIAL';
+        const subId = session.subscription as string | undefined;
+
+        if (schoolId) {
+          await db.update(schools)
+            .set({ status: 'ACTIVE', plan, stripeSubId: subId ?? null, updatedAt: new Date() })
+            .where(eq(schools.id, schoolId));
+
+          await db.insert(payments).values({
+            schoolId,
+            amountCents: session.amount_total ?? 0,
+            currency: session.currency ?? 'usd',
+            stripePiId: (session.payment_intent as string | null) ?? null,
+            stripeSessId: session.id,
+            plan,
+            status: 'succeeded',
+          });
+        }
+      }
+
+      if (event.type === 'customer.subscription.deleted') {
+        const sub = event.data.object as Stripe.Subscription;
+        await db.update(schools)
+          .set({ status: 'CANCELED', updatedAt: new Date() })
+          .where(eq(schools.stripeSubId, sub.id));
+      }
+    } catch (err) {
+      console.error('Webhook handler error', err);
+      return res.sendStatus(500);
+    }
+
+    res.json({ received: true });
+  }
+];
+
+export async function listSchools(_req: Request, res: Response) {
+  const rows = await db.select().from(schools).orderBy(schools.createdAt.desc());
+  res.json(rows);
+}
+export async function listPayments(_req: Request, res: Response) {
+  const rows = await db.select().from(payments).orderBy(payments.createdAt.desc()).limit(200);
+  res.json(rows);
+}
+
+// --- server/index.ts ---
+import express from 'express';
+import cors from 'cors';
+import cookieParser from 'cookie-parser';
+import jwt from 'jsonwebtoken';
+import { register, stripeWebhook, listSchools, listPayments } from './routes/billing';
+
+const app = express();
+app.use(cors({ origin: true, credentials: true }));
+app.use(express.json());
+app.use(cookieParser());
+
+// health
+app.get('/api/health', (_req,res)=>res.send('ok'));
+
+// registration + webhook
+app.post('/api/register', register);
+app.post('/api/stripe/webhook', ...stripeWebhook);
+
+// --- super admin auth (cookie-based) ---
+function signAdmin(email: string) {
+  return jwt.sign({ role: 'superadmin', email }, process.env.JWT_SECRET!, { expiresIn: '7d' });
+}
+function requireAdmin(req: any, res: any, next: any) {
+  try {
+    const token = req.cookies?.admin;
+    if (!token) return res.status(401).send('no-auth');
+    const payload: any = jwt.verify(token, process.env.JWT_SECRET!);
+    if (payload.role !== 'superadmin' || payload.email !== process.env.SUPERADMIN_EMAIL) {
+      return res.status(403).send('forbidden');
+    }
+    next();
+  } catch {
+    return res.status(401).send('invalid-token');
+  }
+}
+
+app.post('/api/admin/login', (req, res) => {
+  const { email, password } = req.body || {};
+  if (email !== process.env.SUPERADMIN_EMAIL) return res.status(401).send('bad-credentials');
+  if (password !== process.env.SUPERADMIN_PASSWORD) return res.status(401).send('bad-credentials');
+  const token = signAdmin(email);
+  res.cookie('admin', token, { httpOnly: true, secure: true, sameSite: 'none', maxAge: 7*24*60*60*1000 });
+  res.json({ ok: true });
+});
+app.post('/api/admin/logout', (_req, res) => {
+  res.clearCookie('admin', { httpOnly: true, secure: true, sameSite: 'none' });
+  res.json({ ok: true });
+});
+
+// protected admin APIs
+app.use('/api/admin', requireAdmin);
+app.get('/api/admin/schools', listSchools);
+app.get('/api/admin/payments', listPayments);
+
+app.listen(process.env.PORT || 3000, () => console.log('API up'));
+
+// --- RegistrationForm.tsx ---
+import React from 'react';
+export default function RegistrationForm() {
+  const [loading, setLoading] = React.useState(false);
+  const [err, setErr] = React.useState<string|null>(null);
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setLoading(true); setErr(null);
+    const data = Object.fromEntries(new FormData(e.currentTarget).entries());
+    const res = await fetch('/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+      cache: 'no-store',
+    });
+    const json = await res.json();
+    setLoading(false);
+    if (!json?.ok) { setErr('Registration failed'); return; }
+    window.location.href = json.checkoutUrl;
+  }
+  return (
+    <form onSubmit={onSubmit}>
+      <input name="schoolName" placeholder="School name" required />
+      <input name="adminName" placeholder="Admin full name" required />
+      <input name="email" type="email" placeholder="Admin email" required />
+      <select name="plan" defaultValue="TRIAL" required>
+        <option value="TRIAL">Trial (30 days)</option>
+        <option value="BASIC">Basic (3 teachers)</option>
+        <option value="SMALL">Small (10)</option>
+        <option value="MEDIUM">Medium (25)</option>
+        <option value="LARGE">Large (50)</option>
+        <option value="UNLIMITED">Unlimited</option>
+      </select>
+      <button disabled={loading} type="submit">{loading ? 'Redirecting…' : 'Start Subscription'}</button>
+      {err && <p style={{color:'crimson'}}>{err}</p>}
+    </form>
+  );
+}
+
+// --- SuperAdminBoard.tsx ---
+import React from 'react';
+import AdminLogin from './components/AdminLogin';
+
+export default function SuperAdminBoard() {
+  const [schools, setSchools] = React.useState<any[]>([]);
+  const [payments, setPayments] = React.useState<any[]>([]);
+  const [err, setErr] = React.useState<string|null>(null);
+  const [authNeeded, setAuthNeeded] = React.useState(false);
+
+  async function load() {
+    try {
+      const [a,b] = await Promise.all([
+        fetch('/api/admin/schools', { credentials: 'include' }),
+        fetch('/api/admin/payments', { credentials: 'include' })
+      ]);
+      if (a.status === 401 || b.status === 401) { setAuthNeeded(true); return; }
+      if (!a.ok || !b.ok) throw new Error('API error');
+      setSchools(await a.json());
+      setPayments(await b.json());
+    } catch (e:any) { setErr(e.message); }
+  }
+
+  React.useEffect(() => { load(); }, []);
+
+  if (authNeeded) return <AdminLogin onDone={load} />;
+  if (err) return <p style={{color:'crimson'}}>Error: {err}</p>;
+
+  return (
+    <div style={{display:'grid', gap:24}}>
+      <section>
+        <h2>Subscriptions</h2>
+        <table>
+          <thead><tr>
+            <th>Created</th><th>School</th><th>Admin</th><th>Email</th><th>Plan</th><th>Status</th><th>Seats</th>
+          </tr></thead>
+          <tbody>
+            {schools.map(r=> (
+              <tr key={r.id}>
+                <td>{new Date(r.createdAt).toLocaleString()}</td>
+                <td>{r.schoolName}</td>
+                <td>{r.adminName}</td>
+                <td>{r.email}</td>
+                <td>{r.plan}</td>
+                <td>{r.status}</td>
+                <td>{r.seats}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Recent Payments</h2>
+        <table>
+          <thead><tr><th>Date</th><th>Amount</th><th>Plan</th><th>Status</th></tr></thead>
+          <tbody>
+            {payments.map(p => (
+              <tr key={p.id}>
+                <td>{new Date(p.createdAt).toLocaleString()}</td>
+                <td>{(p.amountCents/100).toFixed(2)} {String(p.currency).toUpperCase()}</td>
+                <td>{p.plan}</td>
+                <td>{p.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+    </div>
+  );
+}
+
+// --- components/AdminLogin.tsx ---
+import React from 'react';
+export default function AdminLogin({ onDone }: { onDone: () => void }) {
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [err, setErr] = React.useState<string|null>(null);
+  const [loading, setLoading] = React.useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault(); setErr(null); setLoading(true);
+    const res = await fetch('/api/admin/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', body: JSON.stringify({ email, password })
+    });
+    setLoading(false);
+    if (!res.ok) { setErr('Invalid email or password'); return; }
+    onDone();
+  }
+
+  return (
+    <form onSubmit={submit} style={{maxWidth:380}}>
+      <h3>Super Admin Login</h3>
+      <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="Email" required />
+      <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password" required />
+      <button disabled={loading} type="submit">{loading ? 'Signing in…' : 'Sign in'}</button>
+      {err && <p style={{color:'crimson'}}>{err}</p>}
+      <p style={{opacity:.7, fontSize:12}}>Use the email/password in your env vars.</p>
+    </form>
+  );
+}

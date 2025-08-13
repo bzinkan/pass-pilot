@@ -3,31 +3,36 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/not-found";
-import Dashboard from "@/pages/dashboard";
-import CreatePass from "@/pages/create-pass";
-import ActivePasses from "@/pages/active-passes";
-import PassHistory from "@/pages/pass-history";
-import Reports from "@/pages/reports";
-import Settings from "@/pages/settings";
-import Sidebar from "@/components/layout/sidebar";
+// Authentication is handled via hooks, no provider needed
+import Home from "@/pages/home";
+import Login from "@/pages/login";
+import Register from "@/pages/register";
+import ResetPassword from "@/pages/reset-password";
+import KioskDemo from "@/pages/kiosk-demo";
+import Kiosk from "./pages/kiosk";
+import Guide from "./pages/guide";
+import Features from "./pages/features";
+import BillingSuccess from "./pages/billing-success";
+import AdminDashboard from "./pages/admin-dashboard";
 
 function Router() {
   return (
-    <div className="flex min-h-screen">
-      <Sidebar />
-      <main className="flex-1 ml-64 p-6">
-        <Switch>
-          <Route path="/" component={Dashboard} />
-          <Route path="/create-pass" component={CreatePass} />
-          <Route path="/active-passes" component={ActivePasses} />
-          <Route path="/pass-history" component={PassHistory} />
-          <Route path="/reports" component={Reports} />
-          <Route path="/settings" component={Settings} />
-          <Route component={NotFound} />
-        </Switch>
-      </main>
-    </div>
+    <Switch>
+      <Route path="/" component={Home} />
+      <Route path="/login" component={Login} />
+      <Route path="/register" component={Register} />
+      <Route path="/reset-password" component={ResetPassword} />
+      <Route path="/kiosk-demo" component={KioskDemo} />
+      <Route path="/kiosk" component={Kiosk} />
+      <Route path="/guide" component={Guide} />
+      <Route path="/features" component={Features} />
+      <Route path="/billing-success" component={BillingSuccess} />
+      <Route path="/admin" component={AdminDashboard} />
+      {/* Catch-all route for unmatched paths */}
+      <Route>
+        <Home />
+      </Route>
+    </Switch>
   );
 }
 

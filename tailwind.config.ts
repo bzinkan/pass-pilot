@@ -24,11 +24,6 @@ export default {
         primary: {
           DEFAULT: "var(--primary)",
           foreground: "var(--primary-foreground)",
-          50: "var(--primary-50)",
-          100: "var(--primary-100)",
-          500: "var(--primary-500)",
-          600: "var(--primary-600)",
-          700: "var(--primary-700)",
         },
         secondary: {
           DEFAULT: "var(--secondary)",
@@ -65,24 +60,6 @@ export default {
           "accent-foreground": "var(--sidebar-accent-foreground)",
           border: "var(--sidebar-border)",
           ring: "var(--sidebar-ring)",
-        },
-        success: {
-          50: "var(--success-50)",
-          100: "var(--success-100)",
-          500: "var(--success-500)",
-          600: "var(--success-600)",
-        },
-        warning: {
-          50: "var(--warning-50)",
-          100: "var(--warning-100)",
-          500: "var(--warning-500)",
-          600: "var(--warning-600)",
-        },
-        error: {
-          50: "var(--error-50)",
-          100: "var(--error-100)",
-          500: "var(--error-500)",
-          600: "var(--error-600)",
         },
       },
       fontFamily: {

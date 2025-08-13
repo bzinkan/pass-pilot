@@ -6,7 +6,8 @@ import type {
 } from "@/components/ui/toast"
 
 const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000000
+const TOAST_REMOVE_DELAY = 1000000 // Keep very long for manual removal
+const SUCCESS_TOAST_DURATION = 4000 // 4 seconds for success messages
 
 type ToasterToast = ToastProps & {
   id: string
@@ -55,7 +56,7 @@ interface State {
 
 const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
 
-const addToRemoveQueue = (toastId: string) => {
+const addToRemoveQueue = (toastId: string, duration?: number) => {
   if (toastTimeouts.has(toastId)) {
     return
   }
@@ -66,7 +67,7 @@ const addToRemoveQueue = (toastId: string) => {
       type: "REMOVE_TOAST",
       toastId: toastId,
     })
-  }, TOAST_REMOVE_DELAY)
+  }, duration || TOAST_REMOVE_DELAY)
 
   toastTimeouts.set(toastId, timeout)
 }
@@ -149,17 +150,30 @@ function toast({ ...props }: Toast) {
     })
   const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id })
 
+  const finalDuration = props.variant === "destructive" 
+    ? Infinity 
+    : (props.duration !== undefined ? props.duration : SUCCESS_TOAST_DURATION)
+
   dispatch({
     type: "ADD_TOAST",
     toast: {
       ...props,
       id,
       open: true,
+      duration: finalDuration,
       onOpenChange: (open) => {
         if (!open) dismiss()
       },
     },
   })
+
+  // Auto-dismiss non-destructive toasts after specified duration
+  // Destructive toasts (red/error) persist until manually dismissed
+  if (props.variant !== "destructive" && finalDuration !== Infinity) {
+    setTimeout(() => {
+      dismiss()
+    }, finalDuration)
+  }
 
   return {
     id: id,

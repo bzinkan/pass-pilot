@@ -1,10 +1,23 @@
 import express, { type Request, Response, NextFunction } from "express";
+import bodyParser from "body-parser";
+import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import "./passResetScheduler"; // Initialize the pass reset scheduler
 
 const app = express();
+
+// Stripe webhook FIRST — raw body required  
+app.post('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }), async (req, res, next) => {
+  // Import webhook handler dynamically to avoid circular dependencies
+  const { stripeWebhook } = await import("./routes-billing");
+  return stripeWebhook(req, res, next);
+});
+
+// Now regular parsers
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use(cookieParser(process.env.SESSION_SECRET)); // Add signed cookie parsing for admin authentication
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -50,9 +63,24 @@ app.use((req, res, next) => {
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
+  const isProduction = process.env.NODE_ENV === "production" || process.env.REPLIT_DEPLOYMENT === "1";
+  log(`Environment check - NODE_ENV: ${process.env.NODE_ENV}, REPLIT_DEPLOYMENT: ${process.env.REPLIT_DEPLOYMENT}, isProduction: ${isProduction}`);
+  
+  if (!isProduction) {
+    log("Setting up Vite development server");
     await setupVite(app, server);
   } else {
+    log("Setting up production static file serving");
+    
+    // Add cache-control headers for index.html to prevent aggressive caching
+    app.use((req, res, next) => {
+      if (req.path === '/' || req.path.endsWith('/index.html')) {
+        res.set('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+        log(`No-cache headers set for: ${req.path}`);
+      }
+      next();
+    });
+    
     serveStatic(app);
   }
 

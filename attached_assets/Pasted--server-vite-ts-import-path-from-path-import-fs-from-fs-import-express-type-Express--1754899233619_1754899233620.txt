@@ -1,0 +1,107 @@
+// server/vite.ts
+import path from "path";
+import fs from "fs";
+import express, { type Express } from "express";
+import { createServer as createViteServer, createLogger } from "vite";
+import { type Server } from "http";
+import viteConfig from "../vite.config";
+import { nanoid } from "nanoid";
+
+const viteLogger = createLogger();
+
+export function log(message: string, source = "express") {
+  const formattedTime = new Date().toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+  console.log(`${formattedTime} [${source}] ${message}`);
+}
+
+const DIST = path.join(process.cwd(), "dist", "public");
+const CLIENT_ROOT = path.join(process.cwd(), "client");
+
+/** DEV: use Vite in middleware mode */
+export async function setupVite(app: Express, server: Server) {
+  const vite = await createViteServer({
+    ...viteConfig,
+    configFile: false,
+    server: {
+      middlewareMode: true,
+      hmr: { server },
+      allowedHosts: true as const,
+    },
+    appType: "custom",
+    customLogger: {
+      ...viteLogger,
+      error: (msg, options) => {
+        viteLogger.error(msg, options);
+        process.exit(1);
+      },
+    },
+  });
+
+  // Mount Vite's dev middlewares
+  app.use(vite.middlewares);
+
+  // SPA fallback in dev — but NEVER catch /api/*
+  app.get("*", async (req, res, next) => {
+    if (req.path.startsWith("/api/")) return next();
+
+    try {
+      const clientTemplate = path.resolve(CLIENT_ROOT, "index.html");
+
+      // Always reload index.html from disk (good for hot reload)
+      let template = await fs.promises.readFile(clientTemplate, "utf-8");
+      template = template.replace(
+        `src="/src/main.tsx"`,
+        `src="/src/main.tsx?v=${nanoid()}"`,
+      );
+
+      const html = await vite.transformIndexHtml(req.originalUrl, template);
+      res.set("Cache-Control", "no-store"); // ensure fresh HTML in dev
+      res.status(200).set({ "Content-Type": "text/html" }).end(html);
+    } catch (e) {
+      vite.ssrFixStacktrace(e as Error);
+      next(e);
+    }
+  });
+
+  log("Vite middleware + dev SPA fallback mounted");
+}
+
+/** PROD: serve built assets + SPA fallback (skip /api) */
+export function serveStatic(app: Express) {
+  if (!fs.existsSync(DIST)) {
+    throw new Error(
+      `Could not find the build directory: ${DIST}. Make sure to run "npm run build" first.`,
+    );
+  }
+
+  // Cache hashed assets aggressively (immutable)
+  app.use(
+    "/assets",
+    express.static(path.join(DIST, "assets"), {
+      immutable: true,
+      maxAge: "1y",
+    }),
+  );
+
+  // Other static files (images, etc.)
+  app.use(
+    express.static(DIST, {
+      index: "index.html",
+      maxAge: "1h",
+    }),
+  );
+
+  // SPA fallback LAST — and never catch APIs
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api/")) return next();
+    res.set("Cache-Control", "no-store"); // always fetch fresh index.html after deploy
+    res.sendFile(path.join(DIST, "index.html"));
+  });
+
+  log("Static assets + prod SPA fallback mounted");
+}

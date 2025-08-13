@@ -1,0 +1,274 @@
+# PassPilot Delete School/Account Flow (Secure v3 — Merged)
+
+## 1) Overview
+
+Permanent, super-admin-only delete that removes one school **and all of its related data**. Designed to be **tenant-safe**, **Stripe-aware**, and **future-proof**. Now includes secure admin session handling (no frontend secrets), validation, and cascade enforcement tooling.
+
+---
+
+## 2) Security — No Secrets in Frontend
+
+⚠️ **Never expose `SUPERADMIN_TOKEN` in frontend code**. This version uses a signed, httpOnly cookie session for authentication instead of `VITE_SUPERADMIN_TOKEN`.
+
+---
+
+## 3) Database: ON DELETE CASCADE
+
+Every table with a `school_id` must reference `schools.id` using `onDelete: 'cascade'`. If tables already exist, run migrations to update constraints.
+
+---
+
+## 4) Cascade Checker (psql + script)
+
+**psql:**
+
+```sql
+SELECT conrelid::regclass AS child_table,
+       conname AS fk_name,
+       pg_get_constraintdef(oid) AS definition
+FROM pg_constraint
+WHERE contype = 'f'
+  AND confrelid = 'public.schools'::regclass
+  AND pg_get_constraintdef(oid) NOT ILIKE '%ON DELETE CASCADE%'
+ORDER BY 1;
+```
+
+**Node script:**
+
+```ts
+// scripts/checkCascades.ts
+import { db } from '../db';
+import { sql } from 'drizzle-orm';
+
+(async () => {
+  const { rows } = await db.execute(sql`
+    SELECT conrelid::regclass AS child_table,
+           conname AS fk_name,
+           pg_get_constraintdef(oid) AS definition
+    FROM pg_constraint
+    WHERE contype = 'f'
+      AND confrelid = 'public.schools'::regclass
+      AND pg_get_constraintdef(oid) NOT ILIKE '%ON DELETE CASCADE%'
+    ORDER BY 1;
+  `);
+  console.table(rows as any);
+})();
+```
+
+---
+
+## 5) Server: Admin router (secure session)
+
+```ts
+// server/admin.ts
+import express from 'express';
+import Stripe from 'stripe';
+import { db } from '../db';
+import { eq } from 'drizzle-orm';
+import { schools } from '../db/schema/schools';
+import cookieParser from 'cookie-parser';
+
+const admin = express.Router();
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, { apiVersion: '2024-06-20' });
+
+admin.use(cookieParser(process.env.SESSION_SECRET));
+
+// Login route — sets signed httpOnly cookie
+admin.post('/login', (req, res) => {
+  const { password } = req.body || {};
+  if (!password || password !== process.env.SUPERADMIN_PASSWORD) {
+    return res.status(401).json({ error: 'bad_credentials' });
+  }
+  res.cookie('admin_session', '1', {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production',
+    signed: true,
+    maxAge: 60 * 60 * 1000, // 1h
+  });
+  return res.json({ ok: true });
+});
+
+function requireAdminSession(req: any, res: any, next: any) {
+  if (req.signedCookies?.admin_session !== '1') {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  next();
+}
+
+admin.use(requireAdminSession);
+
+// Hard delete ONE school
+admin.delete('/schools/:id', async (req, res) => {
+  const id = String(req.params.id || '');
+  if (!/^[0-9a-fA-F-]{36}$/.test(id)) return res.status(400).json({ error: 'bad_id' });
+
+  try {
+    const [target] = await db.select().from(schools).where(eq(schools.id, id)).limit(1);
+    if (!target) return res.status(404).json({ error: 'not_found' });
+
+    if (target.stripeSubId) {
+      try { await stripe.subscriptions.cancel(target.stripeSubId); }
+      catch (e: any) {
+        if (e?.statusCode !== 404) console.error('[admin.delete] stripe cancel failed', e);
+      }
+    }
+
+    await db.transaction(async (tx) => {
+      await tx.delete(schools).where(eq(schools.id, id));
+    });
+
+    return res.json({ ok: true, id });
+  } catch (e: any) {
+    console.error('[admin.delete] unexpected error', e);
+    return res.status(500).json({ error: 'delete_failed', detail: e?.message });
+  }
+});
+
+export default admin;
+```
+
+**Mount:**
+
+```ts
+import adminRouter from './server/admin';
+app.use(express.json());
+app.use('/api/admin', adminRouter);
+```
+
+---
+
+## 6) Frontend: Row action (uses cookie)
+
+```tsx
+import { useState } from 'react';
+
+export function AdminRow({ school, onDeleted }: { school: any; onDeleted: (id: string) => void }) {
+  const [busy, setBusy] = useState(false);
+
+  async function handleDelete() {
+    const conf = prompt(`Type the school name to permanently delete:\n\n${school.name}`);
+    if (conf !== school.name) return;
+
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/admin/schools/${school.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        alert(`Delete failed: ${res.status} ${body}`);
+      } else {
+        onDeleted(school.id);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <tr>
+      <td>
+        <button title="Delete" onClick={handleDelete} disabled={busy}>🗑️</button>
+      </td>
+    </tr>
+  );
+}
+```
+
+**Login first:**
+
+```ts
+await fetch('/api/admin/login', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ password: formPassword }),
+  credentials: 'include',
+});
+```
+
+---
+
+## 7) Auto‑Generate Migration Statements
+
+```ts
+// scripts/generateCascadeMigrations.ts
+import { db } from '../db';
+import { sql } from 'drizzle-orm';
+import fs from 'fs';
+
+async function main() {
+  const { rows } = await db.execute(sql`
+    SELECT conrelid::regclass AS child_table,
+           conname AS fk_name,
+           pg_get_constraintdef(oid) AS definition
+    FROM pg_constraint
+    WHERE contype = 'f'
+      AND confrelid = 'public.schools'::regclass
+      AND pg_get_constraintdef(oid) NOT ILIKE '%ON DELETE CASCADE%'
+    ORDER BY 1;
+  `);
+
+  if (!rows.length) {
+    console.log('✅ All foreign keys to schools already cascade.');
+    return;
+  }
+
+  const stmts = rows.map((r: any) => `-- ${r.child_table}.${r.fk_name}\nALTER TABLE ${r.child_table}\n  DROP CONSTRAINT IF EXISTS ${r.fk_name},\n  ADD CONSTRAINT ${r.fk_name}\n  FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE CASCADE;\n`).join('\n');
+
+  const filename = `migrations/${Date.now()}_add_school_cascades.sql`;
+  fs.mkdirSync('migrations', { recursive: true });
+  fs.writeFileSync(filename, stmts);
+
+  console.log(stmts);
+  console.log(`💾 Saved to: ${filename}`);
+}
+
+main().catch(e => { console.error(e); process.exit(1); });
+```
+
+---
+
+## 8) Verification
+
+1. Run checker/generator.
+2. Apply migration.
+3. Delete a previously failing school.
+4. Confirm removal in UI.
+
+---
+
+## 9) Safe Rollback
+
+```sql
+ALTER TABLE <table>
+  DROP CONSTRAINT IF EXISTS <fk_name>,
+  ADD CONSTRAINT <fk_name>
+  FOREIGN KEY (school_id) REFERENCES schools(id);
+```
+
+Only if using soft-delete instead.
+
+---
+
+## 10) Final Checklist
+
+* [ ] All child tables have **ON DELETE CASCADE**
+* [ ] No frontend secrets — admin login/session working
+* [ ] Stripe subscription ID correct
+* [ ] DB indexes on all `school_id` columns
+* [ ] Admin router mounted at `/api/admin`
+* [ ] Tested in staging
+
+---
+
+## 11) Performance — Add Indexes
+
+```sql
+CREATE INDEX IF NOT EXISTS idx_users_school_id ON users(school_id);
+CREATE INDEX IF NOT EXISTS idx_passes_school_id ON passes(school_id);
+CREATE INDEX IF NOT EXISTS idx_payments_school_id ON payments(school_id);
+CREATE INDEX IF NOT EXISTS idx_subscription_events_school_id ON subscription_events(school_id);
+```
