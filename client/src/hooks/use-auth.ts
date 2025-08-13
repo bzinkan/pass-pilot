@@ -23,7 +23,7 @@ export function useAuth() {
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
-  const user = (authData && typeof authData === 'object' && authData.authenticated) ? authData.user : null;
+  const user = (authData && typeof authData === 'object' && 'authenticated' in authData && authData.authenticated) ? (authData as any).user : null;
   const isAuthenticated = !!user;
 
   // Login mutation

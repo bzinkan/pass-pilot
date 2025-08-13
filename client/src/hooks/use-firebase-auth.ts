@@ -1,58 +1,39 @@
+// Firebase authentication disabled - this hook is now a stub
+// Use the main useAuth hook instead for database authentication
+
 import { useState, useEffect } from 'react';
-import { firebaseAuthService, type PassPilotUser } from '@/lib/firebaseAuth';
+import type { PassPilotUser } from '@/lib/firebaseAuth';
 
 export function useFirebaseAuth() {
   const [user, setUser] = useState<PassPilotUser | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [initialized, setInitialized] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [initialized, setInitialized] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = firebaseAuthService.onAuthStateChange((user) => {
-      setUser(user);
-      setLoading(false);
-      setInitialized(true);
-    });
-
-    return unsubscribe;
+    console.log('Firebase auth hook disabled - use main useAuth hook instead');
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    try {
-      const user = await firebaseAuthService.signInWithEmailAndPassword(email, password);
-      return user;
-    } catch (error: any) {
-      // Check if this is a pending teacher account
-      if (error.code === 'auth/user-not-found') {
-        try {
-          // Try to activate pending teacher account
-          const user = await firebaseAuthService.activateTeacher(email, password);
-          return user;
-        } catch (activationError: any) {
-          throw new Error('Invalid credentials or account not found');
-        }
-      }
-      throw error;
-    }
+    throw new Error('Firebase auth disabled. Use the main database login system.');
   };
 
   const signUp = async (email: string, password: string, adminName: string, schoolName: string) => {
-    const schoolId = `school_${Date.now()}`;
-    return firebaseAuthService.createSchoolAdmin(email, password, adminName, schoolName, schoolId);
+    throw new Error('Firebase auth disabled. Use the main database registration system.');
   };
 
   const signOut = async () => {
-    await firebaseAuthService.signOut();
+    throw new Error('Firebase auth disabled. Use the main database logout system.');
   };
 
   const updateProfile = async (updates: Partial<PassPilotUser>) => {
-    await firebaseAuthService.updateUserProfile(updates);
+    throw new Error('Firebase auth disabled. Use the main database user system.');
   };
 
   return {
     user,
     loading,
     initialized,
-    isAuthenticated: firebaseAuthService.isAuthenticated(),
+    isAuthenticated: false,
     isAdmin: firebaseAuthService.isAdmin(),
     schoolId: firebaseAuthService.getSchoolId(),
     signIn,
