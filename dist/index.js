@@ -369,7 +369,12 @@ var init_storage = __esm({
         return school || void 0;
       }
       async createSchool(insertSchool) {
-        const [school] = await db.insert(schools).values(insertSchool).returning();
+        const schoolWithDefaults = {
+          ...insertSchool,
+          id: randomUUID(),
+          plan: insertSchool.plan || "free_trial"
+        };
+        const [school] = await db.insert(schools).values(schoolWithDefaults).returning();
         return school;
       }
       async updateSchool(id, updates) {
@@ -561,7 +566,12 @@ var init_storage = __esm({
       }
       // Payment methods
       async createPayment(insertPayment) {
-        const [payment] = await db.insert(payments).values(insertPayment).returning();
+        const paymentWithId = {
+          ...insertPayment,
+          id: randomUUID(),
+          currency: insertPayment.currency || "usd"
+        };
+        const [payment] = await db.insert(payments).values(paymentWithId).returning();
         return payment;
       }
       async getPaymentsBySchool(schoolId) {
@@ -668,7 +678,7 @@ var init_storage = __esm({
       async getRecentPlatformActivity(limit) {
         const activities = [];
         const recentSchools = await db.select().from(schools).orderBy(desc(schools.createdAt)).limit(5);
-        const recentAdmins = await db.select().from(users).where(eq(users.role, "admin")).orderBy(desc(users.createdAt)).limit(10);
+        const recentAdmins = await db.select().from(users).where(eq(users.isAdmin, true)).orderBy(desc(users.createdAt)).limit(10);
         activities.push(
           ...recentSchools.map((school) => ({
             type: "school_created",
@@ -1202,7 +1212,7 @@ import { createServer } from "http";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { nanoid } from "nanoid";
-import { randomUUID as randomUUID2 } from "crypto";
+import { randomUUID as randomUUID3 } from "crypto";
 import bcrypt2 from "bcryptjs";
 import Stripe2 from "stripe";
 
@@ -1464,6 +1474,7 @@ init_schema();
 import { eq as eq2, desc as desc2, count as count2 } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import jwt2 from "jsonwebtoken";
+import { randomUUID as randomUUID2 } from "crypto";
 function signAdmin(email) {
   return jwt2.sign({ role: "superadmin", email }, process.env.JWT_SECRET, { expiresIn: "7d" });
 }
@@ -1511,6 +1522,7 @@ function registerAdminRoutes(app2) {
       const hash = await bcrypt.hash(password, 10);
       try {
         await db.insert(adminUsers).values({
+          id: randomUUID2(),
           email,
           passwordHash: hash,
           name: "Bootstrap Admin",
@@ -1520,12 +1532,15 @@ function registerAdminRoutes(app2) {
         return res.status(409).json({ ok: false, error: "email-exists" });
       }
       const jwtToken = signAdmin(email);
+      const isProd = process.env.NODE_ENV === "production";
       res.cookie("admin", jwtToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-        maxAge: 7 * 24 * 60 * 60 * 1e3
+        secure: isProd,
+        sameSite: "lax",
+        // More permissive for cross-origin scenarios
+        maxAge: 7 * 24 * 60 * 60 * 1e3,
         // 7 days
+        path: "/"
       });
       console.log(`\u2705 Admin user created successfully: ${email}`);
       res.json({ ok: true });
@@ -1549,11 +1564,15 @@ function registerAdminRoutes(app2) {
         return res.status(401).send("bad-credentials");
       }
       const token = signAdmin(email);
+      const isProd = process.env.NODE_ENV === "production";
       res.cookie("admin", token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-        maxAge: 7 * 24 * 60 * 60 * 1e3
+        secure: isProd,
+        sameSite: "lax",
+        // More permissive for cross-origin scenarios
+        maxAge: 7 * 24 * 60 * 60 * 1e3,
+        // 7 days
+        path: "/"
       });
       res.json({ ok: true });
     } catch (error) {
@@ -2217,8 +2236,8 @@ async function registerRoutes(app2) {
         });
       }
       const school = await storage.createSchool({
-        id: randomUUID2(),
-        schoolId: randomUUID2(),
+        id: randomUUID3(),
+        schoolId: randomUUID3(),
         name: schoolName,
         adminEmail: email.toLowerCase().trim(),
         emailDomain: email.split("@")[1],
@@ -2233,7 +2252,7 @@ async function registerRoutes(app2) {
       });
       const hashedPassword = await bcrypt2.hash(password, 12);
       const adminUser = await storage.createUser({
-        id: randomUUID2(),
+        id: randomUUID3(),
         email: email.toLowerCase().trim(),
         password: hashedPassword,
         name: name.trim(),
@@ -3596,7 +3615,7 @@ async function registerRoutes(app2) {
       if (!user) {
         return res.json({ message: "If an account with that email exists, we have sent a password reset link." });
       }
-      const resetToken = randomUUID2();
+      const resetToken = randomUUID3();
       const expiry = /* @__PURE__ */ new Date();
       expiry.setHours(expiry.getHours() + 1);
       await storage.setPasswordResetToken(user.id, resetToken, expiry);
@@ -4245,7 +4264,7 @@ import jwt3 from "jsonwebtoken";
 var JWT_SECRET = process.env.JWT_SECRET || "super-secret-key";
 async function requireSuperAdmin(req, res, next) {
   try {
-    const token = req.cookies?.adminToken;
+    const token = req.cookies?.admin || req.cookies?.adminToken;
     if (!token) {
       return res.status(401).json({ error: "No admin token provided" });
     }
@@ -4295,12 +4314,14 @@ function registerSuperAdminRoutes(app2) {
         role: "superadmin"
       });
       const token = signAdminToken(adminUser.email);
-      res.cookie("adminToken", token, {
+      const isProd = process.env.NODE_ENV === "production";
+      res.cookie("admin", token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: isProd,
         sameSite: "lax",
-        maxAge: 7 * 24 * 60 * 60 * 1e3
+        maxAge: 7 * 24 * 60 * 60 * 1e3,
         // 7 days
+        path: "/"
       });
       console.log(`[Super Admin] Bootstrap completed for: ${adminUser.email}`);
       return res.json({
@@ -4335,11 +4356,14 @@ function registerSuperAdminRoutes(app2) {
         return res.status(401).json({ error: "Invalid credentials" });
       }
       const token = signAdminToken(adminUser.email);
-      res.cookie("adminToken", token, {
+      const isProd = process.env.NODE_ENV === "production";
+      res.cookie("admin", token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: isProd,
         sameSite: "lax",
-        maxAge: 7 * 24 * 60 * 60 * 1e3
+        maxAge: 7 * 24 * 60 * 60 * 1e3,
+        // 7 days
+        path: "/"
       });
       console.log(`[Super Admin] Login successful: ${adminUser.email}`);
       return res.json({
@@ -4357,10 +4381,12 @@ function registerSuperAdminRoutes(app2) {
     }
   });
   app2.post("/api/super-admin/logout", (req, res) => {
-    res.clearCookie("adminToken", {
+    const isProd = process.env.NODE_ENV === "production";
+    res.clearCookie("admin", {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax"
+      secure: isProd,
+      sameSite: "lax",
+      path: "/"
     });
     return res.json({ success: true });
   });
@@ -4374,6 +4400,16 @@ function registerSuperAdminRoutes(app2) {
         name: adminUser.name,
         role: adminUser.role
       }
+    });
+  });
+  app2.get("/api/super-admin/debug", (req, res) => {
+    return res.json({
+      hasCookie: Boolean(req.headers.cookie),
+      cookiesSeen: req.headers.cookie ?? null,
+      adminCookie: req.cookies?.admin ?? null,
+      adminTokenCookie: req.cookies?.adminToken ?? null,
+      protocol: req.protocol,
+      nodeEnv: process.env.NODE_ENV
     });
   });
   app2.use("/api/super-admin/dashboard", requireSuperAdmin);
@@ -4448,7 +4484,7 @@ function registerSuperAdminRoutes(app2) {
 init_db();
 init_schema();
 import bcrypt5 from "bcryptjs";
-import { randomUUID as randomUUID3 } from "crypto";
+import { randomUUID as randomUUID4 } from "crypto";
 var usedOnce = false;
 function registerBootstrapRoute(app2) {
   const bootstrapToken = process.env.BOOTSTRAP_TOKEN || "bootstrap123secure";
@@ -4474,7 +4510,7 @@ function registerBootstrapRoute(app2) {
         return res.status(403).json({ error: "Super admin already exists. Bootstrap phase completed." });
       }
       const [adminUser] = await db.insert(adminUsers).values({
-        id: randomUUID3(),
+        id: randomUUID4(),
         email,
         passwordHash,
         name,
@@ -4625,6 +4661,7 @@ function serveStatic(app2) {
 
 // server/index.ts
 var app = express2();
+app.set("trust proxy", 1);
 app.post("/api/stripe/webhook", bodyParser.raw({ type: "application/json" }), async (req, res) => {
   const { stripeWebhook: stripeWebhook2 } = await Promise.resolve().then(() => (init_routes_billing(), routes_billing_exports));
   return stripeWebhook2(req, res);

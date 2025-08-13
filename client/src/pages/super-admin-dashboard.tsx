@@ -42,13 +42,13 @@ export default function SuperAdminDashboard() {
   // Fetch platform stats
   const { data: stats } = useQuery({
     queryKey: ['/api/super-admin/dashboard/stats'],
-    enabled: !!authData?.authenticated,
+    enabled: !!(authData as any)?.authenticated,
   });
 
   // Fetch schools with stats
   const { data: schoolsData, isLoading: schoolsLoading } = useQuery({
     queryKey: ['/api/super-admin/dashboard/schools'],
-    enabled: !!authData?.authenticated,
+    enabled: !!(authData as any)?.authenticated,
   });
 
 
@@ -92,15 +92,24 @@ export default function SuperAdminDashboard() {
   const deleteSchoolMutation = useMutation({
     mutationFn: (schoolId: string) =>
       apiRequest('DELETE', `/api/super-admin/dashboard/schools/${schoolId}`, { confirmDelete: true }),
-    onSuccess: (data) => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['/api/super-admin/dashboard/schools'] });
       queryClient.invalidateQueries({ queryKey: ['/api/super-admin/dashboard/stats'] });
       setShowDeleteDialog(false);
       setSelectedSchool(null);
       setDeleteConfirmation("");
-      toast({
-        title: "School Deleted",
-        description: `School and all related data deleted successfully. Removed: ${data.deletedCounts.users} users, ${data.deletedCounts.students} students, ${data.deletedCounts.passes} passes.`,
+      
+      // Parse the response data
+      response.json().then((data) => {
+        toast({
+          title: "School Deleted",
+          description: `School and all related data deleted successfully. Removed: ${data.deletedCounts?.users || 0} users, ${data.deletedCounts?.students || 0} students, ${data.deletedCounts?.passes || 0} passes.`,
+        });
+      }).catch(() => {
+        toast({
+          title: "School Deleted",
+          description: "School and all related data deleted successfully.",
+        });
       });
     },
     onError: () => {
@@ -114,7 +123,7 @@ export default function SuperAdminDashboard() {
 
   // Redirect if not authenticated
   useEffect(() => {
-    if (!authLoading && (!authData?.authenticated || authError)) {
+    if (!authLoading && (!(authData as any)?.authenticated || authError)) {
       console.log('Super Admin Dashboard: Authentication failed', { authData, authError });
       setLocation('/super-admin/login');
     }
@@ -131,11 +140,11 @@ export default function SuperAdminDashboard() {
     );
   }
 
-  if (!authData?.authenticated) {
+  if (!(authData as any)?.authenticated) {
     return null; // Will redirect via useEffect
   }
 
-  const schools = schoolsData?.schools || [];
+  const schools = (schoolsData as any)?.schools || [];
 
   const handleEditSchool = (school: any) => {
     setSelectedSchool(school);
@@ -187,7 +196,7 @@ export default function SuperAdminDashboard() {
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-600 dark:text-gray-400">
-                {authData.admin.name} ({authData.admin.email})
+                {(authData as any)?.admin?.name} ({(authData as any)?.admin?.email})
               </span>
               <Button
                 onClick={() => logoutMutation.mutate()}
@@ -212,7 +221,7 @@ export default function SuperAdminDashboard() {
               <Building className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats?.totalSchools || 0}</div>
+              <div className="text-2xl font-bold">{(stats as any)?.totalSchools || 0}</div>
             </CardContent>
           </Card>
 
@@ -222,7 +231,7 @@ export default function SuperAdminDashboard() {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats?.totalUsers || 0}</div>
+              <div className="text-2xl font-bold">{(stats as any)?.totalUsers || 0}</div>
             </CardContent>
           </Card>
 
@@ -232,7 +241,7 @@ export default function SuperAdminDashboard() {
               <UserCheck className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats?.totalStudents || 0}</div>
+              <div className="text-2xl font-bold">{(stats as any)?.totalStudents || 0}</div>
             </CardContent>
           </Card>
 
@@ -242,7 +251,7 @@ export default function SuperAdminDashboard() {
               <Activity className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats?.trialAccounts || 0}</div>
+              <div className="text-2xl font-bold">{(stats as any)?.trialAccounts || 0}</div>
             </CardContent>
           </Card>
 
@@ -252,7 +261,7 @@ export default function SuperAdminDashboard() {
               <BarChart3 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats?.paidPlans || 0}</div>
+              <div className="text-2xl font-bold">{(stats as any)?.paidPlans || 0}</div>
             </CardContent>
           </Card>
         </div>
@@ -337,19 +346,19 @@ export default function SuperAdminDashboard() {
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium">Monthly Revenue</span>
                     <span className="text-lg font-bold text-green-600">
-                      ${stats?.monthlyRevenue || 0}
+                      ${(stats as any)?.monthlyRevenue || 0}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium">Annual Revenue</span>
                     <span className="text-lg font-bold text-green-600">
-                      ${stats?.annualRevenue || 0}
+                      ${(stats as any)?.annualRevenue || 0}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium">Total Revenue</span>
                     <span className="text-xl font-bold text-green-700">
-                      ${stats?.totalRevenue || 0}
+                      ${(stats as any)?.totalRevenue || 0}
                     </span>
                   </div>
                 </div>
@@ -366,23 +375,23 @@ export default function SuperAdminDashboard() {
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium">New Subscriptions (30d)</span>
                     <span className="text-lg font-bold text-green-600">
-                      +{stats?.newSubscriptions || 0}
+                      +{(stats as any)?.newSubscriptions || 0}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium">Canceled Subscriptions (30d)</span>
                     <span className="text-lg font-bold text-red-600">
-                      -{stats?.canceledSubscriptions || 0}
+                      -{(stats as any)?.canceledSubscriptions || 0}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium">Active Subscriptions</span>
                     <span className="text-xl font-bold text-blue-700">
-                      {stats?.activeSubscriptions || 0}
+                      {(stats as any)?.activeSubscriptions || 0}
                     </span>
                   </div>
                   <div className="text-xs text-gray-500 pt-2">
-                    Net Growth: {((stats?.newSubscriptions || 0) - (stats?.canceledSubscriptions || 0)) > 0 ? '+' : ''}{(stats?.newSubscriptions || 0) - (stats?.canceledSubscriptions || 0)} this month
+                    Net Growth: {(((stats as any)?.newSubscriptions || 0) - ((stats as any)?.canceledSubscriptions || 0)) > 0 ? '+' : ''}{((stats as any)?.newSubscriptions || 0) - ((stats as any)?.canceledSubscriptions || 0)} this month
                   </div>
                 </div>
               </CardContent>
