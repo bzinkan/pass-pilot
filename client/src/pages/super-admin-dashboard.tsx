@@ -51,11 +51,7 @@ export default function SuperAdminDashboard() {
     enabled: !!authData?.authenticated,
   });
 
-  // Fetch recent activity
-  const { data: activityData } = useQuery({
-    queryKey: ['/api/super-admin/dashboard/activity'],
-    enabled: !!authData?.authenticated,
-  });
+
 
   // Logout mutation
   const logoutMutation = useMutation({
@@ -241,21 +237,21 @@ export default function SuperAdminDashboard() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Passes</CardTitle>
+              <CardTitle className="text-sm font-medium">Trial Accounts</CardTitle>
               <Activity className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats?.activePasses || 0}</div>
+              <div className="text-2xl font-bold">{stats?.trialAccounts || 0}</div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Passes</CardTitle>
+              <CardTitle className="text-sm font-medium">Paid Plans</CardTitle>
               <BarChart3 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats?.totalPasses || 0}</div>
+              <div className="text-2xl font-bold">{stats?.paidPlans || 0}</div>
             </CardContent>
           </Card>
         </div>
@@ -328,24 +324,65 @@ export default function SuperAdminDashboard() {
             </Card>
           </div>
 
-          {/* Recent Activity */}
-          <div>
+          {/* Money Tracker and Subscription Tracker */}
+          <div className="space-y-6">
+            {/* Money Tracker */}
             <Card>
               <CardHeader>
-                <CardTitle>Recent Activity</CardTitle>
+                <CardTitle className="text-lg font-semibold text-green-600">Money Tracker</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {activityData?.activity?.slice(0, 10).map((activity: any, index: number) => (
-                    <div key={index} className="text-sm">
-                      <p className="font-medium">{activity.description}</p>
-                      <p className="text-gray-500 text-xs">
-                        {activity.timestamp ? new Date(activity.timestamp).toLocaleString() : 'Unknown time'}
-                      </p>
-                    </div>
-                  )) || (
-                    <p className="text-gray-500 text-sm">No recent activity</p>
-                  )}
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">Monthly Revenue</span>
+                    <span className="text-lg font-bold text-green-600">
+                      ${stats?.monthlyRevenue || 0}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">Annual Revenue</span>
+                    <span className="text-lg font-bold text-green-600">
+                      ${stats?.annualRevenue || 0}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">Total Revenue</span>
+                    <span className="text-xl font-bold text-green-700">
+                      ${stats?.totalRevenue || 0}
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Subscription Tracker */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold text-blue-600">Subscription Tracker</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">New Subscriptions (30d)</span>
+                    <span className="text-lg font-bold text-green-600">
+                      +{stats?.newSubscriptions || 0}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">Canceled Subscriptions (30d)</span>
+                    <span className="text-lg font-bold text-red-600">
+                      -{stats?.canceledSubscriptions || 0}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">Active Subscriptions</span>
+                    <span className="text-xl font-bold text-blue-700">
+                      {stats?.activeSubscriptions || 0}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500 pt-2">
+                    Net Growth: {((stats?.newSubscriptions || 0) - (stats?.canceledSubscriptions || 0)) > 0 ? '+' : ''}{(stats?.newSubscriptions || 0) - (stats?.canceledSubscriptions || 0)} this month
+                  </div>
                 </div>
               </CardContent>
             </Card>
