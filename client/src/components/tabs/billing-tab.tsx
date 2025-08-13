@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { AlertCircle, Calendar, CreditCard, X, RotateCcw } from "lucide-react";
+import { AlertCircle, Calendar, CreditCard, X, RotateCcw, ArrowUpRight } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface BillingTabProps {
@@ -138,8 +138,22 @@ export function BillingTab({ user }: BillingTabProps) {
   return (
     <div className="p-4">
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-foreground mb-2">Billing & Subscription</h2>
-        <p className="text-sm text-muted-foreground">Manage your subscription and billing information</p>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-xl font-semibold text-foreground mb-2">Billing & Subscription</h2>
+            <p className="text-sm text-muted-foreground">Manage your subscription and billing information</p>
+          </div>
+          {!subscriptionData?.hasActiveSubscription && (
+            <Button 
+              onClick={() => window.open('/register', '_blank')}
+              className="bg-primary hover:bg-primary/90"
+              data-testid="button-view-pricing-plans"
+            >
+              <ArrowUpRight className="w-4 h-4 mr-2" />
+              View Pricing Plans
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="space-y-6">
@@ -238,7 +252,8 @@ export function BillingTab({ user }: BillingTabProps) {
                   data-testid="button-upgrade-subscription"
                   onClick={() => window.open('/register', '_blank')}
                 >
-                  Upgrade to Paid Plan
+                  <ArrowUpRight className="w-4 h-4 mr-2" />
+                  View Pricing Plans & Upgrade
                 </Button>
               </div>
             )}
@@ -281,6 +296,7 @@ export function BillingTab({ user }: BillingTabProps) {
                             onClick={() => window.open('/register', '_blank')}
                             data-testid={`button-select-${plan.name.toLowerCase().replace(' ', '-')}`}
                           >
+                            <ArrowUpRight className="w-4 h-4 mr-2" />
                             Select Plan
                           </Button>
                         )}
