@@ -29,14 +29,14 @@ const PLAN_CONFIG = {
   },
   SMALL_TEAM_MONTHLY: { 
     maxTeachers: 10, 
-    maxStudents: 1500, 
+    maxStudents: 150, 
     price: process.env.STRIPE_PRICE_SMALL_TEAM_MONTHLY || '',
     name: "Small Team Plan",
     duration: "monthly"
   },
   SMALL_TEAM_ANNUAL: { 
     maxTeachers: 10, 
-    maxStudents: 1500, 
+    maxStudents: 150, 
     price: process.env.STRIPE_PRICE_SMALL_TEAM_ANNUAL || '',
     name: "Small Team Plan",
     duration: "yearly"
