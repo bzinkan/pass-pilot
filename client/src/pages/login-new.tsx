@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -6,12 +6,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { SchoolPicker } from "@/components/school-picker";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function Login() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
   const [mode, setMode] = useState<'login' | 'register' | 'first-login'>('login');
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user) {
+      setLocation('/app');
+    }
+  }, [user, setLocation]);
 
   // Multi-school login state
   const [requiresSchool, setRequiresSchool] = useState(false);
@@ -77,11 +86,8 @@ export default function Login() {
         throw new Error(data.message || 'Failed to set password');
       }
       
-      setLocation('/app');
-      toast({
-        title: "Welcome to PassPilot!",
-        description: "Your password has been set successfully.",
-      });
+      // Successful first login - trigger auth state update
+      window.location.reload(); // This will cause useAuth to re-check the session
       
     } catch (error: any) {
       toast({
@@ -132,12 +138,8 @@ export default function Login() {
         return;
       }
       
-      // Successful login - redirect to app
-      setLocation('/app');
-      toast({
-        title: "Welcome back!",
-        description: "You have successfully logged in.",
-      });
+      // Successful login - trigger auth state update by reloading the page or triggering a re-check
+      window.location.reload(); // This will cause useAuth to re-check the session
       
     } catch (error: any) {
       toast({
@@ -172,11 +174,8 @@ export default function Login() {
         throw new Error(data.error || 'Login failed');
       }
       
-      setLocation('/app');
-      toast({
-        title: "Welcome!",
-        description: "Successfully logged in!",
-      });
+      // Successful login - trigger auth state update by reloading the page
+      window.location.reload(); // This will cause useAuth to re-check the session
       
     } catch (error: any) {
       toast({
