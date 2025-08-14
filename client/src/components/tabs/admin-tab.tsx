@@ -378,7 +378,7 @@ export function AdminTab({ user }: AdminTabProps) {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="text-destructive hover:text-destructive"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
                           data-testid={`button-remove-${teacher.id}`}
                         >
                           <Trash2 className="h-3 w-3" />
