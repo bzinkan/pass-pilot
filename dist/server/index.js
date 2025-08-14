@@ -1640,6 +1640,11 @@ function normalizeTd(body) {
   const td = String(candidate).trim();
   return td.length ? td : "general";
 }
+var _origCreatePass = storage.createPass.bind(storage);
+storage.createPass = async (data) => {
+  const td = normalizeTd(data);
+  return _origCreatePass({ ...data, td });
+};
 var stripe2 = null;
 if (process.env.STRIPE_SECRET_KEY) {
   stripe2 = new Stripe2(process.env.STRIPE_SECRET_KEY, {
@@ -3183,14 +3188,8 @@ async function registerRoutes(app2) {
   });
   app2.post("/api/passes", requireAuth, async (req, res) => {
     try {
-      console.log("POST /api/passes - userId:", req.userId);
-      console.log("POST /api/passes - body:", req.body);
       const user = await storage.getUser(req.userId);
-      if (!user) {
-        console.log("User not found for userId:", req.userId);
-        return res.status(404).json({ message: "User not found" });
-      }
-      console.log("Found user:", user.name, user.email);
+      if (!user) return res.status(404).json({ message: "User not found" });
       const td = normalizeTd(req.body);
       const { validatePassData: validatePassData2 } = await Promise.resolve().then(() => (init_validation(), validation_exports));
       const passInput = validatePassData2({
@@ -3202,16 +3201,14 @@ async function registerRoutes(app2) {
       const passData = {
         ...passInput,
         td,
-        // << GUARANTEED non-empty
+        // <- guaranteed non-null
         checkoutTime: /* @__PURE__ */ new Date(),
         timeOut: /* @__PURE__ */ new Date(),
         issuingTeacher: user.name,
         status: "active",
         printRequested: false
       };
-      console.log("Creating pass with data:", passData);
       const pass = await storage.createPass(passData);
-      console.log("Created pass:", pass);
       res.json(pass);
     } catch (error) {
       console.error("Error creating pass:", error);
