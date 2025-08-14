@@ -3,21 +3,27 @@ import bodyParser from "body-parser";
 import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { ENV } from "./env";
 import "./passResetScheduler"; // Initialize the pass reset scheduler
 
 const app = express();
 
 // Stripe webhook FIRST — raw body required  
-app.post('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }), async (req, res, next) => {
+app.post('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }), async (req, res) => {
   // Import webhook handler dynamically to avoid circular dependencies
-  const { stripeWebhook } = await import("./routes-billing");
-  return stripeWebhook(req, res, next);
+  try {
+    const { stripeWebhook } = await import("./routes-billing");
+    return stripeWebhook(req, res);
+  } catch (error) {
+    console.error('Stripe webhook error:', error);
+    res.status(500).json({ error: 'Webhook handler not available' });
+  }
 });
 
 // Now regular parsers
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-app.use(cookieParser(process.env.SESSION_SECRET)); // Add signed cookie parsing for admin authentication
+app.use(cookieParser(ENV.SESSION_SECRET)); // Add signed cookie parsing for admin authentication
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -63,8 +69,8 @@ app.use((req, res, next) => {
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
-  const isProduction = process.env.NODE_ENV === "production" || process.env.REPLIT_DEPLOYMENT === "1";
-  log(`Environment check - NODE_ENV: ${process.env.NODE_ENV}, REPLIT_DEPLOYMENT: ${process.env.REPLIT_DEPLOYMENT}, isProduction: ${isProduction}`);
+  const isProduction = ENV.NODE_ENV === "production" || process.env.REPLIT_DEPLOYMENT === "1";
+  log(`Environment check - NODE_ENV: ${ENV.NODE_ENV}, REPLIT_DEPLOYMENT: ${process.env.REPLIT_DEPLOYMENT}, isProduction: ${isProduction}`);
   
   if (!isProduction) {
     log("Setting up Vite development server");

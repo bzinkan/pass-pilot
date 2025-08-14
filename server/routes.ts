@@ -1,10 +1,12 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertUserSchema, insertSchoolSchema, insertGradeSchema, insertStudentSchema, insertPassSchema, registerSchoolSchema } from "@shared/schema";
 import { z } from "zod";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
+import { ENV } from "./env";
+import { validate } from "./validate";
 
 // Authentication utilities
 const auth = {
@@ -25,7 +27,11 @@ const auth = {
 const sessions = new Map<string, { userId: string; schoolId: string; expires: Date }>();
 
 // Auth middleware
-const requireAuth = (req: any, res: any, next: any) => {
+interface AuthenticatedRequest extends Request {
+  user: { id: string; schoolId: string };
+}
+
+const requireAuth = (req: Request, res: Response, next: NextFunction) => {
   const authToken = req.headers.authorization?.replace('Bearer ', '') || req.cookies.session;
   
   if (!authToken) {
@@ -38,7 +44,7 @@ const requireAuth = (req: any, res: any, next: any) => {
     return res.status(401).json({ message: 'Session expired' });
   }
   
-  req.user = { id: session.userId, schoolId: session.schoolId };
+  (req as AuthenticatedRequest).user = { id: session.userId, schoolId: session.schoolId };
   next();
 };
 
@@ -56,9 +62,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Auth endpoints
-  app.post('/api/auth/register', async (req, res) => {
+  app.post('/api/auth/register', validate({ body: registerSchoolSchema }), async (req: any, res) => {
     try {
-      const data = registerSchoolSchema.parse(req.body);
+      const data = req.valid.body;
       
       // Create school first
       const schoolData = {
@@ -123,7 +129,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.cookie('session', sessionToken, { 
         httpOnly: true, 
-        secure: process.env.NODE_ENV === 'production',
+        secure: ENV.NODE_ENV === 'production',
         expires 
       });
       
@@ -135,9 +141,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/auth/me', requireAuth, async (req, res) => {
+  app.get('/api/auth/me', requireAuth, async (req: Request, res: Response) => {
     try {
-      const user = await storage.getUser(req.user.id);
+      const authReq = req as AuthenticatedRequest;
+      const user = await storage.getUser(authReq.user.id);
       if (!user) {
         return res.status(404).json({ message: 'User not found' });
       }
@@ -184,9 +191,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/grades', requireAuth, async (req, res) => {
+  app.post('/api/grades', requireAuth, validate({ body: insertGradeSchema }), async (req: any, res) => {
     try {
-      const data = insertGradeSchema.parse(req.body);
+      const data = req.valid.body;
       const grade = await storage.createGrade(data);
       res.json(grade);
     } catch (error: any) {
@@ -206,9 +213,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/students', requireAuth, async (req, res) => {
+  app.post('/api/students', requireAuth, validate({ body: insertStudentSchema }), async (req: any, res) => {
     try {
-      const data = insertStudentSchema.parse(req.body);
+      const data = req.valid.body;
       const student = await storage.createStudent(data);
       res.json(student);
     } catch (error: any) {
@@ -228,9 +235,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/passes', requireAuth, async (req, res) => {
+  app.post('/api/passes', requireAuth, validate({ body: insertPassSchema }), async (req: any, res) => {
     try {
-      const data = insertPassSchema.parse(req.body);
+      const data = req.valid.body;
       const pass = await storage.createPass(data);
       res.json(pass);
     } catch (error: any) {
