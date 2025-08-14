@@ -1137,7 +1137,7 @@ export class DatabaseStorage implements IStorage {
     }).from(passes)
       .innerJoin(students, eq(passes.studentId, students.id))
       .innerJoin(users, eq(passes.teacherId, users.id))
-      .where(and(eq(passes.schoolId, schoolId), eq(passes.status, "out")));
+      .where(and(eq(passes.schoolId, schoolId), eq(passes.status, "active")));
 
     return result.map(row => ({
       ...row.pass,
@@ -1149,14 +1149,14 @@ export class DatabaseStorage implements IStorage {
   async getActivePassesByTeacher(teacherId: string): Promise<(Pass & { studentName: string })[]> {
     const result = await db.select({
       pass: passes,
-      studentName: students.name,
+      student: students,
     }).from(passes)
       .innerJoin(students, eq(passes.studentId, students.id))
-      .where(and(eq(passes.teacherId, teacherId), eq(passes.status, "out")));
+      .where(and(eq(passes.teacherId, teacherId), eq(passes.status, "active")));
 
     return result.map(row => ({
       ...row.pass,
-      studentName: row.studentName,
+      studentName: `${row.student.firstName} ${row.student.lastName}`,
     }));
   }
 
@@ -1237,7 +1237,7 @@ export class DatabaseStorage implements IStorage {
     // First get all active passes to calculate durations
     const activePasses = await db.select()
       .from(passes)
-      .where(and(eq(passes.schoolId, schoolId), eq(passes.status, "out")));
+      .where(and(eq(passes.schoolId, schoolId), eq(passes.status, "active")));
     
     if (activePasses.length === 0) {
       return 0;
