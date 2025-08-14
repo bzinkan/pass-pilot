@@ -76,14 +76,6 @@ export function LandingPage() {
               >
                 Quick Start Guide
               </Button>
-              <Button 
-                onClick={() => setLocation('/register-v2')}
-                variant="link"
-                className="text-white hover:text-gray-200 underline text-lg"
-                data-testid="button-register-v2"
-              >
-                V2 Registration (Beta)
-              </Button>
 
             </div>
 
