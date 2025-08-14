@@ -137,6 +137,8 @@ var init_schema = __esm({
       returnTime: timestamp("return_time"),
       issuingTeacher: text("issuing_teacher").notNull(),
       passType: text("pass_type").default("general"),
+      td: text("td").default("general"),
+      // Pass type/destination - guaranteed non-null by trigger
       customReason: text("custom_reason"),
       notes: text("notes"),
       printRequested: boolean("print_requested").default(false),
@@ -1074,6 +1076,10 @@ var init_validation = __esm({
       customReason: z.string().optional(),
       duration: z.number().positive().optional(),
       passType: z.string().default("general"),
+      td: z.string().default("general"),
+      // Pass type/destination field
+      tdv: z.string().optional(),
+      // Pass type variant (not stored in DB, used for validation only)
       notes: z.string().optional()
     }).strict();
     validatePassData = (data) => {
@@ -3190,18 +3196,19 @@ async function registerRoutes(app2) {
     try {
       const user = await storage.getUser(req.userId);
       if (!user) return res.status(404).json({ message: "User not found" });
-      const td = normalizeTd(req.body);
+      const td = (req.body.td ?? req.body.passType ?? "general").toString().trim() || "general";
+      const tdv = (req.body.tdv ?? td).toString().trim() || "general";
       const { validatePassData: validatePassData2 } = await Promise.resolve().then(() => (init_validation(), validation_exports));
       const passInput = validatePassData2({
         ...req.body,
+        td,
+        tdv,
         teacherId: req.userId,
         schoolId: user.schoolId,
         destination: req.body.destination || "Restroom"
       });
       const passData = {
         ...passInput,
-        td,
-        // <- guaranteed non-null
         checkoutTime: /* @__PURE__ */ new Date(),
         timeOut: /* @__PURE__ */ new Date(),
         issuingTeacher: user.name,
