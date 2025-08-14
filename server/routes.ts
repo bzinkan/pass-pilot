@@ -2066,12 +2066,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.getUser(req.userId);
       if (!user) return res.status(404).json({ message: "User not found" });
 
-      // Make sure td cannot be null going forward
-      const td = normalizeTd(req.body);
+      // Use safe defaults for pass type
+      const td = (req.body.td ?? req.body.passType ?? 'general').toString().trim() || 'general';
+      const tdv = (req.body.tdv ?? td).toString().trim() || 'general';
 
       const { validatePassData } = await import("../shared/validation");
+
       const passInput = validatePassData({
         ...req.body,
+        td,
+        tdv,
         teacherId: req.userId,
         schoolId: user.schoolId,
         destination: req.body.destination || "Restroom",
@@ -2079,7 +2083,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const passData = {
         ...passInput,
-        td, // <- guaranteed non-null
         checkoutTime: new Date(),
         timeOut: new Date(),
         issuingTeacher: user.name,

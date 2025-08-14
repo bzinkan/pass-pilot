@@ -9,6 +9,8 @@ export const CreatePassSchema = z.object({
   customReason: z.string().optional(),
   duration: z.number().positive().optional(),
   passType: z.string().default("general"),
+  td: z.string().default("general"), // Pass type/destination field
+  tdv: z.string().optional(), // Pass type variant (not stored in DB, used for validation only)
   notes: z.string().optional(),
 }).strict(); // Reject unknown properties
 
