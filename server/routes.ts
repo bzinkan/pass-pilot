@@ -2111,17 +2111,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const user = await storage.getUser(req.userId);
       if (!user) {
-        console.log('User not found for userId:', req.userId);
         return res.status(404).json({ message: 'User not found' });
       }
 
-      // --- START DEFENSIVE FIX ---
-      // coalesce ANY of the legacy/new names to tdv, default 'general'
+      const { validatePassData } = await import("../shared/validation");
+
+      // 1) Map any incoming field to tdv, default to 'general'
       const tdv =
         (req.body.tdv ?? req.body.td ?? req.body.passType ?? 'general') || 'general';
 
-      // Build the validated payload
-      const { validatePassData } = await import("../shared/validation");
+      // 2) Validate the rest as before
       const passInput = validatePassData({
         ...req.body,
         teacherId: req.userId,
@@ -2129,21 +2128,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         destination: req.body.destination || "Restroom"
       });
 
-      // force tdv into the final payload (never null)
+      // 3) Force tdv into the insert payload (so it can never be NULL)
       const passData = {
         ...passInput,
-        tdv,                             // <- add this line
+        tdv,
         checkoutTime: new Date(),
         timeOut: new Date(),
         issuingTeacher: user.name,
         status: "active" as const,
         printRequested: false
       };
-      // --- END DEFENSIVE FIX ---
 
-      console.log('Creating pass with data:', passData);
       const pass = await storage.createPass(passData);
-      console.log('Created pass:', pass);
       res.json(pass);
     } catch (error: any) {
       console.error('Error creating pass:', error);
