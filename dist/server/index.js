@@ -1635,6 +1635,11 @@ function isTrialExpired(trialEndDate) {
   if (!trialEndDate) return false;
   return /* @__PURE__ */ new Date() > trialEndDate;
 }
+function normalizeTd(body) {
+  const candidate = typeof body?.td === "string" && body.td || typeof body?.passType === "string" && body.passType || typeof body?.type === "string" && body.type || typeof body?.reason === "string" && body.reason || "";
+  const td = String(candidate).trim();
+  return td.length ? td : "general";
+}
 var stripe2 = null;
 if (process.env.STRIPE_SECRET_KEY) {
   stripe2 = new Stripe2(process.env.STRIPE_SECRET_KEY, {
@@ -3186,6 +3191,7 @@ async function registerRoutes(app2) {
         return res.status(404).json({ message: "User not found" });
       }
       console.log("Found user:", user.name, user.email);
+      const td = normalizeTd(req.body);
       const { validatePassData: validatePassData2 } = await Promise.resolve().then(() => (init_validation(), validation_exports));
       const passInput = validatePassData2({
         ...req.body,
@@ -3195,6 +3201,8 @@ async function registerRoutes(app2) {
       });
       const passData = {
         ...passInput,
+        td,
+        // << GUARANTEED non-empty
         checkoutTime: /* @__PURE__ */ new Date(),
         timeOut: /* @__PURE__ */ new Date(),
         issuingTeacher: user.name,
