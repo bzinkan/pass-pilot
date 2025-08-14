@@ -349,14 +349,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/students', requireAuth, validate({ body: insertStudentSchema }), async (req: any, res) => {
+  app.post('/api/students', requireAuth, async (req: any, res) => {
     try {
       const authReq = req as AuthenticatedRequest;
       const { schoolId } = authReq.user;
       
+      // Flexible data handling - accept both old and new formats
+      const requestData = req.body;
+      
+      // Ensure we have required fields
+      if (!requestData.firstName && !requestData.name) {
+        return res.status(400).json({ 
+          message: 'Student name is required (firstName or name field)' 
+        });
+      }
+      
+      if (!requestData.gradeId && !requestData.grade) {
+        return res.status(400).json({ 
+          message: 'Grade is required (gradeId or grade field)' 
+        });
+      }
+      
+      // Handle legacy format (name field) by converting to firstName/lastName
+      let firstName = requestData.firstName;
+      let lastName = requestData.lastName || '';
+      
+      if (!firstName && requestData.name) {
+        const nameParts = requestData.name.trim().split(' ');
+        firstName = nameParts[0] || 'Student';
+        lastName = nameParts.slice(1).join(' ') || '';
+      }
+      
+      // Handle legacy grade format by converting grade name to gradeId
+      let gradeId = requestData.gradeId;
+      if (!gradeId && requestData.grade) {
+        // Find grade by name
+        const grades = await storage.getGradesBySchool(schoolId);
+        const grade = grades.find(g => g.name === requestData.grade);
+        if (!grade) {
+          return res.status(400).json({ 
+            message: `Grade "${requestData.grade}" not found` 
+          });
+        }
+        gradeId = grade.id;
+      }
+      
       const data = {
-        ...req.valid.body,
-        schoolId: schoolId  // Ensure schoolId from auth user
+        schoolId,
+        firstName,
+        lastName,
+        gradeId,
+        studentId: requestData.studentId || null,
+        email: requestData.email || null,
+        status: requestData.status || 'active'
       };
       
       const student = await storage.createStudent(data);
@@ -367,13 +412,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/students/:id', requireAuth, validate({ body: insertStudentSchema }), async (req: any, res) => {
+  app.put('/api/students/:id', requireAuth, async (req: any, res) => {
     try {
+      const authReq = req as AuthenticatedRequest;
+      const { schoolId } = authReq.user;
       const studentId = req.params.id;
+      
       if (!studentId) {
         return res.status(400).json({ message: 'Student ID is required' });
       }
-      const data = req.valid.body;
+      
+      const requestData = req.body;
+      
+      // Handle legacy format (name field) by converting to firstName/lastName
+      let firstName = requestData.firstName;
+      let lastName = requestData.lastName || '';
+      
+      if (!firstName && requestData.name) {
+        const nameParts = requestData.name.trim().split(' ');
+        firstName = nameParts[0] || 'Student';
+        lastName = nameParts.slice(1).join(' ') || '';
+      }
+      
+      // Handle legacy grade format by converting grade name to gradeId
+      let gradeId = requestData.gradeId;
+      if (!gradeId && requestData.grade) {
+        // Find grade by name
+        const grades = await storage.getGradesBySchool(schoolId);
+        const grade = grades.find(g => g.name === requestData.grade);
+        if (!grade) {
+          return res.status(400).json({ 
+            message: `Grade "${requestData.grade}" not found` 
+          });
+        }
+        gradeId = grade.id;
+      }
+      
+      const data = {
+        firstName,
+        lastName,
+        gradeId,
+        studentId: requestData.studentId || null,
+        email: requestData.email || null,
+        status: requestData.status || 'active'
+      };
+      
       const student = await storage.updateStudent(studentId, data);
       res.json(student);
     } catch (error: any) {

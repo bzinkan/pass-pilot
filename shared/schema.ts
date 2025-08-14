@@ -145,6 +145,13 @@ export const insertStudentSchema = createInsertSchema(students).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  // Make schoolId optional since it's added by the server
+  schoolId: z.string().uuid().optional(),
+  // Make studentId optional and nullable
+  studentId: z.string().optional().nullable(),
+  // Make email optional
+  email: z.string().email().optional().nullable(),
 });
 
 // Simple pass schema for in-memory storage compatibility

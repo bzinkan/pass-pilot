@@ -148,28 +148,11 @@ export function RosterTab({ user, selectedGrades = new Set(), onGradeClick }: Ro
     }
     
     try {
-      // Find the grade ID from the grade name
-      const selectedGrade = filteredGrades.find((g: any) => g.name === studentForm.grade);
-      if (!selectedGrade) {
-        toast({
-          title: "Invalid Grade",
-          description: "Please select a valid grade.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Split name into first and last name
-      const nameParts = studentForm.name.trim().split(' ');
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.slice(1).join(' ') || '';
-
+      // Send in simple format - let backend handle the conversion
       const studentData = {
-        firstName,
-        lastName,
-        gradeId: selectedGrade.id,
-        studentId: studentForm.studentId || undefined,
-        status: 'active'
+        name: studentForm.name,
+        grade: studentForm.grade,
+        studentId: studentForm.studentId || undefined
       };
       
       await apiRequest('POST', '/api/students', studentData);
@@ -247,16 +230,10 @@ export function RosterTab({ user, selectedGrades = new Set(), onGradeClick }: Ro
           cleanLine = line.trim(); // Fallback to original if cleaning removed everything
         }
 
-        // Split into first and last name
-        const nameParts = cleanLine.split(' ').filter(part => part.length > 0);
-        const firstName = nameParts[0] || 'Student';
-        const lastName = nameParts.slice(1).join(' ') || '';
-
+        // Send in simple format - let backend handle the conversion
         const studentData = {
-          firstName,
-          lastName,
-          gradeId: selectedGrade.id,
-          status: 'active'
+          name: cleanLine,
+          grade: bulkGrade
         };
 
         return apiRequest('POST', '/api/students', studentData);
@@ -309,28 +286,11 @@ export function RosterTab({ user, selectedGrades = new Set(), onGradeClick }: Ro
     }
     
     try {
-      // Find the grade ID from the grade name
-      const selectedGrade = filteredGrades.find((g: any) => g.name === studentForm.grade);
-      if (!selectedGrade) {
-        toast({
-          title: "Invalid Grade",
-          description: "Please select a valid grade.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Split name into first and last name
-      const nameParts = studentForm.name.trim().split(' ');
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.slice(1).join(' ') || '';
-
+      // Send in simple format - let backend handle the conversion
       const studentData = {
-        firstName,
-        lastName,
-        gradeId: selectedGrade.id,
-        studentId: studentForm.studentId || undefined,
-        status: 'active'
+        name: studentForm.name,
+        grade: studentForm.grade,
+        studentId: studentForm.studentId || undefined
       };
 
       await apiRequest('PUT', `/api/students/${editingStudent.id}`, studentData);
