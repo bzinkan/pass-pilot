@@ -2139,6 +2139,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         printRequested: false
       };
 
+      console.log('TDV DEBUG → body:', { td: req.body.td, passType: req.body.passType, tdv: req.body.tdv });
       const pass = await storage.createPass(passData);
       res.json(pass);
     } catch (error: any) {
