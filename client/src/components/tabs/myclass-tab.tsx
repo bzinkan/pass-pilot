@@ -94,7 +94,7 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
 
   const handleCustomReasonSubmit = () => {
     if (selectedStudentForCustom && customReason.trim()) {
-      handleMarkOut(selectedStudentForCustom.id, selectedStudentForCustom.name, 'general', customReason.trim());
+      handleMarkOut(selectedStudentForCustom.id, `${selectedStudentForCustom.firstName} ${selectedStudentForCustom.lastName}`, 'general', customReason.trim());
       setCustomReason('');
       setSelectedStudentForCustom(null);
       setIsCustomReasonDialogOpen(false);
@@ -128,6 +128,7 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
   };
 
   const getInitials = (name: string) => {
+    if (!name || typeof name !== 'string') return 'S';
     return name
       .split(' ')
       .map(word => word[0])
@@ -145,6 +146,7 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
       'bg-yellow-100 text-yellow-600',
       'bg-red-100 text-red-600'
     ];
+    if (!name || typeof name !== 'string') return colors[0];
     const index = name.length % colors.length;
     return colors[index];
   };
@@ -361,12 +363,12 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
                     return (
                       <div key={pass.id} className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                         <div className="flex items-center space-x-3">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${getAvatarColor(student.name)}`}>
-                            {getInitials(student.name)}
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${getAvatarColor(`${student.firstName} ${student.lastName}`)}`}>
+                            {getInitials(`${student.firstName} ${student.lastName}`)}
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
-                              <p className="font-medium">{student.name}</p>
+                              <p className="font-medium">{student.firstName} {student.lastName}</p>
                               <span className={`px-2 py-1 text-xs rounded-full border flex items-center gap-1 ${getPassTypeBadgeColor(pass.passType || 'general')}`}>
                                 {getPassTypeIcon(pass.passType || 'general')}
                                 {getPassTypeLabel(pass.passType || 'general')}
@@ -378,7 +380,7 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
                           </div>
                         </div>
                         <Button 
-                          onClick={() => handleMarkReturned(pass.id, student.name)}
+                          onClick={() => handleMarkReturned(pass.id, `${student.firstName} ${student.lastName}`)}
                           size="sm"
                           data-testid={`button-return-${pass.id}`}
                         >
@@ -413,11 +415,11 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
                   {availableStudents.map((student: any) => (
                     <div key={student.id} className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
                       <div className="flex items-center space-x-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${getAvatarColor(student.name)}`}>
-                          {getInitials(student.name)}
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${getAvatarColor(`${student.firstName} ${student.lastName}`)}`}>
+                          {getInitials(`${student.firstName} ${student.lastName}`)}
                         </div>
                         <div>
-                          <p className="font-medium">{student.name}</p>
+                          <p className="font-medium">{student.firstName} {student.lastName}</p>
                           {student.studentId && (
                             <p className="text-sm text-muted-foreground">ID: {student.studentId}</p>
                           )}
@@ -425,7 +427,7 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
                       </div>
                       <div className="flex items-center gap-2">
                         <Button 
-                          onClick={() => handleMarkOut(student.id, student.name, 'general')}
+                          onClick={() => handleMarkOut(student.id, `${student.firstName} ${student.lastName}`, 'general')}
                           size="sm"
                           variant="outline"
                           data-testid={`button-checkout-${student.id}`}
@@ -445,14 +447,14 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem 
-                              onClick={() => handleMarkOut(student.id, student.name, 'nurse')}
+                              onClick={() => handleMarkOut(student.id, `${student.firstName} ${student.lastName}`, 'nurse')}
                               className="flex items-center gap-2"
                             >
                               <Heart className="w-4 h-4 text-red-500" />
                               Nurse
                             </DropdownMenuItem>
                             <DropdownMenuItem 
-                              onClick={() => handleMarkOut(student.id, student.name, 'discipline')}
+                              onClick={() => handleMarkOut(student.id, `${student.firstName} ${student.lastName}`, 'discipline')}
                               className="flex items-center gap-2"
                             >
                               <AlertTriangle className="w-4 h-4 text-orange-500" />
@@ -494,7 +496,7 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
       <Dialog open={isCustomReasonDialogOpen} onOpenChange={setIsCustomReasonDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Custom Reason for {selectedStudentForCustom?.name}</DialogTitle>
+            <DialogTitle>Custom Reason for {selectedStudentForCustom?.firstName} {selectedStudentForCustom?.lastName}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-4">
             <div>
