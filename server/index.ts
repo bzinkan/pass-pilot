@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import bodyParser from "body-parser";
 import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
+import { registerV2Routes } from "./routes/register-v2";
 import { setupVite, serveStatic, log } from "./vite";
 import { ENV } from "./env";
 import "./passResetScheduler"; // Initialize the pass reset scheduler
@@ -9,17 +10,9 @@ import "./passResetScheduler"; // Initialize the pass reset scheduler
 const app = express();
 app.set('trust proxy', 1); // Trust Railway/Replit proxy for secure cookies
 
-// Stripe webhook FIRST — raw body required  
-app.post('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }), async (req, res) => {
-  // Import webhook handler dynamically to avoid circular dependencies
-  try {
-    const { stripeWebhook } = await import("./routes-billing");
-    return stripeWebhook(req, res);
-  } catch (error) {
-    console.error('Stripe webhook error:', error);
-    res.status(500).json({ error: 'Webhook handler not available' });
-  }
-});
+// V2 Stripe webhook FIRST — raw body required
+import { registerStripeWebhook } from "./stripe/webhook-v2";
+registerStripeWebhook(app);
 
 // Now regular parsers
 app.use(express.json());
@@ -58,6 +51,7 @@ app.use((req, res, next) => {
 
 (async () => {
   const server = await registerRoutes(app);
+  registerV2Routes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

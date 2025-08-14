@@ -3,6 +3,18 @@ import { pgTable, text, varchar, timestamp, integer, boolean, uuid, unique, deci
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// Registration tracking table (V2) - webhook-first provisioning
+export const registrations = pgTable("registrations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  status: text("status").notNull().default("PENDING"), // PENDING|ACTIVE|FAILED
+  adminEmail: text("admin_email").notNull(),
+  schoolName: text("school_name").notNull(),
+  plan: text("plan").notNull(), // TRIAL|BASIC|SMALL|MEDIUM|LARGE|UNLIMITED
+  stripeCheckoutSessionId: text("stripe_checkout_session_id").notNull().unique(),
+  stripeCustomerId: text("stripe_customer_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // Schools table - represents educational institutions
 export const schools = pgTable("schools", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -174,6 +186,11 @@ export type InsertPass = z.infer<typeof insertPassSchema>;
 
 export type Payment = typeof payments.$inferSelect;
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
+
+// Registration table schemas
+export const insertRegistrationSchema = createInsertSchema(registrations);
+export type Registration = typeof registrations.$inferSelect;
+export type InsertRegistration = z.infer<typeof insertRegistrationSchema>;
 
 // Admin users table (for platform administration)
 export const adminUsers = pgTable("admin_users", {

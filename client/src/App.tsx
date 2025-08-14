@@ -10,6 +10,8 @@ import { MainApp } from "@/components/main-app";
 import Home from "./pages/home";
 import Login from "./pages/login-new";
 import Register from "./pages/register";
+import RegisterV2 from "./pages/register-v2";
+import RegisterSuccess from "./pages/register-success";
 import ResetPassword from "./pages/reset-password";
 import Features from "./pages/features";
 import Guide from "./pages/guide";
@@ -38,6 +40,8 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
+      <Route path="/register-v2" component={RegisterV2} />
+      <Route path="/register/success" component={RegisterSuccess} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/features" component={Features} />
       <Route path="/guide" component={Guide} />

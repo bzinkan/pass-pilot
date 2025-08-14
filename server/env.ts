@@ -9,6 +9,12 @@ const EnvSchema = z.object({
   FIREBASE_PROJECT_ID: z.string().optional(),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   PORT: z.string().transform(Number).default("5000"),
+  PRICE_TRIAL: z.string().optional(),
+  PRICE_BASIC: z.string().optional(),
+  PRICE_SMALL: z.string().optional(),
+  PRICE_MEDIUM: z.string().optional(),
+  PRICE_LARGE: z.string().optional(),
+  PRICE_UNLIMITED: z.string().optional(),
 });
 
 export const ENV = EnvSchema.parse(process.env);
