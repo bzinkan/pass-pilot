@@ -649,7 +649,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Reset teacher password
+  // Reset teacher password (force them to set new password on next login)
   app.post('/api/admin/teachers/:teacherId/reset-password', requireAuth, async (req, res) => {
     try {
       const authReq = req as AuthenticatedRequest;
@@ -661,17 +661,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const { teacherId } = req.params;
-      const { password } = req.body;
-      
-      if (!password || password.length < 6) {
-        return res.status(400).json({ message: 'Password must be at least 6 characters' });
-      }
       
       // Get teacher to verify they belong to same school
       const teacher = await storage.getUser(teacherId);
       if (!teacher || teacher.schoolId !== validUser.schoolId) {
         return res.status(404).json({ message: 'Teacher not found' });
       }
+
+      // Reset password by clearing it and setting first login flag
+      await storage.updateUser(teacherId, {
+        password: '',
+        isFirstLogin: true
+      });
+
+      res.json({ success: true, message: 'Password reset successfully. Teacher will set new password on next login.' });
       
       // Hash new password and update
       const hashedPassword = await auth.hashPassword(password);
