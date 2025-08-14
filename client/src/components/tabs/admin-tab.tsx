@@ -30,10 +30,7 @@ export function AdminTab({ user }: AdminTabProps) {
   });
 
   const addGradeMutation = useMutation({
-    mutationFn: (data: { name: string }) => apiRequest('/api/grades', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+    mutationFn: (data: { name: string }) => apiRequest('POST', '/api/grades', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/grades'] });
       setNewGradeName('');
