@@ -657,6 +657,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Reports endpoints needed by ReportsTab
+  app.get('/api/passes', requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthenticatedRequest;
+      const { schoolId } = authReq.user;
+      
+      // Get all passes for the school with query filtering
+      const { dateStart, dateEnd, grade, teacherId, passType } = req.query;
+      
+      // For now, get all passes - in a real app you'd filter in storage layer
+      const allPasses = await storage.getPassesBySchool ? 
+        await storage.getPassesBySchool(schoolId) : 
+        await storage.getActivePassesBySchool(schoolId);
+      
+      // Apply filters (basic implementation)
+      let filteredPasses = allPasses;
+      
+      if (dateStart) {
+        const startDate = new Date(dateStart as string);
+        filteredPasses = filteredPasses.filter(pass => 
+          new Date(pass.checkoutTime) >= startDate
+        );
+      }
+      
+      if (dateEnd) {
+        const endDate = new Date(dateEnd as string);
+        filteredPasses = filteredPasses.filter(pass => 
+          new Date(pass.checkoutTime) <= endDate
+        );
+      }
+      
+      if (teacherId && teacherId !== 'all') {
+        filteredPasses = filteredPasses.filter(pass => pass.teacherId === teacherId);
+      }
+      
+      if (passType && passType !== 'all') {
+        filteredPasses = filteredPasses.filter(pass => 
+          (pass.passType || 'general') === passType
+        );
+      }
+      
+      res.json(filteredPasses);
+    } catch (error) {
+      console.error('Get passes error:', error);
+      res.status(500).json({ message: 'Failed to get passes' });
+    }
+  });
+
+  app.get('/api/grades', requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthenticatedRequest;
+      const { schoolId } = authReq.user;
+      const grades = await storage.getGradesBySchool(schoolId);
+      res.json(grades);
+    } catch (error) {
+      console.error('Get grades error:', error);
+      res.status(500).json({ message: 'Failed to get grades' });
+    }
+  });
+
+  app.get('/api/teachers', requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthenticatedRequest;
+      const { schoolId } = authReq.user;
+      const teachers = await storage.getUsersBySchool(schoolId);
+      const teachersWithoutPasswords = teachers.map(teacher => {
+        const { password: _, ...teacherData } = teacher;
+        return {
+          ...teacherData,
+          name: `${teacher.firstName} ${teacher.lastName}`.trim()
+        };
+      });
+      res.json(teachersWithoutPasswords);
+    } catch (error) {
+      console.error('Get teachers error:', error);
+      res.status(500).json({ message: 'Failed to get teachers' });
+    }
+  });
+
   // Teacher self-service profile update
   app.patch('/api/profile', requireAuth, async (req, res) => {
     try {
