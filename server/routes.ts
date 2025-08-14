@@ -8,6 +8,7 @@ import bcrypt from "bcryptjs";
 import { ENV } from "./env";
 import { validate } from "./validate";
 import { invariant, unwrap, assertValidUuid, assertNonEmpty } from "./safe";
+import { ok, err, sendOk, sendErr, catchAsync, ErrorResponses } from "./api-response";
 
 // Authentication utilities
 const auth = {
@@ -36,13 +37,13 @@ const requireAuth = (req: Request, res: Response, next: NextFunction) => {
   const authToken = req.headers.authorization?.replace('Bearer ', '') || req.cookies.pp_session;
   
   if (!authToken) {
-    return res.status(401).json({ message: 'Authentication required' });
+    return res.status(401).json(ErrorResponses.unauthorized());
   }
   
   const session = sessions.get(authToken);
   if (!session || session.expires < new Date()) {
     sessions.delete(authToken);
-    return res.status(401).json({ message: 'Session expired' });
+    return res.status(401).json(ErrorResponses.unauthorized('Session expired'));
   }
   
   (req as AuthenticatedRequest).user = { id: session.userId, schoolId: session.schoolId };
@@ -69,12 +70,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     plan: z.enum(["TRIAL","BASIC","SMALL","MEDIUM","LARGE","UNLIMITED"]),
   });
 
-  app.post("/api/register-simple", validate({ body: RegisterBody }), async (req, res) => {
+  app.post("/api/register-simple", validate({ body: RegisterBody }), catchAsync(async (req, res) => {
     const { schoolName, adminEmail, plan } = (req as any).valid.body;
-    // This demonstrates the exact pattern you requested
     console.log('Validated data:', { schoolName, adminEmail, plan });
-    res.json({ ok: true, received: { schoolName, adminEmail, plan } });
-  });
+    return sendOk(res, { received: { schoolName, adminEmail, plan } });
+  }));
 
   // Auth endpoints
   app.post('/api/auth/register', validate({ body: registerSchoolSchema }), async (req: any, res) => {
@@ -217,10 +217,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validUser = unwrap(user, 'User not found');
       
       const { password: _, ...userWithoutPassword } = validUser;
-      res.json({ ok: true, user: userWithoutPassword });
+      return sendOk(res, { user: userWithoutPassword });
     } catch (error) {
       console.error('Get user error:', error);
-      res.status(500).json({ message: 'Failed to get user' });
+      return sendErr(res, 'Failed to get user', 500, 'USER_FETCH_ERROR');
     }
   });
 

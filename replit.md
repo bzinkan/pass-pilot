@@ -100,6 +100,16 @@ Complete end-to-end testing has validated that the school registration system fu
     - Fail-fast pattern prevents data corruption and provides clear error context
     - Guards applied at application "edges" where assumptions must hold
 
+11. **Safer API Responses (Consistent Shape)** ✅
+    - Comprehensive API response helper library (`server/api-response.ts`)
+    - Consistent response types: `ApiOk<T>` for success, `ApiErr` for errors
+    - Helper functions: `ok()`, `err()`, `sendOk()`, `sendErr()`, `catchAsync()`
+    - All responses include timestamps and consistent field structure
+    - Frontend never sees "missing fields" or inconsistent response shapes
+    - Enhanced error responses with error codes and optional details
+    - Common error response patterns for typical scenarios
+    - Applied to registration, validation, and authentication endpoints
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.

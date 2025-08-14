@@ -8,6 +8,7 @@ import { priceIdForPlan, type Plan } from "../utils/priceId";
 import { ENV } from "../env";
 import { eq } from "drizzle-orm";
 import { validate } from "../validate";
+import { ok, err, sendOk, sendErr, catchAsync } from "../api-response";
 
 const registrationBodySchema = z.object({
   schoolName: z.string().min(2, "School name must be at least 2 characters"),
@@ -62,10 +63,10 @@ export function registerV2Routes(app: Express) {
         stripeCheckoutSessionId: session.id,
       }).onConflictDoNothing();
 
-      res.json({ ok: true, url: session.url });
+      return sendOk(res, { url: session.url, sessionId: session.id });
     } catch (error: any) {
       console.error('Registration init error:', error);
-      return res.status(500).json({ ok: false, error: error.message });
+      return sendErr(res, 'Registration initialization failed', 500, 'REGISTRATION_ERROR', error.message);
     }
   });
 
@@ -78,10 +79,18 @@ export function registerV2Routes(app: Express) {
       const { session_id: sessionId } = req.valid.query;
       
       const [row] = await db.select().from(registrations).where(eq(registrations.stripeCheckoutSessionId, sessionId)).limit(1);
-      res.json({ ok: true, status: row?.status ?? "PENDING" });
+      return sendOk(res, { 
+        status: row?.status ?? "PENDING",
+        sessionId,
+        registration: row ? {
+          schoolName: row.schoolName,
+          adminEmail: row.adminEmail,
+          plan: row.plan
+        } : null
+      });
     } catch (error: any) {
       console.error('Registration status error:', error);
-      return res.status(500).json({ ok: false, error: error.message });
+      return sendErr(res, 'Failed to get registration status', 500, 'STATUS_ERROR', error.message);
     }
   });
 }
