@@ -245,12 +245,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/grades', requireAuth, validate({ body: insertGradeSchema }), async (req: any, res) => {
     try {
-      const data = req.valid.body;
+      const authReq = req as AuthenticatedRequest;
+      const { schoolId } = authReq.user;
+      
+      const data = {
+        ...req.valid.body,
+        schoolId: schoolId  // Ensure schoolId from auth user
+      };
+      
       const grade = await storage.createGrade(data);
       res.json(grade);
     } catch (error: any) {
       console.error('Create grade error:', error);
       res.status(400).json({ message: error.message || 'Failed to create grade' });
+    }
+  });
+
+  app.put('/api/grades/:id', requireAuth, validate({ body: insertGradeSchema }), async (req: any, res) => {
+    try {
+      const data = req.valid.body;
+      const grade = await storage.updateGrade(req.params.id, data);
+      res.json(grade);
+    } catch (error: any) {
+      console.error('Update grade error:', error);
+      res.status(400).json({ message: error.message || 'Failed to update grade' });
+    }
+  });
+
+  app.delete('/api/grades/:id', requireAuth, async (req, res) => {
+    try {
+      await storage.deleteGrade(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Delete grade error:', error);
+      res.status(400).json({ message: error.message || 'Failed to delete grade' });
     }
   });
 
@@ -265,14 +293,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Students endpoint without schoolId parameter (uses auth user's school)
+  app.get('/api/students', requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthenticatedRequest;
+      const { schoolId } = authReq.user;
+      const { grade } = req.query;
+      
+      const students = await storage.getStudentsBySchool(schoolId, grade as string);
+      res.json(students);
+    } catch (error) {
+      console.error('Get students error:', error);
+      res.status(500).json({ message: 'Failed to get students' });
+    }
+  });
+
   app.post('/api/students', requireAuth, validate({ body: insertStudentSchema }), async (req: any, res) => {
     try {
-      const data = req.valid.body;
+      const authReq = req as AuthenticatedRequest;
+      const { schoolId } = authReq.user;
+      
+      const data = {
+        ...req.valid.body,
+        schoolId: schoolId  // Ensure schoolId from auth user
+      };
+      
       const student = await storage.createStudent(data);
       res.json(student);
     } catch (error: any) {
       console.error('Create student error:', error);
       res.status(400).json({ message: error.message || 'Failed to create student' });
+    }
+  });
+
+  app.put('/api/students/:id', requireAuth, validate({ body: insertStudentSchema }), async (req: any, res) => {
+    try {
+      const data = req.valid.body;
+      const student = await storage.updateStudent(req.params.id, data);
+      res.json(student);
+    } catch (error: any) {
+      console.error('Update student error:', error);
+      res.status(400).json({ message: error.message || 'Failed to update student' });
+    }
+  });
+
+  app.delete('/api/students/:id', requireAuth, async (req, res) => {
+    try {
+      await storage.deleteStudent(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Delete student error:', error);
+      res.status(400).json({ message: error.message || 'Failed to delete student' });
     }
   });
 
