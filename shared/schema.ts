@@ -198,11 +198,12 @@ export const loginSchema = z.object({
 });
 
 export const registerSchoolSchema = z.object({
-  schoolName: z.string().min(1),
+  schoolName: z.string().min(2),
   adminFirstName: z.string().min(1),
   adminLastName: z.string().min(1),
   adminEmail: z.string().email(),
   adminPassword: z.string().min(8),
+  plan: z.enum(["TRIAL","BASIC","SMALL","MEDIUM","LARGE","UNLIMITED"]).default("TRIAL"),
 });
 
 export const passwordResetSchema = z.object({

@@ -62,17 +62,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Example route demonstrating the validator pattern
+  const RegisterBody = z.object({
+    schoolName: z.string().min(2),
+    adminEmail: z.string().email(),
+    plan: z.enum(["TRIAL","BASIC","SMALL","MEDIUM","LARGE","UNLIMITED"]),
+  });
+
+  app.post("/api/register-simple", validate({ body: RegisterBody }), async (req, res) => {
+    const { schoolName, adminEmail, plan } = (req as any).valid.body;
+    // This demonstrates the exact pattern you requested
+    console.log('Validated data:', { schoolName, adminEmail, plan });
+    res.json({ ok: true, received: { schoolName, adminEmail, plan } });
+  });
+
   // Auth endpoints
   app.post('/api/auth/register', validate({ body: registerSchoolSchema }), async (req: any, res) => {
     try {
-      const data = req.valid.body;
+      const { schoolName, adminEmail, adminFirstName, adminLastName, adminPassword, plan } = req.valid.body;
       
       // Create school first
       const schoolData = {
-        name: data.schoolName,
-        slug: data.schoolName.toLowerCase().replace(/\s+/g, '-'),
+        name: schoolName,
+        slug: schoolName.toLowerCase().replace(/\s+/g, '-'),
         status: 'active',
-        plan: 'free_trial',
+        plan: plan.toLowerCase(),
         trialStartDate: new Date(),
         trialEndDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 days
       };
@@ -80,19 +94,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const school = await storage.createSchool(schoolData);
       
       // Create admin user
-      const hashedPassword = await auth.hashPassword(data.adminPassword);
+      const hashedPassword = await auth.hashPassword(adminPassword);
       const userData = {
         schoolId: school.id,
-        email: data.adminEmail,
+        email: adminEmail,
         password: hashedPassword,
-        firstName: data.adminFirstName,
-        lastName: data.adminLastName,
+        firstName: adminFirstName,
+        lastName: adminLastName,
         isAdmin: true,
       };
       
       const user = await storage.createUser(userData);
       
-      res.json({ success: true, message: 'School and admin account created successfully' });
+      res.json({ ok: true, school: { id: school.id, name: school.name }, user: { id: user.id, email: user.email } });
     } catch (error: any) {
       console.error('Registration error:', error);
       res.status(400).json({ message: error.message || 'Registration failed' });

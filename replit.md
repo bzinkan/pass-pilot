@@ -23,10 +23,12 @@ The frontend uses a component-based architecture with separate views for teacher
 - **Framework**: Express.js with TypeScript
 - **Development**: Hot module replacement in development with production-ready build process
 - **API Design**: RESTful endpoints for authentication, student management, and pass operations
-- **Error Handling**: Centralized error handling middleware with proper HTTP status codes
+- **Validation**: Zod-based request validation middleware for body, query, and params
+- **Error Handling**: Global error handler with comprehensive validation feedback and error tracking
+- **Type Safety**: Null guard utilities and environment variable validation at startup
 - **Logging**: Request/response logging for API endpoints with duration tracking
 
-The backend follows a modular structure with separate route handlers and storage abstraction layer that currently uses in-memory storage but can be easily swapped for database persistence.
+The backend follows a modular structure with enterprise-level validation and error handling. All endpoints use type-safe validation middleware that provides detailed error messages for invalid requests.
 
 ### Data Storage
 - **Database**: PostgreSQL with Neon serverless database
@@ -40,8 +42,11 @@ The database schema supports user roles (teacher/student), pass lifecycle manage
 - **Session Management**: Simple credential-based authentication 
 - **Role-based Access**: Separate interfaces and permissions for teachers vs students
 - **Security**: Basic password authentication with session handling
+- **Input Validation**: Comprehensive Zod schema validation for all API endpoints
+- **Error Handling**: Global error handler with detailed validation feedback
+- **Type Safety**: Null guard utilities (invariant/unwrap) for safe data access
 
-The system distinguishes between teacher and student roles, providing different capabilities and interfaces based on user type.
+The system distinguishes between teacher and student roles, providing different capabilities and interfaces based on user type. All endpoints validate incoming data using Zod schemas before processing.
 
 ## External Dependencies
 
