@@ -3,10 +3,8 @@ import App from "./App";
 import "./index.css";
 import ErrorBoundary from "./ErrorBoundary";
 
-// Import robust service worker registration
-import { registerSW } from './sw-register';
-
-// Register service worker with safe update flow
+// Robust service worker registration
+import { registerSW } from "./sw-register";
 registerSW();
 
 createRoot(document.getElementById("root")!).render(

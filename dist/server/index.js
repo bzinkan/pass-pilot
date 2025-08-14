@@ -4302,13 +4302,29 @@ async function setupVite(app2) {
 function serveStatic(app2) {
   const clientDir = path.resolve(process.cwd(), "dist", "client");
   if (!fs.existsSync(clientDir)) {
-    throw new Error(
-      `Could not find the client build directory: ${clientDir}. Run "npm run build" first.`
-    );
+    console.warn(`[vite] client build not found at ${clientDir}; skipping static serve`);
+    return;
   }
-  app2.use(express.static(clientDir));
-  app2.get("*", (_req, res) => {
-    res.sendFile(path.join(clientDir, "index.html"));
+  app2.use(
+    express.static(clientDir, {
+      index: false,
+      setHeaders(res, filePath) {
+        if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        }
+      }
+    })
+  );
+  app2.get("*", (req, res, next) => {
+    if (req.method !== "GET") return next();
+    if (req.path.startsWith("/api") || req.path === "/healthz" || req.path === "/api/healthz") {
+      return next();
+    }
+    const accept = req.headers.accept || "";
+    if (typeof accept === "string" && accept.includes("text/html")) {
+      return res.sendFile(path.join(clientDir, "index.html"));
+    }
+    return next();
   });
 }
 
