@@ -157,6 +157,8 @@ Complete end-to-end testing has validated that the school registration system fu
     - Enhanced environment variable validation for Stripe configuration
     - Unique slug generation prevents duplicate school name conflicts (bayside -> bayside-2 -> bayside-3)
     - Fixed "duplicate key value violates unique constraint" errors for school registration
+    - Fixed database schema mismatch by adding missing columns (role, enable_notifications, auto_return, pass_timeout)
+    - Both legacy and V2 registration systems now work correctly with proper database migrations
 
 ## User Preferences
 
