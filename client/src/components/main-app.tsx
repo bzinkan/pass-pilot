@@ -109,7 +109,7 @@ export function MainApp({ user, onLogout }: MainAppProps) {
             if (currentGrade === gradeName) {
               // Set to the first remaining grade or null
               const remainingGrades = Array.from(newSelectedGrades);
-              setCurrentGrade(remainingGrades.length > 0 ? remainingGrades[0] : null);
+              setCurrentGrade(remainingGrades.length > 0 ? remainingGrades[0]! : null);
             }
             setSelectedGrades(newSelectedGrades);
           }}

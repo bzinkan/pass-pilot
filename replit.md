@@ -12,12 +12,13 @@ Preferred communication style: Simple, everyday language.
 
 ### Frontend Architecture
 - **Framework**: React with TypeScript for type safety
+- **TypeScript**: Strict mode enabled with enhanced null safety (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitReturns`)
 - **Styling**: Tailwind CSS with shadcn/ui component library for consistent design
 - **State Management**: TanStack React Query for server state management and caching
 - **Routing**: Wouter for lightweight client-side routing
 - **Build Tool**: Vite for fast development and optimized production builds
 
-The frontend uses a component-based architecture with separate views for teachers and students. The application features real-time updates through periodic polling and provides a responsive design that works across different screen sizes.
+The frontend uses a component-based architecture with separate views for teachers and students. TypeScript strict mode ensures compile-time null safety and prevents undefined value access. The application features real-time updates through periodic polling and provides a responsive design that works across different screen sizes.
 
 ### Backend Architecture
 - **Framework**: Express.js with TypeScript
