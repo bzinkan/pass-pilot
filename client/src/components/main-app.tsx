@@ -10,7 +10,7 @@ import { RosterTab } from "./tabs/roster-tab";
 import { UploadTab } from "./tabs/upload-tab";
 import { ReportsTab } from "./tabs/reports-tab";
 import { ProfileTab } from "./tabs/profile-tab";
-import { SetupTab } from "./tabs/setup-tab";
+import { AdminTab } from "./tabs/admin-tab";
 import TrialStatusBanner from "./trial-status-banner";
 
 import { useToast } from "@/hooks/use-toast";
@@ -131,7 +131,7 @@ export function MainApp({ user, onLogout }: MainAppProps) {
       case 'reports':
         return <ReportsTab user={user} />;
       case 'admin':
-        return <SetupTab user={user} />;
+        return <AdminTab user={user} />;
       case 'profile':
         return <ProfileTab user={user} />;
       default:
