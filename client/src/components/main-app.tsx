@@ -10,7 +10,6 @@ import { RosterTab } from "./tabs/roster-tab";
 import { UploadTab } from "./tabs/upload-tab";
 import { ReportsTab } from "./tabs/reports-tab";
 import { ProfileTab } from "./tabs/profile-tab";
-import { BillingTab } from "./tabs/billing-tab";
 import { SetupTab } from "./tabs/setup-tab";
 import TrialStatusBanner from "./trial-status-banner";
 
@@ -86,7 +85,6 @@ export function MainApp({ user, onLogout }: MainAppProps) {
     { id: 'upload', label: 'Upload', icon: 'fas fa-cloud-upload-alt' },
     { id: 'reports', label: 'Reports', icon: 'fas fa-chart-bar' },
     { id: 'admin', label: 'Admin', icon: 'fas fa-cog' },
-    { id: 'billing', label: 'Billing', icon: 'fas fa-credit-card' },
     { id: 'profile', label: 'Profile', icon: 'fas fa-user' },
   ];
 
@@ -133,11 +131,9 @@ export function MainApp({ user, onLogout }: MainAppProps) {
       case 'reports':
         return <ReportsTab user={user} />;
       case 'admin':
-        return user.isAdmin ? <SetupTab user={user} /> : null;
+        return <SetupTab user={user} />;
       case 'profile':
         return <ProfileTab user={user} />;
-      case 'billing':
-        return user.isAdmin ? <BillingTab user={user} /> : null;
       default:
         return <PassesTab user={user} />;
     }
