@@ -87,11 +87,13 @@ export default function Login() {
       }
       
       // Successful first login - refresh auth state and redirect
-      await refreshUser();
       toast({
         title: "Welcome!",
         description: "Password set successfully. Welcome to PassPilot!",
       });
+      
+      // Refresh auth state and redirect
+      await refreshUser();
       setLocation('/app');
       
     } catch (error: any) {
@@ -144,11 +146,13 @@ export default function Login() {
       }
       
       // Successful login - refresh auth state and redirect
-      await refreshUser();
       toast({
         title: "Welcome back!",
         description: "You have successfully logged in.",
       });
+      
+      // Refresh auth state and redirect
+      await refreshUser();
       setLocation('/app');
       
     } catch (error: any) {
@@ -185,11 +189,13 @@ export default function Login() {
       }
       
       // Successful login - refresh auth state and redirect
-      await refreshUser();
       toast({
         title: "Welcome back!",
         description: "You have successfully logged in.",
       });
+      
+      // Refresh auth state and redirect
+      await refreshUser();
       setLocation('/app');
       
     } catch (error: any) {

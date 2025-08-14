@@ -112,9 +112,13 @@ export function useAuth(): AuthState {
 
   const refreshUser = async () => {
     try {
-      const response = await apiRequest('GET', '/api/auth/me');
-      const userData = await response.json();
+      const response = await fetch('/api/auth/me', {
+        method: 'GET',
+        credentials: 'include',
+      });
+      
       if (response.ok) {
+        const userData = await response.json();
         setUser(userData);
       } else {
         setUser(null);
