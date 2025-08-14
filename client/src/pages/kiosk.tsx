@@ -23,19 +23,31 @@ interface KioskSession {
 
 interface Student {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   grade: string;
+  gradeId?: string;
   studentId?: string;
 }
 
 interface Pass {
   id: string;
   studentId: string;
-  studentName: string;
-  checkoutTime: string;
-  passType: "general" | "nurse" | "discipline";
-  customReason?: string;
-  status: "out" | "returned";
+  student?: {
+    firstName: string;
+    lastName: string;
+    grade?: string;
+  };
+  teacher?: {
+    firstName: string;
+    lastName: string;
+  };
+  issuedAt: string;
+  returnedAt?: string;
+  destination: string;
+  customDestination?: string;
+  duration: number;
+  status: "active" | "returned" | "expired";
 }
 
 export default function Kiosk() {
@@ -114,9 +126,10 @@ export default function Kiosk() {
 
   const loadActivePasses = async (teacherId: string) => {
     try {
-      // Use apiRequest for consistent authentication
-      const response = await apiRequest('GET', `/api/passes/active?teacherId=${teacherId}`, undefined);
+      // Use apiRequest for consistent authentication - use same endpoint as MyClass tab
+      const response = await apiRequest('GET', '/api/passes/active', undefined);
       const data = await response.json();
+      console.log('Loaded active passes in kiosk:', data);
       setActivePasses(data);
     } catch (error) {
       console.error('Failed to load active passes:', error);
@@ -176,7 +189,7 @@ export default function Kiosk() {
   const handleStudentClick = (student: Student) => {
     if (!session) return;
     
-    const existingPass = activePasses.find(pass => pass.studentId === student.id && pass.status === 'out');
+    const existingPass = activePasses.find(pass => pass.studentId === student.id && pass.status === 'active');
     
     if (existingPass) {
       // Student is out - mark as returned directly
@@ -195,7 +208,7 @@ export default function Kiosk() {
     if (!selectedStudent || !session) return;
     
     try {
-      console.log('Creating pass for student:', selectedStudent.name);
+      console.log('Creating pass for student:', `${selectedStudent.firstName} ${selectedStudent.lastName}`);
       
       // Determine the reason based on pass type
       let reason = customReason;
@@ -223,8 +236,8 @@ export default function Kiosk() {
       await loadActivePasses(session.teacherId);
       
       toast({
-        title: "Pass created",
-        description: `${selectedStudent.name} has been marked as out for ${reason}.`,
+        title: "Pass created", 
+        description: `${selectedStudent.firstName} ${selectedStudent.lastName} has been marked as out for ${reason}.`,
       });
 
       // Close dialog and reset
@@ -246,7 +259,7 @@ export default function Kiosk() {
   const returnStudent = async (passId: string) => {
     try {
       const pass = activePasses.find(p => p.id === passId);
-      const studentName = pass?.studentName || 'Student';
+      const studentName = pass?.student ? `${pass.student.firstName} ${pass.student.lastName}` : 'Student';
 
       // Use apiRequest for consistency with MyClass tab
       await apiRequest('PUT', `/api/passes/${passId}/return`, {});
@@ -323,9 +336,14 @@ export default function Kiosk() {
     }
   };
 
-  // Filter students by current grade only (no search in kiosk mode)
+  // Filter students by current grade using gradeId lookup (same as MyClass logic)
   const filteredStudents = students.filter(student => {
-    return !currentGrade || student.grade === currentGrade;
+    if (!currentGrade) return true;
+    // Find the grade object for the current grade name
+    const gradeObj = grades.find(g => g.name === currentGrade);
+    if (!gradeObj) return false;
+    // Match student's gradeId to the grade object's id
+    return student.gradeId === gradeObj.id;
   });
 
   // Set initial grade if none selected and grades available
@@ -444,7 +462,7 @@ export default function Kiosk() {
                 >
                   {grade.name}
                   <span className="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-black/10">
-                    {students.filter(s => s.grade === grade.name).length}
+                    {students.filter(s => s.gradeId === grade.id).length}
                   </span>
                 </Button>
             ))
@@ -476,7 +494,7 @@ export default function Kiosk() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Currently Out</p>
-                  <p className="text-2xl font-bold text-red-600">{activePasses.filter(pass => pass.status === 'out' && filteredStudents.some(s => s.id === pass.studentId)).length}</p>
+                  <p className="text-2xl font-bold text-red-600">{activePasses.filter(pass => pass.status === 'active' && filteredStudents.some(s => s.id === pass.studentId)).length}</p>
                 </div>
               </div>
             </CardContent>
@@ -491,7 +509,7 @@ export default function Kiosk() {
                 <div>
                   <p className="text-sm text-gray-600">Available</p>
                   <p className="text-2xl font-bold text-green-600">
-                    {filteredStudents.length - activePasses.filter(pass => pass.status === 'out' && filteredStudents.some(s => s.id === pass.studentId)).length}
+                    {filteredStudents.length - activePasses.filter(pass => pass.status === 'active' && filteredStudents.some(s => s.id === pass.studentId)).length}
                   </p>
                 </div>
               </div>
@@ -508,17 +526,20 @@ export default function Kiosk() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {activePasses.filter(pass => pass.status === 'out' && filteredStudents.some(s => s.id === pass.studentId)).length === 0 ? (
+            {activePasses.filter(pass => pass.status === 'active' && filteredStudents.some(s => s.id === pass.studentId)).length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 No students are currently out of class
               </div>
             ) : (
               <div className="space-y-3">
                 {activePasses
-                  .filter(pass => pass.status === 'out' && filteredStudents.some(s => s.id === pass.studentId))
+                  .filter(pass => pass.status === 'active' && filteredStudents.some(s => s.id === pass.studentId))
                   .map((pass) => {
-                    const student = filteredStudents.find(s => s.id === pass.studentId);
+                    const student = filteredStudents.find(s => s.id === pass.studentId) || pass.student;
                     if (!student) return null;
+                    
+                    const studentName = student.firstName ? `${student.firstName} ${student.lastName}` : 'Unknown Student';
+                    const initials = student.firstName ? `${student.firstName.charAt(0)}${student.lastName?.charAt(0) || ''}` : 'U';
                     
                     return (
                       <div
@@ -528,18 +549,17 @@ export default function Kiosk() {
                         <div className="flex items-center space-x-3">
                           <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
                             <span className="text-sm font-medium text-red-600">
-                              {student.name.charAt(0)}
+                              {initials}
                             </span>
                           </div>
                           <div>
-                            <div className="font-medium text-gray-900">{student.name}</div>
+                            <div className="font-medium text-gray-900">{studentName}</div>
                             <div className="text-sm text-gray-600">
-                              {pass.passType === "general" ? "General" : 
-                               pass.passType === "nurse" ? "Nurse" : "Discipline"}
-                              {pass.customReason && ` • ${pass.customReason}`}
+                              Out for {pass.destination || 'General'}
+                              {pass.customDestination && ` • ${pass.customDestination}`}
                             </div>
                             <div className="text-sm text-gray-500">
-                              Out for {Math.floor((currentTime - new Date(pass.checkoutTime).getTime()) / 60000)} min • Since {new Date(pass.checkoutTime).toLocaleTimeString()}
+                              Out for {Math.floor((currentTime - new Date(pass.issuedAt).getTime()) / 60000)} min • Since {new Date(pass.issuedAt).toLocaleTimeString()}
                             </div>
                           </div>
                         </div>
@@ -568,44 +588,49 @@ export default function Kiosk() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {filteredStudents.filter(student => !activePasses.some(pass => pass.studentId === student.id && pass.status === 'out')).length === 0 ? (
+            {filteredStudents.filter(student => !activePasses.some(pass => pass.studentId === student.id && pass.status === 'active')).length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 All students are currently out of class
               </div>
             ) : (
               <div className="space-y-2">
                 {filteredStudents
-                  .filter(student => !activePasses.some(pass => pass.studentId === student.id && pass.status === 'out'))
-                  .map((student) => (
-                    <div
-                      key={student.id}
-                      className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
-                      data-testid={`student-card-${student.id}`}
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                          <span className="text-sm font-medium text-green-600">
-                            {student.name.charAt(0)}
-                          </span>
+                  .filter(student => !activePasses.some(pass => pass.studentId === student.id && pass.status === 'active'))
+                  .map((student) => {
+                    const studentName = `${student.firstName} ${student.lastName}`;
+                    const initials = `${student.firstName.charAt(0)}${student.lastName?.charAt(0) || ''}`;
+                    
+                    return (
+                      <div
+                        key={student.id}
+                        className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+                        data-testid={`student-card-${student.id}`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                            <span className="text-sm font-medium text-green-600">
+                              {initials}
+                            </span>
+                          </div>
+                          <div>
+                            <div className="font-medium text-gray-900">{studentName}</div>
+                            <div className="text-sm text-gray-500">{student.grade} • {student.studentId}</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="font-medium text-gray-900">{student.name}</div>
-                          <div className="text-sm text-gray-500">{student.grade} • {student.studentId}</div>
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-green-300 text-green-700 hover:bg-green-50"
+                            onClick={() => handleStudentClick(student)}
+                            data-testid={`button-mark-out-${student.id}`}
+                          >
+                            Mark Out
+                          </Button>
                         </div>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="border-green-300 text-green-700 hover:bg-green-50"
-                          onClick={() => handleStudentClick(student)}
-                          data-testid={`button-mark-out-${student.id}`}
-                        >
-                          Mark Out
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
               </div>
             )}
           </CardContent>
@@ -621,7 +646,7 @@ export default function Kiosk() {
           <div className="space-y-4 py-4">
             {selectedStudent && (
               <div className="text-sm text-gray-600">
-                Creating pass for: <span className="font-medium">{selectedStudent.name}</span>
+                Creating pass for: <span className="font-medium">{selectedStudent.firstName} {selectedStudent.lastName}</span>
               </div>
             )}
             
