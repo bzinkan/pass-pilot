@@ -1,0 +1,170 @@
+# PassPilot — Post‑Registration Auto‑Login (Uses Same Session as Normal Login)
+
+## 1) Session Helper (Shared)
+
+```ts
+// auth/session.ts
+import type { Response } from 'express';
+import jwt from 'jsonwebtoken';
+
+type SessionPayload = {
+  userId: string;
+  schoolId: string;
+  role: 'ADMIN' | 'TEACHER' | 'STAFF' | 'STUDENT';
+};
+
+const COOKIE_NAME = 'pp_session';
+
+export function setUserSession(res: Response, payload: SessionPayload) {
+  const token = jwt.sign(payload, process.env.SESSION_SECRET as string, {
+    expiresIn: '7d',
+    audience: 'passpilot',
+    issuer: 'passpilot',
+  });
+
+  res.cookie(COOKIE_NAME, token, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+}
+
+export function clearUserSession(res: Response) {
+  res.clearCookie(COOKIE_NAME, { httpOnly: true, sameSite: 'strict', secure: process.env.NODE_ENV === 'production' });
+}
+```
+
+**Auth middleware:**
+
+```ts
+// auth/requireUser.ts
+import type { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+
+export function requireUser(req: Request, res: Response, next: NextFunction) {
+  const token = req.cookies?.pp_session;
+  if (!token) return res.status(401).json({ error: 'unauthorized' });
+
+  try {
+    const payload = jwt.verify(token, process.env.SESSION_SECRET as string, {
+      audience: 'passpilot',
+      issuer: 'passpilot',
+    }) as any;
+    // @ts-ignore
+    req.user = payload;
+    next();
+  } catch {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+}
+```
+
+---
+
+## 2) Normal Login Route (Reuses Helper)
+
+```ts
+// server/login.ts
+import express from 'express';
+import { setUserSession } from '../auth/session';
+import { db } from '../db';
+import { users } from '../db/schema/users';
+import { eq } from 'drizzle-orm';
+
+const router = express.Router();
+
+router.post('/login', async (req, res) => {
+  const { email, password } = req.body || {};
+  // TODO: validate password with hash compare
+  const [u] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  if (!u) return res.status(401).json({ error: 'bad_credentials' });
+
+  setUserSession(res, { userId: u.id, schoolId: u.schoolId, role: u.role });
+  return res.json({ ok: true });
+});
+
+export default router;
+```
+
+---
+
+## 3) Stripe/Registration Success Route (Auto‑Login)
+
+```ts
+// server/success.ts
+import express from 'express';
+import Stripe from 'stripe';
+import { db } from '../db';
+import { schools } from '../db/schema/schools';
+import { users } from '../db/schema/users';
+import { eq } from 'drizzle-orm';
+import { setUserSession } from '../auth/session';
+
+const router = express.Router();
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, { apiVersion: '2024-06-20' });
+
+router.get('/checkout/success', async (req, res) => {
+  try {
+    const sessionId = String(req.query.session_id || '');
+    if (!sessionId) return res.status(400).send('Missing session_id');
+
+    const checkout = await stripe.checkout.sessions.retrieve(sessionId, { expand: ['subscription', 'customer'] });
+
+    const schoolId = checkout.metadata?.school_id || crypto.randomUUID();
+    const schoolName = checkout.metadata?.school_name || 'New School';
+    const adminEmail = checkout.customer_email || checkout.metadata?.admin_email;
+
+    const [existing] = await db.select().from(schools).where(eq(schools.id, schoolId)).limit(1);
+    if (!existing) {
+      await db.insert(schools).values({
+        id: schoolId,
+        name: schoolName,
+        stripeSubId: (checkout.subscription as any)?.id || null,
+        createdAt: new Date(),
+      });
+    }
+
+    let [admin] = await db.select().from(users).where(eq(users.email, adminEmail as string)).limit(1);
+    if (!admin) {
+      const inserted = await db.insert(users).values({
+        schoolId,
+        email: adminEmail as string,
+        role: 'ADMIN',
+      }).returning();
+      admin = inserted[0];
+    }
+
+    setUserSession(res, { userId: admin.id, schoolId, role: 'ADMIN' });
+
+    return res.redirect('/app');
+  } catch (e) {
+    console.error('Success route failed:', e);
+    return res.redirect('/login?error=provision_failed');
+  }
+});
+
+export default router;
+```
+
+---
+
+## 4) Mount Routes
+
+```ts
+import cookieParser from 'cookie-parser';
+import loginRouter from './server/login';
+import successRouter from './server/success';
+
+app.use(cookieParser());
+app.use(express.json());
+app.use('/api', loginRouter);
+app.use('/api', successRouter);
+```
+
+---
+
+✅ With this setup:
+
+* Normal login **and** post‑registration success use the same `pp_session` cookie.
+* Users skip the duplicate login screen and land directly in `/app` after registration or payment.

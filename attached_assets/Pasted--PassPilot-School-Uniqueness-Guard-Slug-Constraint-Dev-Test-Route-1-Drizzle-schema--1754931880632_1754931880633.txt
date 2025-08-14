@@ -1,0 +1,92 @@
+# PassPilot — School Uniqueness Guard (Slug + Constraint) + Dev Test Route
+
+## 1) Drizzle schema + unique index (unchanged from before)
+
+*(See previous version for full schema and migration details)*
+
+---
+
+## 2) Dev-only test route for duplicate-school guard
+
+```ts
+// routes/__test__/createSchool.ts
+import { Router } from 'express';
+import { db } from '../../db';
+import { schools } from '../../db/schema/schools';
+import { eq } from 'drizzle-orm';
+
+function normalizeSlug(name: string) {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+export const testRouter = Router();
+
+testRouter.post('/__test__/createSchool', async (req, res) => {
+  if (process.env.NODE_ENV === 'production') return res.status(404).end();
+
+  const { name } = req.body || {};
+  if (!name) return res.status(400).json({ error: 'Missing name' });
+
+  const slug = normalizeSlug(name);
+  const existing = await db.select({ id: schools.id }).from(schools).where(eq(schools.slug, slug));
+  if (existing.length > 0) {
+    return res.status(409).json({ error: 'School already exists' });
+  }
+  const [row] = await db.insert(schools).values({ name, slug, plan: 'TRIAL' }).returning({ id: schools.id });
+  return res.status(201).json({ id: row.id, slug });
+});
+```
+
+Mount in your main server file:
+
+```ts
+if (process.env.NODE_ENV !== 'production') {
+  app.use(express.json());
+  app.use(testRouter);
+}
+```
+
+---
+
+## 3) PreDeploy.js additions for duplicate-school guard check
+
+Append inside your `preDeploy.js` checks list:
+
+```js
+// Schema: slug column + unique index
+results.push(await step('schools.slug exists + unique index', async () => {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  const col = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_name='schools' AND column_name='slug'`);
+  if (col.rowCount === 0) throw new Error('schools.slug missing');
+  const idx = await client.query(`SELECT 1 FROM pg_indexes WHERE indexname='schools_slug_uq'`);
+  if (idx.rowCount === 0) throw new Error('schools_slug_uq missing');
+  await client.end();
+}));
+
+// Live duplicate name guard test (dev/test only)
+results.push(await step('Duplicate school guard live check', async () => {
+  if (!BASE) { console.log(`${WARN} PREDEPLOY_BASE_URL not set, skipping.`); return; }
+  const testName = `PreDeploy School ${Date.now()}`;
+  const first = await fetch(`${BASE}/__test__/createSchool`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: testName }),
+  });
+  if (first.status !== 201) throw new Error(`Expected 201 on first create, got ${first.status}`);
+  const second = await fetch(`${BASE}/__test__/createSchool`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: testName }),
+  });
+  if (second.status !== 409) throw new Error(`Expected 409 on duplicate create, got ${second.status}`);
+}));
+```
+
+---
+
+## 4) Result
+
+* The dev test route lets `preDeploy.js` confirm the duplicate-school guard actually blocks duplicates.
+* In **production**, the route is disabled (404) so no one can abuse it.
+* The schema + unique index ensure the DB itself prevents duplicates even if the guard logic is bypassed.

@@ -1,0 +1,494 @@
+// =============================================
+// PassPilot — Drizzle + Stripe + Super Admin (CLEAN DEPLOY BUILD)
+// =============================================
+// This canvas contains a final, deploy-ready set of files:
+// - db/schema.ts
+// - db/client.ts
+// - routes/billing.ts
+// - server/index.ts
+// - components/AdminLogin.tsx, AdminBootstrap.tsx, AdminEditSchool.tsx, SuperAdminBoard.tsx (excerpt)
+// - migrations/extra.sql (indexes & uniques)
+//
+// Copy into your project 1:1. This build removes duplicates, fixes webhook ordering,
+// adds idempotency + rate-limit, and includes subscription period tracking & events.
+
+// =============================================
+// db/schema.ts
+// =============================================
+import { pgTable, uuid, text, timestamp, integer, pgEnum } from 'drizzle-orm/pg-core';
+
+export const planEnum = pgEnum('plan', [ 'TRIAL', 'BASIC', 'SMALL', 'MEDIUM', 'LARGE', 'UNLIMITED' ]);
+export const statusEnum = pgEnum('status', [ 'PENDING','ACTIVE','CANCELED' ]);
+
+export const schools = pgTable('schools', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  createdAt: timestamp('created_at', { withTimezone: false }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: false }).defaultNow().notNull(),
+  schoolName: text('school_name').notNull(),
+  adminName: text('admin_name').notNull(),
+  email: text('email').notNull().unique(),
+  plan: planEnum('plan').default('TRIAL').notNull(),
+  status: statusEnum('status').default('PENDING').notNull(),
+  seats: integer('seats').default(3).notNull(),
+  stripeCusId: text('stripe_cus_id'),
+  stripeSubId: text('stripe_sub_id'),
+  // period tracking
+  periodEnd: timestamp('period_end'),
+  trialEnd: timestamp('trial_end'),
+  notes: text('notes'),
+});
+
+export const payments = pgTable('payments', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  createdAt: timestamp('created_at', { withTimezone: false }).defaultNow().notNull(),
+  schoolId: uuid('school_id').notNull().references(() => schools.id, { onDelete: 'cascade' }),
+  amountCents: integer('amount_cents').notNull(),
+  currency: text('currency').default('usd').notNull(),
+  stripePiId: text('stripe_pi_id'),
+  stripeSessId: text('stripe_sess_id'),
+  plan: planEnum('plan').notNull(),
+  status: text('status').notNull(),
+});
+
+export const adminUsers = pgTable('admin_users', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  createdAt: timestamp('created_at', { withTimezone: false }).defaultNow().notNull(),
+  email: text('email').notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+});
+
+export const subscriptionEvents = pgTable('subscription_events', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  createdAt: timestamp('created_at', { withTimezone: false }).defaultNow().notNull(),
+  schoolId: uuid('school_id').notNull().references(() => schools.id, { onDelete: 'cascade' }),
+  event: text('event').notNull(),            // 'SUB_CREATED' | 'PLAN_UPDATED' | 'SUB_CANCELED'
+  previousPlan: planEnum('previous_plan'),
+  newPlan: planEnum('new_plan'),
+  stripeSubId: text('stripe_sub_id'),
+});
+
+// =============================================
+// db/client.ts
+// =============================================
+import { drizzle } from 'drizzle-orm/node-postgres';
+import pg from 'pg';
+export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+export const db = drizzle(pool);
+
+// =============================================
+// routes/billing.ts
+// =============================================
+import Stripe from 'stripe';
+import type { RequestHandler } from 'express';
+import { db } from '../db/client';
+import { schools, payments, subscriptionEvents, planEnum } from '../db/schema';
+import { eq } from 'drizzle-orm';
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2023-10-16' });
+export type Plan = typeof planEnum.enumValues[number];
+
+const PLAN_MAP: Record<Plan, { price: string; seats: number }> = {
+  TRIAL:     { price: process.env.STRIPE_PRICE_TRIAL!,     seats: 3 },
+  BASIC:     { price: process.env.STRIPE_PRICE_BASIC!,     seats: 3 },
+  SMALL:     { price: process.env.STRIPE_PRICE_SMALL!,     seats: 10 },
+  MEDIUM:    { price: process.env.STRIPE_PRICE_MEDIUM!,    seats: 25 },
+  LARGE:     { price: process.env.STRIPE_PRICE_LARGE!,     seats: 50 },
+  UNLIMITED: { price: process.env.STRIPE_PRICE_UNLIMITED!, seats: 9999 },
+};
+
+function priceIdToPlan(priceId?: string): Plan {
+  if (!priceId) return 'TRIAL';
+  if (priceId === process.env.STRIPE_PRICE_BASIC) return 'BASIC';
+  if (priceId === process.env.STRIPE_PRICE_SMALL) return 'SMALL';
+  if (priceId === process.env.STRIPE_PRICE_MEDIUM) return 'MEDIUM';
+  if (priceId === process.env.STRIPE_PRICE_LARGE) return 'LARGE';
+  if (priceId === process.env.STRIPE_PRICE_UNLIMITED) return 'UNLIMITED';
+  if (priceId === process.env.STRIPE_PRICE_TRIAL) return 'TRIAL';
+  return 'TRIAL';
+}
+
+export const register: RequestHandler = async (req, res) => {
+  const { schoolName, adminName, email, plan } = req.body as { schoolName: string; adminName: string; email: string; plan: Plan };
+  if (!schoolName || !adminName || !email) return res.status(400).json({ ok:false, error:'missing-fields' });
+  const map = PLAN_MAP[plan ?? 'TRIAL'] ?? PLAN_MAP.TRIAL;
+
+  // Create (or reuse) Stripe customer
+  const customer = await stripe.customers.create({ email, name: `${adminName} (${schoolName})`, metadata: { schoolName, adminName, email } });
+
+  const session = await stripe.checkout.sessions.create({
+    mode: 'subscription',
+    customer: customer.id,
+    line_items: [{ price: map.price, quantity: 1 }],
+    success_url: `${process.env.APP_URL}/success`,
+    cancel_url: `${process.env.APP_URL}/cancel`,
+    metadata: { schoolName, adminName, email, plan },
+  });
+
+  // Upsert pending school row by email
+  const now = new Date();
+  await db.insert(schools).values({ schoolName, adminName, email, plan, status:'PENDING', seats: map.seats, stripeCusId: customer.id, updatedAt: now })
+    .onConflictDoUpdate({ target: schools.email, set: { schoolName, adminName, plan, seats: map.seats, stripeCusId: customer.id, updatedAt: now } });
+
+  res.json({ url: session.url });
+};
+
+export const stripeWebhook: RequestHandler = async (req: any, res) => {
+  const sig = req.headers['stripe-signature'];
+  let event: Stripe.Event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig as string, process.env.STRIPE_WEBHOOK_SECRET!);
+  } catch (err: any) {
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object as Stripe.Checkout.Session;
+    const email = session.customer_details?.email || (session.metadata?.email as string | undefined);
+    const subId = session.subscription as string | undefined;
+    let periodEnd: Date | null = null; let trialEnd: Date | null = null; let resolvedPlan: Plan = (session.metadata?.plan as any) ?? 'TRIAL';
+
+    if (subId) {
+      const sub = await stripe.subscriptions.retrieve(subId);
+      const priceId = sub.items.data[0]?.price?.id;
+      resolvedPlan = priceIdToPlan(priceId);
+      if (sub.current_period_end) periodEnd = new Date(sub.current_period_end * 1000);
+      if (sub.trial_end) trialEnd = new Date(sub.trial_end * 1000);
+    }
+
+    if (email) {
+      const found = await db.select({ id: schools.id, plan: schools.plan }).from(schools).where(eq(schools.email, email)).limit(1);
+      if (found.length) {
+        await db.update(schools).set({ status:'ACTIVE', plan: resolvedPlan, stripeSubId: subId ?? null, periodEnd, trialEnd, updatedAt: new Date() }).where(eq(schools.email, email));
+        // idempotent payment insert
+        const existing = await db.select().from(payments).where(eq(payments.stripeSessId, session.id)).limit(1);
+        if (!existing.length) {
+          await db.insert(payments).values({
+            schoolId: found[0].id,
+            amountCents: session.amount_total ?? 0,
+            currency: session.currency ?? 'usd',
+            stripePiId: (session.payment_intent as string | null) ?? null,
+            stripeSessId: session.id,
+            plan: resolvedPlan,
+            status: 'succeeded',
+          });
+        }
+        await db.insert(subscriptionEvents).values({ schoolId: found[0].id, event:'SUB_CREATED', previousPlan: found[0].plan as any, newPlan: resolvedPlan, stripeSubId: subId ?? null });
+      }
+    }
+  }
+
+  if (event.type === 'customer.subscription.updated') {
+    const sub = event.data.object as Stripe.Subscription;
+    const priceId = sub.items.data[0]?.price?.id;
+    const newPlan = priceIdToPlan(priceId);
+    const periodEnd = new Date((sub.current_period_end || 0) * 1000);
+    const trialEnd = sub.trial_end ? new Date(sub.trial_end * 1000) : null;
+    const rows = await db.select().from(schools).where(eq(schools.stripeSubId, sub.id)).limit(1);
+    if (rows.length) {
+      const row = rows[0];
+      await db.update(schools).set({ plan: newPlan, periodEnd, trialEnd, updatedAt: new Date() }).where(eq(schools.id, row.id));
+      if (row.plan !== newPlan) {
+        await db.insert(subscriptionEvents).values({ schoolId: row.id, event:'PLAN_UPDATED', previousPlan: row.plan as any, newPlan, stripeSubId: sub.id });
+      }
+    }
+  }
+
+  if (event.type === 'customer.subscription.deleted') {
+    const sub = event.data.object as Stripe.Subscription;
+    const rows = await db.select().from(schools).where(eq(schools.stripeSubId, sub.id)).limit(1);
+    if (rows.length) {
+      const row = rows[0];
+      await db.update(schools).set({ status:'CANCELED', updatedAt: new Date() }).where(eq(schools.id, row.id));
+      await db.insert(subscriptionEvents).values({ schoolId: row.id, event:'SUB_CANCELED', previousPlan: row.plan as any, newPlan: row.plan as any, stripeSubId: sub.id });
+    }
+  }
+
+  res.json({ received:true });
+};
+
+export const listSchools: RequestHandler = async (_req, res) => { res.json(await db.select().from(schools)); };
+export const listPayments: RequestHandler = async (_req, res) => { res.json(await db.select().from(payments)); };
+
+// =============================================
+// server/index.ts
+// =============================================
+import express from 'express';
+import cors from 'cors';
+import cookieParser from 'cookie-parser';
+import bodyParser from 'body-parser';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+import { db } from './db/client';
+import { schools, adminUsers, subscriptionEvents } from './db/schema';
+import { eq, desc, count } from 'drizzle-orm';
+import { register, stripeWebhook, listSchools, listPayments } from './routes/billing';
+
+const app = express();
+app.set('trust proxy', 1);
+app.use(cors({ origin: [/^https?:\/\/(www\.)?passpilot\.net$/, /\.replit\.app$/], credentials: true }));
+app.use(cookieParser());
+
+// Stripe webhook MUST be before express.json()
+app.post('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }), stripeWebhook);
+app.use(express.json());
+
+app.get('/api/health', (_req,res)=>res.send('ok'));
+app.post('/api/register', register);
+
+// Superadmin JWT helpers
+function signAdmin(email: string) { return jwt.sign({ role:'superadmin', email }, process.env.JWT_SECRET!, { expiresIn: '7d' }); }
+async function requireAdmin(req: any, res: any, next: any) {
+  try {
+    const token = req.cookies?.admin; if (!token) return res.status(401).send('no-auth');
+    const payload: any = jwt.verify(token, process.env.JWT_SECRET!);
+    if (payload.role !== 'superadmin') return res.status(403).send('forbidden');
+    const row = await db.select().from(adminUsers).where(eq(adminUsers.email, payload.email)).limit(1);
+    if (!row.length) return res.status(401).send('no-admin');
+    next();
+  } catch { return res.status(401).send('invalid-token'); }
+}
+
+// bootstrap (first admin) — optional token gate
+app.post('/api/admin/bootstrap', async (req, res) => {
+  const { email, password, token } = req.body || {};
+  if (!email || !password) return res.status(400).json({ ok:false, error:'missing' });
+  const [{ value: totalAdmins }] = await db.select({ value: count() }).from(adminUsers);
+  if (process.env.ADMIN_BOOTSTRAP_TOKEN && token !== process.env.ADMIN_BOOTSTRAP_TOKEN) return res.status(401).json({ ok:false, error:'bad-bootstrap-token' });
+  if (!process.env.ADMIN_BOOTSTRAP_TOKEN && totalAdmins > 0) return res.status(403).json({ ok:false, error:'bootstrap-closed' });
+  const hash = await bcrypt.hash(password, 10);
+  try { await db.insert(adminUsers).values({ email, passwordHash: hash }); } catch { return res.status(409).json({ ok:false, error:'email-exists' }); }
+  const jwtTok = signAdmin(email);
+  res.cookie('admin', jwtTok, { httpOnly:true, secure:true, sameSite:'none', maxAge: 7*24*60*60*1000 });
+  res.json({ ok:true });
+});
+
+// login with simple rate limit
+const loginHits = new Map<string,{count:number, ts:number}>();
+function rateLimitLogin(req:any, res:any, next:any){
+  const key = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+  const now = Date.now();
+  const rec = loginHits.get(key) || { count:0, ts:now };
+  if (now - rec.ts > 60_000) { rec.count = 0; rec.ts = now; }
+  rec.count++; loginHits.set(key, rec);
+  if (rec.count > 5) return res.status(429).send('too-many');
+  next();
+}
+app.post('/api/admin/login', rateLimitLogin, async (req, res) => {
+  const { email, password } = req.body || {};
+  const row = await db.select().from(adminUsers).where(eq(adminUsers.email, email)).limit(1);
+  if (!row.length) return res.status(401).send('bad-credentials');
+  const ok = await bcrypt.compare(password, row[0].passwordHash);
+  if (!ok) return res.status(401).send('bad-credentials');
+  const token = signAdmin(email);
+  res.cookie('admin', token, { httpOnly:true, secure:true, sameSite:'none', maxAge: 7*24*60*60*1000 });
+  res.json({ ok:true });
+});
+app.post('/api/admin/logout', (_req,res) => { res.clearCookie('admin', { httpOnly:true, secure:true, sameSite:'none' }); res.json({ ok:true }); });
+
+// protected admin APIs
+app.use('/api/admin', requireAdmin);
+app.get('/api/admin/schools', listSchools);
+app.get('/api/admin/payments', listPayments);
+app.get('/api/admin/events', async (_req, res) => {
+  const rows = await db.select().from(subscriptionEvents).orderBy(desc(subscriptionEvents.createdAt)).limit(500);
+  res.json(rows);
+});
+app.patch('/api/admin/schools/:id', async (req, res) => {
+  const { plan, status, seats, notes, periodEnd, trialEnd } = req.body ?? {};
+  await db.update(schools).set({
+    ...(plan ? { plan } : {}),
+    ...(status ? { status } : {}),
+    ...(seats !== undefined ? { seats } : {}),
+    ...(notes !== undefined ? { notes } : {}),
+    ...(periodEnd ? { periodEnd: new Date(periodEnd) } : {}),
+    ...(trialEnd ? { trialEnd: new Date(trialEnd) } : {}),
+    updatedAt: new Date(),
+  }).where(eq(schools.id, req.params.id));
+  res.json({ ok:true });
+});
+
+app.listen(process.env.PORT || 3000, () => console.log('API up'));
+
+// =============================================
+// components/AdminLogin.tsx
+// =============================================
+import React from 'react';
+export default function AdminLogin({ onDone }: { onDone: () => void }) {
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [err, setErr] = React.useState<string|null>(null);
+  const [loading, setLoading] = React.useState(false);
+  async function submit(e: React.FormEvent) {
+    e.preventDefault(); setErr(null); setLoading(true);
+    const res = await fetch('/api/admin/login', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({ email, password }) });
+    setLoading(false); if (!res.ok) { setErr('Invalid email or password'); return; }
+    onDone();
+  }
+  return (
+    <form onSubmit={submit} style={{maxWidth:380}}>
+      <h3>Super Admin Login</h3>
+      <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="Email" required />
+      <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password" required />
+      <button disabled={loading} type="submit">{loading ? 'Signing in…' : 'Sign in'}</button>
+      {err && <p style={{color:'crimson'}}>{err}</p>}
+    </form>
+  );
+}
+
+// =============================================
+// components/AdminBootstrap.tsx
+// =============================================
+import React from 'react';
+export default function AdminBootstrap({ onDone }: { onDone: () => void }) {
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [token, setToken] = React.useState('');
+  const [err, setErr] = React.useState<string|null>(null);
+  async function submit(e: React.FormEvent) {
+    e.preventDefault(); setErr(null);
+    const res = await fetch('/api/admin/bootstrap', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({ email, password, token }) });
+    if (!res.ok) { setErr('Bootstrap failed. Check token or if admin already exists.'); return; }
+    onDone();
+  }
+  return (
+    <form onSubmit={submit} style={{maxWidth:420}}>
+      <h3>Create Super Admin</h3>
+      <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="Owner Email" required />
+      <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="New Password" required />
+      {import.meta.env.VITE_REQUIRE_BOOTSTRAP_TOKEN && (
+        <input value={token} onChange={e=>setToken(e.target.value)} placeholder="Bootstrap Token" />
+      )}
+      <button type="submit">Create Admin</button>
+      {err && <p style={{color:'crimson'}}>{err}</p>}
+    </form>
+  );
+}
+
+// =============================================
+// components/AdminEditSchool.tsx
+// =============================================
+import React from 'react';
+export default function AdminEditSchool({ row, onSaved }: { row: any; onSaved: () => void }) {
+  const [open, setOpen] = React.useState(false);
+  const [plan, setPlan] = React.useState(row.plan);
+  const [status, setStatus] = React.useState(row.status);
+  const [seats, setSeats] = React.useState(row.seats);
+  const [notes, setNotes] = React.useState(row.notes || '');
+  async function save() {
+    await fetch(`/api/admin/schools/${row.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({ plan, status, seats, notes }) });
+    setOpen(false); onSaved();
+  }
+  if (!open) return <button onClick={()=>setOpen(true)}>Edit</button>;
+  return (
+    <div style={{border:'1px solid #ddd', padding:12, background:'#fff'}}>
+      <div style={{display:'flex', gap:8}}>
+        <select value={plan} onChange={e=>setPlan(e.target.value)}>
+          {['TRIAL','BASIC','SMALL','MEDIUM','LARGE','UNLIMITED'].map(p=> <option key={p} value={p}>{p}</option>)}
+        </select>
+        <select value={status} onChange={e=>setStatus(e.target.value)}>
+          {['PENDING','ACTIVE','CANCELED'].map(s=> <option key={s} value={s}>{s}</option>)}
+        </select>
+        <input type="number" value={seats} onChange={e=>setSeats(Number(e.target.value))} style={{width:90}} />
+      </div>
+      <textarea rows={3} value={notes} onChange={e=>setNotes(e.target.value)} style={{width:'100%', marginTop:8}} />
+      <div style={{display:'flex', gap:8, marginTop:8}}>
+        <button onClick={save}>Save</button>
+        <button onClick={()=>setOpen(false)}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+// =============================================
+// SuperAdminBoard.tsx (excerpt)
+// =============================================
+import React from 'react';
+import AdminLogin from './components/AdminLogin';
+import AdminEditSchool from './components/AdminEditSchool';
+
+export default function SuperAdminBoard() {
+  const [schoolsRows, setSchoolsRows] = React.useState<any[]>([]);
+  const [paymentsRows, setPaymentsRows] = React.useState<any[]>([]);
+  const [events, setEvents] = React.useState<any[]>([]);
+  const [authNeeded, setAuthNeeded] = React.useState(false);
+
+  function daysLeft(dt?: string) {
+    if (!dt) return '';
+    const ms = new Date(dt).getTime() - Date.now();
+    return ms > 0 ? Math.ceil(ms / (1000*60*60*24)) : 0;
+  }
+
+  async function load() {
+    const opt = { credentials: 'include' as const };
+    const [a,b,c] = await Promise.all([
+      fetch('/api/admin/schools', opt),
+      fetch('/api/admin/payments', opt),
+      fetch('/api/admin/events', opt),
+    ]);
+    if ([a,b,c].some(r=>r.status===401)) { setAuthNeeded(true); return; }
+    setSchoolsRows(await a.json());
+    setPaymentsRows(await b.json());
+    setEvents(await c.json());
+  }
+  React.useEffect(()=>{ load(); }, []);
+
+  if (authNeeded) return <AdminLogin onDone={load} />;
+
+  const latestBySchool = new Map<string, any>();
+  for (const ev of events) { if (!latestBySchool.has(ev.schoolId)) latestBySchool.set(ev.schoolId, ev); }
+
+  return (
+    <div style={{display:'grid', gap:24}}>
+      <section>
+        <h2>Subscriptions</h2>
+        <table>
+          <thead><tr>
+            <th>Created</th><th>School</th><th>Admin</th><th>Email</th><th>Plan</th><th>Status</th><th>Seats</th><th>Days Left</th><th>Recent Change</th><th></th>
+          </tr></thead>
+          <tbody>
+            {schoolsRows.map(r=> (
+              <tr key={r.id}>
+                <td>{new Date(r.createdAt).toLocaleString()}</td>
+                <td>{r.schoolName}</td>
+                <td>{r.adminName}</td>
+                <td>{r.email}</td>
+                <td>{r.plan}</td>
+                <td>{r.status}</td>
+                <td>{r.seats}</td>
+                <td>{daysLeft(r.periodEnd)}</td>
+                <td>{(() => { const ev = latestBySchool.get(r.id); return ev ? `${ev.event} → ${ev.newPlan || ''}` : ''; })()}</td>
+                <td><AdminEditSchool row={r} onSaved={load} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Recent Payments</h2>
+        <table>
+          <thead><tr><th>Date</th><th>Amount</th><th>Plan</th><th>Status</th></tr></thead>
+          <tbody>
+            {paymentsRows.map(p => (
+              <tr key={p.id}>
+                <td>{new Date(p.createdAt).toLocaleString()}</td>
+                <td>{(p.amountCents/100).toFixed(2)} {String(p.currency).toUpperCase()}</td>
+                <td>{p.plan}</td>
+                <td>{p.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+    </div>
+  );
+}
+
+// =============================================
+// migrations/extra.sql (run once)
+// =============================================
+-- Avoid duplicate payments from webhook retries
+ALTER TABLE payments ADD CONSTRAINT IF NOT EXISTS payments_stripe_sess_id_uniq UNIQUE (stripe_sess_id);
+-- Speed lookups
+CREATE INDEX IF NOT EXISTS schools_stripe_sub_id_idx ON schools (stripe_sub_id);
+CREATE INDEX IF NOT EXISTS subscription_events_school_idx ON subscription_events (school_id);
