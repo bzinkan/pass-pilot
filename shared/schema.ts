@@ -5,7 +5,7 @@ import { z } from "zod";
 
 // Schools table - represents educational institutions
 export const schools = pgTable("schools", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(), // URL-safe identifier
   emailDomain: text("email_domain"), // Optional: for validation
@@ -29,7 +29,7 @@ export const schools = pgTable("schools", {
 
 // Users table - teachers and administrators
 export const users = pgTable("users", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: uuid("id").defaultRandom().primaryKey(),
   schoolId: uuid("school_id").notNull().references(() => schools.id, { onDelete: "cascade" }),
   email: text("email").notNull(),
   password: text("password").notNull(),
@@ -48,7 +48,7 @@ export const users = pgTable("users", {
 
 // Grades table - grade levels within schools
 export const grades = pgTable("grades", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: uuid("id").defaultRandom().primaryKey(),
   schoolId: uuid("school_id").notNull().references(() => schools.id, { onDelete: "cascade" }),
   name: text("name").notNull(), // e.g., "6th Grade", "Freshman", "Senior"
   displayOrder: integer("display_order").notNull().default(0),
@@ -57,7 +57,7 @@ export const grades = pgTable("grades", {
 
 // Students table
 export const students = pgTable("students", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: uuid("id").defaultRandom().primaryKey(),
   schoolId: uuid("school_id").notNull().references(() => schools.id, { onDelete: "cascade" }),
   gradeId: uuid("grade_id").references(() => grades.id, { onDelete: "set null" }),
   firstName: text("first_name").notNull(),
@@ -74,7 +74,7 @@ export const students = pgTable("students", {
 
 // Passes table - hall passes issued to students
 export const passes = pgTable("passes", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: uuid("id").defaultRandom().primaryKey(),
   schoolId: uuid("school_id").notNull().references(() => schools.id, { onDelete: "cascade" }),
   studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
   teacherId: uuid("teacher_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -94,7 +94,7 @@ export const passes = pgTable("passes", {
 
 // Payments table - for tracking subscription payments
 export const payments = pgTable("payments", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: uuid("id").defaultRandom().primaryKey(),
   schoolId: uuid("school_id").notNull().references(() => schools.id, { onDelete: "cascade" }),
   stripePaymentIntentId: text("stripe_payment_intent_id").unique(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
@@ -166,7 +166,7 @@ export type InsertPayment = z.infer<typeof insertPaymentSchema>;
 
 // Admin users table (for platform administration)
 export const adminUsers = pgTable("admin_users", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: uuid("id").defaultRandom().primaryKey(),
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
   firstName: text("first_name").notNull(),
@@ -177,7 +177,7 @@ export const adminUsers = pgTable("admin_users", {
 
 // Subscription events table
 export const subscriptionEvents = pgTable("subscription_events", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: uuid("id").defaultRandom().primaryKey(),
   schoolId: uuid("school_id").notNull().references(() => schools.id, { onDelete: "cascade" }),
   eventType: text("event_type").notNull(), // subscription.created, subscription.updated, etc.
   stripeEventId: text("stripe_event_id").unique(),
