@@ -256,64 +256,63 @@ export default function Login() {
         </CardHeader>
         <CardContent>
           {mode === 'login' ? (
-                <form onSubmit={handleLogin} className="space-y-4">
-                  <div>
-                    <Label htmlFor="email">Email Address</Label>
-                    <Input
-                      type="email"
-                      id="email"
-                      name="email"
-                      placeholder="teacher@school.edu"
-                      value={loginForm.email}
-                      onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
-                      required
-                      data-testid="input-email"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="password">Password</Label>
-                    <Input
-                      type="password"
-                      id="password"
-                      name="password"
-                      placeholder="••••••••"
-                      value={loginForm.password}
-                      onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-                      required
-                      data-testid="input-password"
-                    />
-                  </div>
-                  <Button 
-                    type="submit" 
-                    className="w-full" 
-                    disabled={isLoading}
-                    data-testid="button-login"
-                  >
-                    {isLoading ? "Signing In..." : "Sign In"}
-                  </Button>
-                  
-                  <div className="flex justify-between items-center">
-                    <Button 
-                      type="button" 
-                      variant="link" 
-                      className="text-sm text-muted-foreground hover:text-foreground p-0"
-                      onClick={() => setMode('forgot-password')}
-                      data-testid="button-forgot-password"
-                    >
-                      Forgot Password?
-                    </Button>
-                    <Button 
-                      type="button" 
-                      variant="link" 
-                      className="text-sm text-muted-foreground hover:text-foreground p-0"
-                      onClick={() => setMode('register')}
-                      data-testid="button-register-link"
-                    >
-                      Register School
-                    </Button>
-                  </div>
-                </form>
-            </>)
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <Label htmlFor="email">Email Address</Label>
+                <Input
+                  type="email"
+                  id="email"
+                  name="email"
+                  placeholder="teacher@school.edu"
+                  value={loginForm.email}
+                  onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                  required
+                  data-testid="input-email"
+                />
+              </div>
+              <div>
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  type="password"
+                  id="password"
+                  name="password"
+                  placeholder="••••••••"
+                  value={loginForm.password}
+                  onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                  required
+                  data-testid="input-password"
+                />
+              </div>
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={isLoading}
+                data-testid="button-login"
+              >
+                {isLoading ? "Signing In..." : "Sign In"}
+              </Button>
+              
+              <div className="flex justify-between items-center">
+                <Button 
+                  type="button" 
+                  variant="link" 
+                  className="text-sm text-muted-foreground hover:text-foreground p-0"
+                  onClick={() => setMode('forgot-password')}
+                  data-testid="button-forgot-password"
+                >
+                  Forgot Password?
+                </Button>
+                <Button 
+                  type="button" 
+                  variant="link" 
+                  className="text-sm text-muted-foreground hover:text-foreground p-0"
+                  onClick={() => setMode('register')}
+                  data-testid="button-register-link"
+                >
+                  Register School
+                </Button>
+              </div>
+            </form>
           ) : mode === 'forgot-password' ? (
             <form onSubmit={handleForgotPassword} className="space-y-4">
               <div>
