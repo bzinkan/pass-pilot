@@ -50,14 +50,6 @@ export function LandingPage() {
                 Start Free Trial
               </Button>
               <Button 
-                onClick={() => setLocation('/register')}
-                variant="outline"
-                className="bg-transparent border-2 border-white text-white px-8 py-4 rounded-lg font-semibold hover:bg-white hover:text-primary transition duration-200"
-                data-testid="button-view-pricing"
-              >
-                View Pricing & Plans
-              </Button>
-              <Button 
                 onClick={() => handleShowAuth('login')}
                 variant="outline"
                 className="bg-transparent border-2 border-white text-white px-8 py-4 rounded-lg font-semibold hover:bg-white hover:text-primary transition duration-200"
