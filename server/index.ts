@@ -21,49 +21,6 @@ app.set("trust proxy", 1);
 app.get("/api/healthz", (_req, res) => res.type("text/plain").send("ok"));
 app.get("/healthz", (_req, res) => res.type("text/plain").send("ok")); // extra path just in case
 
-// --- DEBUG: where is prod actually connected? ---
-app.get("/api/health/db-where", async (_req, res) => {
-  try {
-    const { Client } = await import("pg");
-    const cs = process.env.DATABASE_URL;
-    const client = new Client({ connectionString: cs, ssl: { rejectUnauthorized: false } });
-    await client.connect();
-
-    const meta = await client.query(`
-      select current_database() as db,
-             current_schema()  as schema,
-             inet_server_addr() as host
-    `);
-
-    const col = await client.query(`
-      select is_nullable, column_default
-      from information_schema.columns
-      where table_schema = current_schema()
-        and table_name   = 'passes'
-        and column_name  = 'tdv'
-    `);
-
-    const cnt = await client.query(`
-      select count(*)::int as n
-      from passes
-      where tdv is null or tdv = ''
-    `);
-
-    await client.end();
-
-    res.json({
-      urlPrefix: cs ? cs.slice(0, cs.indexOf("@") > 0 ? cs.indexOf("@") : cs.length) + "@…" : null,
-      db: meta.rows[0]?.db,
-      schema: meta.rows[0]?.schema,
-      host: meta.rows[0]?.host,
-      tdv: col.rows[0] || null,
-      null_or_empty: cnt.rows[0]?.n ?? null
-    });
-  } catch (e: any) {
-    res.status(500).json({ error: e.message || String(e) });
-  }
-});
-
 /**
  * Stripe webhook FIRST — raw body required.
  * Must appear before express.json/urlencoded.
