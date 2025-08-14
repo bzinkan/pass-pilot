@@ -238,18 +238,24 @@ export default function Register() {
 
     try {
       // CRITICAL: Use current form data to prevent step-back issues
+      // Split adminName into first and last name to match backend schema
+      const nameParts = schoolData.adminName.trim().split(' ');
+      const adminFirstName = nameParts[0] || 'Admin';
+      const adminLastName = nameParts.slice(1).join(' ') || 'User';
+      
       const currentFormData = {
         schoolName: schoolData.name,
         adminEmail: schoolData.adminEmail,
-        adminName: schoolData.adminName,
+        adminFirstName,
+        adminLastName,
         adminPassword: schoolData.password,
         plan: selectedPlan.id
       };
       
       console.log('Submitting current form data:', currentFormData);
       
-      // Use the consistent registration endpoint
-      const response = await apiRequest('POST', '/api/auth/register-school', currentFormData);
+      // Use the main registration endpoint
+      const response = await apiRequest('POST', '/api/auth/register', currentFormData);
 
       if (response.ok) {
         const data = await response.json();
