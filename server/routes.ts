@@ -657,6 +657,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Teacher self-service profile update
+  app.patch('/api/profile', requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthenticatedRequest;
+      const user = await storage.getUser(authReq.user.id);
+      const validUser = unwrap(user, 'User not found');
+      
+      const { firstName, lastName, currentPassword, newPassword } = req.body;
+      const updates: any = {};
+      
+      // Update name if provided
+      if (firstName && lastName) {
+        updates.firstName = firstName.trim();
+        updates.lastName = lastName.trim();
+      }
+      
+      // Update password if provided
+      if (newPassword) {
+        if (!currentPassword) {
+          return res.status(400).json({ message: 'Current password is required to change password' });
+        }
+        
+        if (newPassword.length < 6) {
+          return res.status(400).json({ message: 'New password must be at least 6 characters long' });
+        }
+        
+        // Verify current password
+        const isCurrentPasswordValid = await auth.verifyPassword(currentPassword, validUser.password);
+        if (!isCurrentPasswordValid) {
+          return res.status(400).json({ message: 'Current password is incorrect' });
+        }
+        
+        updates.password = await auth.hashPassword(newPassword);
+      }
+      
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ message: 'No valid updates provided' });
+      }
+      
+      await storage.updateUser(validUser.id, updates);
+      
+      // Return updated user without password
+      const updatedUser = await storage.getUser(validUser.id);
+      const { password: _, ...userWithoutPassword } = updatedUser!;
+      
+      res.json({ 
+        success: true, 
+        user: userWithoutPassword,
+        message: 'Profile updated successfully' 
+      });
+      
+    } catch (error: any) {
+      console.error('Update profile error:', error);
+      res.status(500).json({ message: error.message || 'Failed to update profile' });
+    }
+  });
+
   const server = createServer(app);
   return server;
 }

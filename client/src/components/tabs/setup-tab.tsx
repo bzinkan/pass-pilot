@@ -36,6 +36,13 @@ export function SetupTab({ user }: SetupTabProps) {
     passTimeout: 30,
   });
   const [assignedGrades, setAssignedGrades] = useState<string[]>(user.assignedGrades || []);
+  const [profileForm, setProfileForm] = useState({
+    firstName: user.firstName || '',
+    lastName: user.lastName || '',
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
   const [newTeacherEmail, setNewTeacherEmail] = useState('');
   const [newTeacherName, setNewTeacherName] = useState('');
   const [isAddingTeacher, setIsAddingTeacher] = useState(false);
@@ -227,6 +234,36 @@ export function SetupTab({ user }: SetupTabProps) {
     },
   });
 
+  const updateProfileMutation = useMutation({
+    mutationFn: async (profileData: any) => {
+      const response = await apiRequest('PATCH', '/api/profile', profileData);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setProfileForm(prev => ({
+        ...prev,
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      }));
+      // Update user context if available
+      if (data.user) {
+        queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
+      }
+      toast({
+        title: "Profile Updated",
+        description: data.message || "Your profile has been updated successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update profile",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleAddTeacher = () => {
     if (!newTeacherEmail || !newTeacherName) {
       toast({
@@ -282,6 +319,76 @@ export function SetupTab({ user }: SetupTabProps) {
     }
     
     resetPasswordMutation.mutate({ teacherId, password: newPassword });
+  };
+
+  const handleUpdateProfile = () => {
+    // Validate name changes
+    const nameChanged = profileForm.firstName !== user.firstName || profileForm.lastName !== user.lastName;
+    const passwordChanged = profileForm.newPassword.length > 0;
+    
+    if (!nameChanged && !passwordChanged) {
+      toast({
+        title: "No Changes",
+        description: "Please make changes to update your profile",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate password if changing
+    if (passwordChanged) {
+      if (!profileForm.currentPassword) {
+        toast({
+          title: "Current Password Required",
+          description: "Please enter your current password to change it",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (profileForm.newPassword.length < 6) {
+        toast({
+          title: "Password Too Short",
+          description: "New password must be at least 6 characters long",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (profileForm.newPassword !== profileForm.confirmPassword) {
+        toast({
+          title: "Passwords Don't Match",
+          description: "New password and confirmation must match",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    // Validate name if changing
+    if (nameChanged && (!profileForm.firstName.trim() || !profileForm.lastName.trim())) {
+      toast({
+        title: "Name Required",
+        description: "Please enter both first and last name",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Prepare update data
+    const updateData: any = {};
+    
+    if (nameChanged) {
+      updateData.firstName = profileForm.firstName.trim();
+      updateData.lastName = profileForm.lastName.trim();
+    }
+    
+    if (passwordChanged) {
+      updateData.currentPassword = profileForm.currentPassword;
+      updateData.newPassword = profileForm.newPassword;
+    }
+
+    updateProfileMutation.mutate(updateData);
   };
 
   const getMaxTeachersForPlan = (plan: string) => {
@@ -666,22 +773,37 @@ export function SetupTab({ user }: SetupTabProps) {
         <Card>
           <CardHeader>
             <CardTitle>Teacher Profile</CardTitle>
+            <p className="text-sm text-muted-foreground">Update your personal information and password</p>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="teacherName">Name</Label>
-                  <Input
-                    id="teacherName"
-                    value={user.name || ''}
-                    readOnly
-                    className="bg-gray-50 dark:bg-gray-800"
-                    data-testid="input-teacher-name"
-                  />
+            <div className="space-y-6">
+              {/* Edit Name Section */}
+              <div>
+                <h4 className="text-sm font-medium mb-3">Personal Information</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="editFirstName">First Name</Label>
+                    <Input
+                      id="editFirstName"
+                      value={profileForm.firstName}
+                      onChange={(e) => setProfileForm(prev => ({ ...prev, firstName: e.target.value }))}
+                      placeholder="Enter first name"
+                      data-testid="input-edit-first-name"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="editLastName">Last Name</Label>
+                    <Input
+                      id="editLastName"
+                      value={profileForm.lastName}
+                      onChange={(e) => setProfileForm(prev => ({ ...prev, lastName: e.target.value }))}
+                      placeholder="Enter last name"
+                      data-testid="input-edit-last-name"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="teacherEmail">Email</Label>
+                <div className="mt-4">
+                  <Label htmlFor="teacherEmail">Email (Read Only)</Label>
                   <Input
                     id="teacherEmail"
                     value={user.email || ''}
@@ -691,16 +813,71 @@ export function SetupTab({ user }: SetupTabProps) {
                   />
                 </div>
               </div>
+
+              {/* Change Password Section */}
               <div>
-                <Label htmlFor="schoolName">School</Label>
-                <Input
-                  id="schoolName"
-                  value={user.schoolName || ''}
-                  readOnly
-                  className="bg-gray-50 dark:bg-gray-800"
-                  data-testid="input-school-name-readonly"
-                />
+                <h4 className="text-sm font-medium mb-3">Change Password</h4>
+                <div className="space-y-3">
+                  <div>
+                    <Label htmlFor="currentPassword">Current Password</Label>
+                    <Input
+                      id="currentPassword"
+                      type="password"
+                      value={profileForm.currentPassword}
+                      onChange={(e) => setProfileForm(prev => ({ ...prev, currentPassword: e.target.value }))}
+                      placeholder="Enter current password"
+                      data-testid="input-current-password"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="newPassword">New Password</Label>
+                    <Input
+                      id="newPassword"
+                      type="password"
+                      value={profileForm.newPassword}
+                      onChange={(e) => setProfileForm(prev => ({ ...prev, newPassword: e.target.value }))}
+                      placeholder="Enter new password (min 6 characters)"
+                      data-testid="input-new-password"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                    <Input
+                      id="confirmPassword"
+                      type="password"
+                      value={profileForm.confirmPassword}
+                      onChange={(e) => setProfileForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                      placeholder="Confirm new password"
+                      data-testid="input-confirm-password"
+                    />
+                  </div>
+                </div>
               </div>
+
+              {/* Read-only School Info */}
+              <div>
+                <h4 className="text-sm font-medium mb-3">School Information</h4>
+                <div>
+                  <Label htmlFor="schoolName">School</Label>
+                  <Input
+                    id="schoolName"
+                    value={user.schoolName || ''}
+                    readOnly
+                    className="bg-gray-50 dark:bg-gray-800"
+                    data-testid="input-school-name-readonly"
+                  />
+                </div>
+              </div>
+
+              {/* Save Profile Button */}
+              <Button 
+                onClick={handleUpdateProfile}
+                disabled={updateProfileMutation.isPending}
+                className="w-full"
+                data-testid="button-update-profile"
+              >
+                {updateProfileMutation.isPending ? 'Updating...' : 'Update Profile'}
+              </Button>
             </div>
           </CardContent>
         </Card>
