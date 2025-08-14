@@ -28,7 +28,7 @@ export default function Login() {
     adminLastName: '',
     adminEmail: '',
     adminPassword: '',
-    plan: 'free_trial'
+    plan: 'TRIAL'
   });
 
   const [firstLoginForm, setFirstLoginForm] = useState({
