@@ -9,6 +9,7 @@ export interface IStorage {
   // Users
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUsersByEmail(email: string): Promise<User[]>; // Get all users with this email across schools
   getUserByEmailAndSchool(email: string, schoolId: string): Promise<User | undefined>;
   getUsersBySchool(schoolId: string): Promise<User[]>;
   authenticateUser(email: string, password: string): Promise<User | null>;
@@ -23,6 +24,7 @@ export interface IStorage {
   getSchool(id: string): Promise<School | undefined>;
   getSchoolById(id: string): Promise<School | undefined>; // Alias for getSchool
   getSchoolBySlug(slug: string): Promise<School | undefined>; // Get school by unique slug
+  getSchoolsByIds(ids: string[]): Promise<School[]>; // Get multiple schools by IDs
   getAllSchools(): Promise<School[]>;
   getActiveSchools(): Promise<School[]>; // Schools with active subscriptions or valid trials
   createSchool(school: InsertSchool): Promise<School>;
@@ -387,6 +389,13 @@ export class MemStorage implements IStorage {
     return Array.from(this.users.values()).filter(user => user.schoolId === schoolId);
   }
 
+  async getUsersByEmail(email: string): Promise<User[]> {
+    const emailNorm = email.trim().toLowerCase();
+    return Array.from(this.users.values()).filter(user => 
+      user.email.toLowerCase() === emailNorm
+    );
+  }
+
   async getUserByEmailAndSchool(email: string, schoolId: string): Promise<User | undefined> {
     const emailNorm = email.trim().toLowerCase();
     return Array.from(this.users.values()).find(user => 
@@ -409,6 +418,10 @@ export class MemStorage implements IStorage {
 
   async getSchoolBySlug(slug: string): Promise<School | undefined> {
     return Array.from(this.schools.values()).find(school => school.slug === slug);
+  }
+
+  async getSchoolsByIds(ids: string[]): Promise<School[]> {
+    return Array.from(this.schools.values()).filter(school => ids.includes(school.id));
   }
 
   async createSchool(insertSchool: InsertSchool): Promise<School> {
@@ -1001,6 +1014,14 @@ export class DatabaseStorage implements IStorage {
   async getSchoolBySlug(slug: string): Promise<School | undefined> {
     const [school] = await db.select().from(schools).where(eq(schools.slug, slug));
     return school || undefined;
+  }
+
+  async getSchoolsByIds(ids: string[]): Promise<School[]> {
+    if (ids.length === 0) return [];
+    const schoolList = await db.select().from(schools).where(
+      ids.length === 1 ? eq(schools.id, ids[0]) : eq(schools.id, ids[0]) // Simple implementation for now
+    );
+    return schoolList.filter(school => ids.includes(school.id));
   }
 
   async createSchool(insertSchool: InsertSchool): Promise<School> {

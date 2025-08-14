@@ -117,35 +117,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { email, password, schoolId } = req.body;
       
-      let user;
+      // Normalize email
+      const normalizedEmail = email.trim().toLowerCase();
+      
+      // If schoolId provided, single-step login
       if (schoolId) {
-        user = await storage.getUserByEmailAndSchool(email, schoolId);
-      } else {
-        user = await storage.getUserByEmail(email);
+        const user = await storage.getUserByEmailAndSchool(normalizedEmail, schoolId);
+        invariant(user, 'Invalid credentials');
+        
+        const isValid = await auth.comparePassword(password, user.password);
+        invariant(isValid, 'Invalid credentials');
+        
+        // Create session
+        const sessionToken = auth.generateSessionToken();
+        const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+        sessions.set(sessionToken, {
+          userId: user.id,
+          schoolId: user.schoolId,
+          expires
+        });
+        
+        res.cookie('session', sessionToken, { 
+          httpOnly: true, 
+          secure: ENV.NODE_ENV === 'production',
+          expires 
+        });
+        
+        const { password: _, ...userWithoutPassword } = user;
+        return res.json({ success: true, user: userWithoutPassword, token: sessionToken });
       }
+
+      // Multi-school flow: get all accounts for this email
+      const candidates = await storage.getUsersByEmail(normalizedEmail);
       
-      invariant(user, 'Invalid credentials');
+      if (candidates.length === 0) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+
+      // Verify password against first account (prevents email enumeration)
+      const isValid = await auth.comparePassword(password, candidates[0].password);
+      if (!isValid) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+
+      // Single school - auto login
+      if (candidates.length === 1) {
+        const user = candidates[0];
+        const sessionToken = auth.generateSessionToken();
+        const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        sessions.set(sessionToken, {
+          userId: user.id,
+          schoolId: user.schoolId,
+          expires
+        });
+        
+        res.cookie('session', sessionToken, { 
+          httpOnly: true, 
+          secure: ENV.NODE_ENV === 'production',
+          expires 
+        });
+        
+        const { password: _, ...userWithoutPassword } = user;
+        return res.json({ success: true, user: userWithoutPassword, token: sessionToken });
+      }
+
+      // Multiple schools - return school picker data
+      const schoolIds = candidates.map(c => c.schoolId);
+      const schools = await storage.getSchoolsByIds(schoolIds);
       
-      const isValid = await auth.comparePassword(password, user.password);
-      invariant(isValid, 'Invalid credentials');
-      
-      // Create session
-      const sessionToken = auth.generateSessionToken();
-      const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-      sessions.set(sessionToken, {
-        userId: user.id,
-        schoolId: user.schoolId,
-        expires
+      return res.json({ 
+        success: false, 
+        requiresSchool: true, 
+        schools: schools.map(s => ({ id: s.id, name: s.name }))
       });
-      
-      res.cookie('session', sessionToken, { 
-        httpOnly: true, 
-        secure: ENV.NODE_ENV === 'production',
-        expires 
-      });
-      
-      const { password: _, ...userWithoutPassword } = user;
-      res.json({ user: userWithoutPassword, token: sessionToken });
+
     } catch (error: any) {
       console.error('Login error:', error);
       res.status(500).json({ message: 'Login failed' });

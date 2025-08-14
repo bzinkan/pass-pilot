@@ -8,7 +8,7 @@ import { useAuth } from "./hooks/use-auth";
 import { LandingPage } from "@/components/landing-page";
 import { MainApp } from "@/components/main-app";
 import Home from "./pages/home";
-import Login from "./pages/login";
+import Login from "./pages/login-new";
 import Register from "./pages/register";
 import ResetPassword from "./pages/reset-password";
 import Features from "./pages/features";
