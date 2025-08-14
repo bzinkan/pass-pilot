@@ -46,10 +46,10 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
     return null; // guarded fallback
   }
 
-  const formatDuration = (checkoutTime: string) => {
+  const formatDuration = (issuedAt: string) => {
     const now = new Date();
-    const checkout = new Date(checkoutTime);
-    const diffMs = now.getTime() - checkout.getTime();
+    const issued = new Date(issuedAt);
+    const diffMs = now.getTime() - issued.getTime();
     const diffMinutes = Math.floor(diffMs / (1000 * 60));
     return `${diffMinutes} min`;
   };
@@ -165,31 +165,31 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${getAvatarColor(pass.student?.name || '')}`}>
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${getAvatarColor(`${pass.student?.firstName} ${pass.student?.lastName}` || '')}`}>
                       <span className="text-sm font-medium" data-testid={`student-initials-${pass.id}`}>
-                        {getInitials(pass.student?.name || '')}
+                        {getInitials(`${pass.student?.firstName} ${pass.student?.lastName}` || '')}
                       </span>
                     </div>
                     <div>
                       <div className="flex items-center space-x-2 mb-1">
                         <h3 className="font-medium text-foreground" data-testid={`student-name-${pass.id}`}>
-                          {pass.student?.name}
+                          {pass.student?.firstName} {pass.student?.lastName}
                         </h3>
                         {getPassTypeBadge(pass.passType)}
                       </div>
                       <p className="text-sm text-muted-foreground">
                         Grade <span data-testid={`student-grade-${pass.id}`}>{pass.student?.grade}</span> • 
-                        Out for <span data-testid={`pass-duration-${pass.id}`}>{formatDuration(pass.checkoutTime)}</span>
+                        Out for <span data-testid={`pass-duration-${pass.id}`}>{formatDuration(pass.issuedAt)}</span>
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Issued by: <span className="font-medium">{pass.teacher?.name || 'Unknown Teacher'}</span>
+                        Issued by: <span className="font-medium">{pass.teacher?.firstName} {pass.teacher?.lastName}</span>
                       </p>
                     </div>
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-muted-foreground">Checked out</p>
                     <p className="text-sm font-medium text-foreground" data-testid={`checkout-time-${pass.id}`}>
-                      {new Date(pass.checkoutTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                      {new Date(pass.issuedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                     </p>
                   </div>
                 </div>
