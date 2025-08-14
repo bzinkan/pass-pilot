@@ -63,7 +63,7 @@ function isTrialExpired(trialEndDate: Date | null): boolean {
   return new Date() > trialEndDate;
 }
 
-// --- Normalize td (pass type / destination) so it is never null ---
+// Ensures "td" (pass type / reason) is never null or empty
 function normalizeTd(body: any): string {
   const candidate =
     (typeof body?.td === "string" && body.td) ||
@@ -75,6 +75,13 @@ function normalizeTd(body: any): string {
   const td = String(candidate).trim();
   return td.length ? td : "general";
 }
+
+// Force-safe createPass: guarantees td is never null before hitting the DB
+const _origCreatePass = storage.createPass.bind(storage);
+(storage as any).createPass = async (data: any) => {
+  const td = normalizeTd(data);
+  return _origCreatePass({ ...data, td });
+};
 
 // Initialize Stripe if key is available
 let stripe: Stripe | null = null;
@@ -2056,47 +2063,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/passes", requireAuth, async (req: any, res) => {
     try {
-      console.log('POST /api/passes - userId:', req.userId);
-      console.log('POST /api/passes - body:', req.body);
-      
       const user = await storage.getUser(req.userId);
-      if (!user) {
-        console.log('User not found for userId:', req.userId);
-        return res.status(404).json({ message: 'User not found' });
-      }
+      if (!user) return res.status(404).json({ message: "User not found" });
 
-      console.log('Found user:', user.name, user.email);
-
-      // Ensure td is never null (maps td | passType | type | reason -> td, defaults to 'general')
+      // Make sure td cannot be null going forward
       const td = normalizeTd(req.body);
 
-      // Use enhanced validation to prevent other nulls
-     const { validatePassData } = await import("../shared/validation");
-      
+      const { validatePassData } = await import("../shared/validation");
       const passInput = validatePassData({
         ...req.body,
         teacherId: req.userId,
         schoolId: user.schoolId,
-        destination: req.body.destination || "Restroom"
+        destination: req.body.destination || "Restroom",
       });
-      
-      // Final payload to DB — make sure "td" exists
+
       const passData = {
         ...passInput,
-        td,                                 // << GUARANTEED non-empty
+        td, // <- guaranteed non-null
         checkoutTime: new Date(),
         timeOut: new Date(),
         issuingTeacher: user.name,
         status: "active" as const,
-        printRequested: false
+        printRequested: false,
       };
 
-      console.log('Creating pass with data:', passData);
       const pass = await storage.createPass(passData);
-      console.log('Created pass:', pass);
       res.json(pass);
     } catch (error: any) {
-      console.error('Error creating pass:', error);
+      console.error("Error creating pass:", error);
       res.status(400).json({ message: error.message });
     }
   });

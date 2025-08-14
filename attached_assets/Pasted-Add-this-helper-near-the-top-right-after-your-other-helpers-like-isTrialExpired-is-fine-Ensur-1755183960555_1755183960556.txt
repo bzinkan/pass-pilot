@@ -1,0 +1,61 @@
+Add this helper near the top (right after your other helpers like isTrialExpired is fine):
+
+// Ensures "td" (pass type / reason) is never null or empty
+function normalizeTd(body: any): string {
+  const candidate =
+    (typeof body?.td === "string" && body.td) ||
+    (typeof body?.passType === "string" && body.passType) ||
+    (typeof body?.type === "string" && body.type) ||
+    (typeof body?.reason === "string" && body.reason) ||
+    "";
+
+  const td = String(candidate).trim();
+  return td.length ? td : "general";
+}
+
+
+Immediately after import { storage } from "./storage"; (keep the import as-is), insert this one-time wrapper:
+
+// Force-safe createPass: guarantees td is never null before hitting the DB
+const _origCreatePass = storage.createPass.bind(storage);
+(storage as any).createPass = async (data: any) => {
+  const td = normalizeTd(data);
+  return _origCreatePass({ ...data, td });
+};
+
+
+(Optional but helpful) keep the safer route you already added, or replace your /api/passes route with this version to double-up the guarantee:
+
+app.post("/api/passes", requireAuth, async (req: any, res) => {
+  try {
+    const user = await storage.getUser(req.userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // Make sure td cannot be null going forward
+    const td = normalizeTd(req.body);
+
+    const { validatePassData } = await import("../shared/validation");
+    const passInput = validatePassData({
+      ...req.body,
+      teacherId: req.userId,
+      schoolId: user.schoolId,
+      destination: req.body.destination || "Restroom",
+    });
+
+    const passData = {
+      ...passInput,
+      td, // <- guaranteed non-null
+      checkoutTime: new Date(),
+      timeOut: new Date(),
+      issuingTeacher: user.name,
+      status: "active" as const,
+      printRequested: false,
+    };
+
+    const pass = await storage.createPass(passData);
+    res.json(pass);
+  } catch (error: any) {
+    console.error("Error creating pass:", error);
+    res.status(400).json({ message: error.message });
+  }
+});
