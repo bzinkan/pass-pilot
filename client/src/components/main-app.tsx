@@ -85,14 +85,10 @@ export function MainApp({ user, onLogout }: MainAppProps) {
     { id: 'roster', label: 'Roster', icon: 'fas fa-users' },
     { id: 'upload', label: 'Upload', icon: 'fas fa-cloud-upload-alt' },
     { id: 'reports', label: 'Reports', icon: 'fas fa-chart-bar' },
+    { id: 'admin', label: 'Admin', icon: 'fas fa-cog' },
+    { id: 'billing', label: 'Billing', icon: 'fas fa-credit-card' },
     { id: 'profile', label: 'Profile', icon: 'fas fa-user' },
   ];
-
-  // Add admin-only tabs
-  if (user.isAdmin) {
-    tabs.push({ id: 'admin', label: 'Admin', icon: 'fas fa-cog' });
-    tabs.push({ id: 'billing', label: 'Billing', icon: 'fas fa-credit-card' });
-  }
 
   const renderTabContent = () => {
     switch (currentTab) {

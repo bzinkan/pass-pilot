@@ -250,13 +250,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/grades', requireAuth, validate({ body: insertGradeSchema }), async (req: any, res) => {
+  app.post('/api/grades', requireAuth, async (req: any, res) => {
     try {
       const authReq = req as AuthenticatedRequest;
       const { schoolId } = authReq.user;
       
+      if (!schoolId) {
+        return res.status(400).json({ message: 'User must be associated with a school' });
+      }
+      
       const data = {
-        ...req.valid.body,
+        name: req.body.name,
+        displayOrder: req.body.displayOrder || 0,
         schoolId: schoolId  // Ensure schoolId from auth user
       };
       
