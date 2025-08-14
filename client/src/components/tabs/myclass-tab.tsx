@@ -235,10 +235,10 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
 
   // Get current active grade data
   const currentActiveGrade = availableGrades.find(g => g.name === activeGrade);
-  const gradeStudents = currentActiveGrade ? students.filter((student: any) => student.grade === currentActiveGrade.name) : [];
+  const gradeStudents = currentActiveGrade ? students.filter((student: any) => student.gradeId === currentActiveGrade.id) : [];
   const gradeOutPasses = currentActiveGrade ? passes.filter((pass: any) => {
     const student = students.find((s: any) => s.id === pass.studentId);
-    return student && student.grade === currentActiveGrade.name;
+    return student && student.gradeId === currentActiveGrade.id;
   }) : [];
   const availableStudents = gradeStudents.filter(student => 
     !passes.some(pass => pass.studentId === student.id)
@@ -255,10 +255,10 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
       <div className="mb-6">
         <div className="flex flex-wrap gap-2">
           {availableGrades.map((grade: any) => {
-            const gradeStudents = students.filter(s => s.grade === grade.name);
+            const gradeStudents = students.filter(s => s.gradeId === grade.id);
             const gradeOutCount = passes.filter(p => {
               const student = students.find(s => s.id === p.studentId);
-              return student && student.grade === grade.name;
+              return student && student.gradeId === grade.id;
             }).length;
             
             const isActive = activeGrade === grade.name;
