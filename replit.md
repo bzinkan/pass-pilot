@@ -22,6 +22,7 @@ The frontend uses a component-based architecture with separate views for teacher
 
 ### Backend Architecture
 - **Framework**: Express.js with TypeScript
+- **TypeScript**: Strict mode enabled with enhanced null safety (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitReturns`)
 - **Development**: Hot module replacement in development with production-ready build process
 - **API Design**: RESTful endpoints for authentication, student management, and pass operations
 - **Validation**: Zod-based request validation middleware for body, query, and params
