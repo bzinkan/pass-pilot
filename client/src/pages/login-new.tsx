@@ -10,7 +10,7 @@ import { SchoolPicker } from "@/components/school-picker";
 export default function Login() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState<'login' | 'register' | 'first-login'>('login');
   const [isLoading, setIsLoading] = useState(false);
 
   // Multi-school login state
@@ -31,6 +31,69 @@ export default function Login() {
     plan: 'free_trial'
   });
 
+  const [firstLoginForm, setFirstLoginForm] = useState({
+    password: '',
+    confirmPassword: ''
+  });
+
+  const handleFirstLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (firstLoginForm.password !== firstLoginForm.confirmPassword) {
+      toast({
+        title: "Error",
+        description: "Passwords do not match",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (firstLoginForm.password.length < 6) {
+      toast({
+        title: "Error", 
+        description: "Password must be at least 6 characters",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      const response = await fetch('/api/auth/first-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          email: loginForm.email, 
+          password: firstLoginForm.password,
+          schoolId: availableSchools[0]?.id // Use first school if multiple
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to set password');
+      }
+      
+      setLocation('/');
+      toast({
+        title: "Welcome to PassPilot!",
+        description: "Your password has been set successfully.",
+      });
+      
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -46,6 +109,15 @@ export default function Login() {
       const data = await response.json();
       
       if (!response.ok) {
+        // Check if this is a first-time login scenario
+        if (data.isFirstLogin) {
+          toast({
+            title: "First Time Login",
+            description: "Please set your password to continue.",
+          });
+          setMode('first-login');
+          return;
+        }
         throw new Error(data.error || 'Login failed');
       }
       
@@ -176,7 +248,9 @@ export default function Login() {
             <i className="fas fa-id-card text-white text-2xl"></i>
           </div>
           <CardTitle className="text-2xl font-bold">
-            {mode === 'login' ? 'Sign In to PassPilot' : 'Register Your School'}
+            {mode === 'login' ? 'Sign In to PassPilot' : 
+             mode === 'first-login' ? 'Set Your Password' :
+             'Register Your School'}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -226,6 +300,63 @@ export default function Login() {
                   data-testid="button-register-link"
                 >
                   Register Your School
+                </Button>
+              </div>
+            </form>
+          ) : mode === 'first-login' ? (
+            <form onSubmit={handleFirstLogin} className="space-y-4">
+              <div className="text-center mb-4">
+                <p className="text-sm text-muted-foreground">
+                  Welcome! Please set your password to access PassPilot.
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Email: {loginForm.email}
+                </p>
+              </div>
+              <div>
+                <Label htmlFor="firstPassword">Choose Password</Label>
+                <Input
+                  type="password"
+                  id="firstPassword"
+                  name="firstPassword"
+                  placeholder="••••••••"
+                  value={firstLoginForm.password}
+                  onChange={(e) => setFirstLoginForm({ ...firstLoginForm, password: e.target.value })}
+                  required
+                  data-testid="input-first-password"
+                />
+              </div>
+              <div>
+                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <Input
+                  type="password"
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  placeholder="••••••••"
+                  value={firstLoginForm.confirmPassword}
+                  onChange={(e) => setFirstLoginForm({ ...firstLoginForm, confirmPassword: e.target.value })}
+                  required
+                  data-testid="input-confirm-password"
+                />
+              </div>
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={isLoading}
+                data-testid="button-set-password"
+              >
+                {isLoading ? "Setting Password..." : "Set Password & Continue"}
+              </Button>
+              
+              <div className="flex justify-center">
+                <Button 
+                  type="button" 
+                  variant="link" 
+                  className="text-sm text-muted-foreground hover:text-foreground"
+                  onClick={() => setMode('login')}
+                  data-testid="button-back-to-login"
+                >
+                  Back to Login
                 </Button>
               </div>
             </form>

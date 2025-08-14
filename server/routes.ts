@@ -353,6 +353,238 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin teacher management endpoints
+  app.get('/api/admin/teachers', requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthenticatedRequest;
+      const user = await storage.getUser(authReq.user.id);
+      const validUser = unwrap(user, 'User not found');
+      
+      if (!validUser.isAdmin) {
+        return res.status(403).json({ message: 'Admin access required' });
+      }
+      
+      const teachers = await storage.getTeachersBySchool(validUser.schoolId);
+      const teachersWithoutPasswords = teachers.map(teacher => {
+        const { password: _, ...teacherWithoutPassword } = teacher;
+        return teacherWithoutPassword;
+      });
+      
+      res.json(teachersWithoutPasswords);
+    } catch (error) {
+      console.error('Get teachers error:', error);
+      res.status(500).json({ message: 'Failed to get teachers' });
+    }
+  });
+
+  app.post('/api/admin/teachers', requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthenticatedRequest;
+      const user = await storage.getUser(authReq.user.id);
+      const validUser = unwrap(user, 'User not found');
+      
+      if (!validUser.isAdmin) {
+        return res.status(403).json({ message: 'Admin access required' });
+      }
+      
+      const { email, name } = req.body;
+      const normalizedEmail = email.trim().toLowerCase();
+      
+      // Check if teacher already exists in this school
+      const existingTeacher = await storage.getUserByEmailAndSchool(normalizedEmail, validUser.schoolId);
+      if (existingTeacher) {
+        return res.status(400).json({ message: 'Teacher already exists in this school' });
+      }
+      
+      // Split name into first and last
+      const nameParts = name.trim().split(' ');
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+      
+      // Create teacher with pending status (no password yet)
+      const teacherData = {
+        schoolId: validUser.schoolId,
+        email: normalizedEmail,
+        firstName,
+        lastName,
+        isAdmin: false,
+        isFirstLogin: true, // Flag for first-time login
+        password: '', // Will be set on first login
+      };
+      
+      const newTeacher = await storage.createUser(teacherData);
+      const { password: _, ...teacherWithoutPassword } = newTeacher;
+      
+      res.json({ 
+        success: true, 
+        teacher: teacherWithoutPassword,
+        message: 'Teacher invited successfully. They will set their password on first login.'
+      });
+      
+    } catch (error: any) {
+      console.error('Create teacher error:', error);
+      res.status(400).json({ message: error.message || 'Failed to create teacher' });
+    }
+  });
+
+  app.delete('/api/admin/teachers/:teacherId', requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthenticatedRequest;
+      const user = await storage.getUser(authReq.user.id);
+      const validUser = unwrap(user, 'User not found');
+      
+      if (!validUser.isAdmin) {
+        return res.status(403).json({ message: 'Admin access required' });
+      }
+      
+      const teacherId = req.params.teacherId;
+      const teacher = await storage.getUser(teacherId);
+      
+      if (!teacher || teacher.schoolId !== validUser.schoolId) {
+        return res.status(404).json({ message: 'Teacher not found' });
+      }
+      
+      if (teacher.isAdmin && teacher.id === validUser.id) {
+        return res.status(400).json({ message: 'Cannot remove yourself' });
+      }
+      
+      await storage.deleteUser(teacherId);
+      res.json({ success: true, message: 'Teacher removed successfully' });
+      
+    } catch (error: any) {
+      console.error('Delete teacher error:', error);
+      res.status(500).json({ message: error.message || 'Failed to remove teacher' });
+    }
+  });
+
+  app.patch('/api/admin/teachers/:teacherId/promote', requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthenticatedRequest;
+      const user = await storage.getUser(authReq.user.id);
+      const validUser = unwrap(user, 'User not found');
+      
+      if (!validUser.isAdmin) {
+        return res.status(403).json({ message: 'Admin access required' });
+      }
+      
+      const teacherId = req.params.teacherId;
+      const teacher = await storage.getUser(teacherId);
+      
+      if (!teacher || teacher.schoolId !== validUser.schoolId) {
+        return res.status(404).json({ message: 'Teacher not found' });
+      }
+      
+      await storage.updateUser(teacherId, { isAdmin: true });
+      res.json({ success: true, message: 'Teacher promoted to admin successfully' });
+      
+    } catch (error: any) {
+      console.error('Promote teacher error:', error);
+      res.status(500).json({ message: error.message || 'Failed to promote teacher' });
+    }
+  });
+
+  app.patch('/api/admin/teachers/:teacherId/demote', requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthenticatedRequest;
+      const user = await storage.getUser(authReq.user.id);
+      const validUser = unwrap(user, 'User not found');
+      
+      if (!validUser.isAdmin) {
+        return res.status(403).json({ message: 'Admin access required' });
+      }
+      
+      const teacherId = req.params.teacherId;
+      const teacher = await storage.getUser(teacherId);
+      
+      if (!teacher || teacher.schoolId !== validUser.schoolId) {
+        return res.status(404).json({ message: 'Teacher not found' });
+      }
+      
+      if (teacher.id === validUser.id) {
+        return res.status(400).json({ message: 'Cannot demote yourself' });
+      }
+      
+      await storage.updateUser(teacherId, { isAdmin: false });
+      res.json({ success: true, message: 'Admin demoted to teacher successfully' });
+      
+    } catch (error: any) {
+      console.error('Demote admin error:', error);
+      res.status(500).json({ message: error.message || 'Failed to demote admin' });
+    }
+  });
+
+  app.get('/api/admin/school-info', requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthenticatedRequest;
+      const user = await storage.getUser(authReq.user.id);
+      const validUser = unwrap(user, 'User not found');
+      
+      if (!validUser.isAdmin) {
+        return res.status(403).json({ message: 'Admin access required' });
+      }
+      
+      const school = await storage.getSchool(validUser.schoolId);
+      const validSchool = unwrap(school, 'School not found');
+      
+      res.json(validSchool);
+    } catch (error) {
+      console.error('Get school info error:', error);
+      res.status(500).json({ message: 'Failed to get school information' });
+    }
+  });
+
+  // First-time login endpoint for teachers
+  app.post('/api/auth/first-login', async (req, res) => {
+    try {
+      const { email, password, schoolId } = req.body;
+      const normalizedEmail = email.trim().toLowerCase();
+      
+      // Find user by email and school
+      const user = await storage.getUserByEmailAndSchool(normalizedEmail, schoolId);
+      if (!user) {
+        return res.status(400).json({ message: 'Invalid email or school' });
+      }
+      
+      // Check if this is indeed a first-time login
+      if (!user.isFirstLogin) {
+        return res.status(400).json({ message: 'User has already set their password' });
+      }
+      
+      // Set password for first time
+      const hashedPassword = await auth.hashPassword(password);
+      await storage.updateUser(user.id, { 
+        password: hashedPassword, 
+        isFirstLogin: false 
+      });
+      
+      // Create session
+      const sessionToken = auth.generateSessionToken();
+      const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      sessions.set(sessionToken, {
+        userId: user.id,
+        schoolId: user.schoolId,
+        expires
+      });
+      
+      res.cookie('session', sessionToken, { 
+        httpOnly: true, 
+        secure: ENV.NODE_ENV === 'production',
+        expires 
+      });
+      
+      const { password: _, ...userWithoutPassword } = user;
+      res.json({ 
+        success: true, 
+        user: { ...userWithoutPassword, isFirstLogin: false },
+        message: 'Password set successfully. Welcome to PassPilot!'
+      });
+      
+    } catch (error: any) {
+      console.error('First login error:', error);
+      res.status(500).json({ message: 'Failed to set password' });
+    }
+  });
+
   const server = createServer(app);
   return server;
 }

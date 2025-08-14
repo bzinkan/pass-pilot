@@ -12,6 +12,7 @@ export interface IStorage {
   getUsersByEmail(email: string): Promise<User[]>; // Get all users with this email across schools
   getUserByEmailAndSchool(email: string, schoolId: string): Promise<User | undefined>;
   getUsersBySchool(schoolId: string): Promise<User[]>;
+  getTeachersBySchool(schoolId: string): Promise<User[]>;
   authenticateUser(email: string, password: string): Promise<User | null>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<User>): Promise<User>;
@@ -387,6 +388,12 @@ export class MemStorage implements IStorage {
 
   async getUsersBySchool(schoolId: string): Promise<User[]> {
     return Array.from(this.users.values()).filter(user => user.schoolId === schoolId);
+  }
+
+  async getTeachersBySchool(schoolId: string): Promise<User[]> {
+    return Array.from(this.users.values()).filter(user => 
+      user.schoolId === schoolId && !user.isPlatformOwner
+    );
   }
 
   async getUsersByEmail(email: string): Promise<User[]> {

@@ -36,6 +36,7 @@ export const users = pgTable("users", {
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   isAdmin: boolean("is_admin").notNull().default(false),
+  isFirstLogin: boolean("is_first_login").notNull().default(false),
   status: text("status").notNull().default("active"), // active, suspended, pending
   resetToken: text("reset_token"),
   resetTokenExpiry: timestamp("reset_token_expiry"),
