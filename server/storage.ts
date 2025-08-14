@@ -407,6 +407,10 @@ export class MemStorage implements IStorage {
     return this.getSchool(id); // Alias for getSchool
   }
 
+  async getSchoolBySlug(slug: string): Promise<School | undefined> {
+    return Array.from(this.schools.values()).find(school => school.slug === slug);
+  }
+
   async createSchool(insertSchool: InsertSchool): Promise<School> {
     const id = randomUUID();
     const school = {

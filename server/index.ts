@@ -103,3 +103,9 @@ app.use((req, res, next) => {
     log(`serving on port ${port}`);
   });
 })();
+
+// Global error handler - must be at the very end
+app.use((err: any, _req: any, res: any, _next: any) => {
+  console.error(err);
+  res.status(500).json({ ok: false, error: "Internal Server Error" });
+});
