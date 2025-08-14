@@ -11,7 +11,7 @@ import { useAuth } from "@/hooks/use-auth";
 export default function Login() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  const { user } = useAuth();
+  const { user, login, refreshUser } = useAuth();
   const [mode, setMode] = useState<'login' | 'register' | 'first-login'>('login');
   const [isLoading, setIsLoading] = useState(false);
   
@@ -86,8 +86,13 @@ export default function Login() {
         throw new Error(data.message || 'Failed to set password');
       }
       
-      // Successful first login - trigger auth state update
-      window.location.reload(); // This will cause useAuth to re-check the session
+      // Successful first login - refresh auth state and redirect
+      await refreshUser();
+      toast({
+        title: "Welcome!",
+        description: "Password set successfully. Welcome to PassPilot!",
+      });
+      setLocation('/app');
       
     } catch (error: any) {
       toast({
@@ -138,8 +143,13 @@ export default function Login() {
         return;
       }
       
-      // Successful login - trigger auth state update by reloading the page or triggering a re-check
-      window.location.reload(); // This will cause useAuth to re-check the session
+      // Successful login - refresh auth state and redirect
+      await refreshUser();
+      toast({
+        title: "Welcome back!",
+        description: "You have successfully logged in.",
+      });
+      setLocation('/app');
       
     } catch (error: any) {
       toast({
@@ -174,8 +184,13 @@ export default function Login() {
         throw new Error(data.error || 'Login failed');
       }
       
-      // Successful login - trigger auth state update by reloading the page
-      window.location.reload(); // This will cause useAuth to re-check the session
+      // Successful login - refresh auth state and redirect
+      await refreshUser();
+      toast({
+        title: "Welcome back!",
+        description: "You have successfully logged in.",
+      });
+      setLocation('/app');
       
     } catch (error: any) {
       toast({

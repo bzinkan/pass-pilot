@@ -10,6 +10,7 @@ interface AuthState {
   login: (email: string, password: string, schoolId?: string) => Promise<void>;
   logout: () => void;
   register: (data: any) => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 export function useAuth(): AuthState {
@@ -109,11 +110,26 @@ export function useAuth(): AuthState {
     await registerMutation.mutateAsync(data);
   };
 
+  const refreshUser = async () => {
+    try {
+      const response = await apiRequest('GET', '/api/auth/me');
+      const userData = await response.json();
+      if (response.ok) {
+        setUser(userData);
+      } else {
+        setUser(null);
+      }
+    } catch (error) {
+      setUser(null);
+    }
+  };
+
   return {
     user,
     isLoading: isLoading || loginMutation.isPending || registerMutation.isPending,
     login,
     logout,
     register,
+    refreshUser,
   };
 }
