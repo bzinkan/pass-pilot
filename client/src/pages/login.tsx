@@ -14,7 +14,7 @@ export default function Login() {
   const { login } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  const [mode, setMode] = useState<'login' | 'register' | 'forgot-password'>('login');
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot-password' | 'first-login'>('login');
   const [isLoading, setIsLoading] = useState(false);
 
   const [loginForm, setLoginForm] = useState({
@@ -38,6 +38,17 @@ export default function Login() {
   const [forgotPasswordForm, setForgotPasswordForm] = useState({
     email: ''
   });
+
+  const [firstLoginForm, setFirstLoginForm] = useState({
+    password: '',
+    confirmPassword: ''
+  });
+
+  // Store first-time login info from backend
+  const [firstLoginInfo, setFirstLoginInfo] = useState<{
+    email: string;
+    schoolId: string;
+  } | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,6 +75,19 @@ export default function Login() {
       const data = await response.json();
       
       if (!response.ok) {
+        // Check if this is a first-time login scenario
+        if (data.isFirstLogin) {
+          setFirstLoginInfo({
+            email: data.email,
+            schoolId: data.schoolId
+          });
+          toast({
+            title: "First Time Login",
+            description: "Please set your password to continue.",
+          });
+          setMode('first-login');
+          return;
+        }
         throw new Error(data.error || 'Login failed');
       }
       
@@ -223,6 +247,63 @@ export default function Login() {
     }
   };
 
+  const handleFirstLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (firstLoginForm.password !== firstLoginForm.confirmPassword) {
+      toast({
+        title: "Error",
+        description: "Passwords do not match",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (firstLoginForm.password.length < 6) {
+      toast({
+        title: "Error", 
+        description: "Password must be at least 6 characters",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/auth/first-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          email: firstLoginInfo?.email,
+          password: firstLoginForm.password,
+          schoolId: firstLoginInfo?.schoolId
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to set password');
+      }
+      
+      setLocation('/');
+      toast({
+        title: "Welcome!",
+        description: "Password set successfully! You're now logged in.",
+      });
+      
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Show school picker if multi-school flow
   if (requiresSchool) {
     return (
@@ -251,11 +332,60 @@ export default function Login() {
           <CardTitle className="text-2xl font-bold">
             {mode === 'login' ? 'Sign In to PassPilot' : 
              mode === 'forgot-password' ? 'Reset Your Password' : 
+             mode === 'first-login' ? 'Set Your Password' :
              'Register Your School'}
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {mode === 'login' ? (
+          {mode === 'first-login' ? (
+            <form onSubmit={handleFirstLogin} className="space-y-4">
+              <div className="text-sm text-muted-foreground mb-4">
+                Welcome! Since this is your first login, please set a password for your account.
+              </div>
+              
+              <div>
+                <Label htmlFor="firstPassword">New Password</Label>
+                <Input
+                  type="password"
+                  id="firstPassword"
+                  placeholder="••••••••"
+                  value={firstLoginForm.password}
+                  onChange={(e) => setFirstLoginForm({ ...firstLoginForm, password: e.target.value })}
+                  required
+                  minLength={6}
+                  data-testid="input-first-password"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <Input
+                  type="password"
+                  id="confirmPassword"
+                  placeholder="••••••••"
+                  value={firstLoginForm.confirmPassword}
+                  onChange={(e) => setFirstLoginForm({ ...firstLoginForm, confirmPassword: e.target.value })}
+                  required
+                  minLength={6}
+                  data-testid="input-confirm-password"
+                />
+              </div>
+              
+              <Button type="submit" className="w-full" disabled={isLoading} data-testid="button-set-password">
+                {isLoading ? "Setting Password..." : "Set Password & Sign In"}
+              </Button>
+              
+              <Button 
+                type="button" 
+                variant="ghost" 
+                className="w-full" 
+                onClick={() => setMode('login')}
+                data-testid="button-back-to-login"
+              >
+                Back to Login
+              </Button>
+            </form>
+          ) : mode === 'login' ? (
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
                 <Label htmlFor="email">Email Address</Label>

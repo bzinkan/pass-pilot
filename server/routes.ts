@@ -137,6 +137,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const user = await storage.getUserByEmailAndSchool(normalizedEmail, schoolId);
         invariant(user, 'Invalid credentials');
         
+        // Check if this is a first-time login (teacher hasn't set password yet)
+        if (user.isFirstLogin) {
+          return res.json({ 
+            ok: false, 
+            isFirstLogin: true,
+            email: normalizedEmail,
+            schoolId: schoolId,
+            message: 'First time login - please set your password'
+          });
+        }
+        
         const isValid = await auth.comparePassword(password, user.password);
         invariant(isValid, 'Invalid credentials');
         
@@ -167,6 +178,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (candidates.length === 0) {
         return res.status(401).json({ error: 'Invalid credentials' });
+      }
+
+      // Check if any candidate is a first-time login
+      const firstLoginUser = candidates.find(user => user.isFirstLogin);
+      if (firstLoginUser) {
+        // If single school with first login, return first-login response
+        if (candidates.length === 1) {
+          return res.json({ 
+            ok: false, 
+            isFirstLogin: true,
+            email: normalizedEmail,
+            schoolId: firstLoginUser.schoolId,
+            message: 'First time login - please set your password'
+          });
+        } else {
+          // Multiple schools with at least one first-time login - need school selection first
+          const schools = candidates.map(user => ({
+            id: user.schoolId,
+            name: user.schoolId, // This should ideally be school name
+            isFirstLogin: user.isFirstLogin
+          }));
+          return res.json({
+            ok: false,
+            requiresSchool: true,
+            schools: schools,
+            hasFirstLogin: true,
+            email: normalizedEmail
+          });
+        }
       }
 
       // Verify password against first account (prevents email enumeration)
