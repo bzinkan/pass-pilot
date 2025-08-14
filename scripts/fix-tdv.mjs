@@ -1,46 +1,54 @@
 import pg from 'pg';
 const { Client } = pg;
 
-// Build connection from env vars (Neon)
-const cs = `postgresql://${process.env.PROD_PGUSER}:${encodeURIComponent(process.env.PROD_PGPASSWORD)}@${process.env.PROD_PGHOST}:${process.env.PROD_PGPORT}/${process.env.PROD_PGDATABASE}`;
-const client = new Client({ connectionString: cs, ssl: { rejectUnauthorized: false }});
+const client = new Client({
+  host: process.env.PGHOST,
+  port: Number(process.env.PGPORT || 5432),
+  database: process.env.PGDATABASE,
+  user: process.env.PGUSER,
+  password: process.env.PGPASSWORD,
+  ssl: { rejectUnauthorized: false },
+});
 
-async function main() {
+async function run() {
   await client.connect();
 
   // 1) Ensure column exists
   await client.query(`ALTER TABLE IF EXISTS passes ADD COLUMN IF NOT EXISTS tdv text`);
 
-  // 2) Backfill any null/empty to 'general'
-  await client.query(`UPDATE passes SET tdv='general' WHERE tdv IS NULL OR btrim(tdv)=''`);
-
-  // 3) Default + NOT NULL
+  // 2) Set default for new rows
   await client.query(`ALTER TABLE passes ALTER COLUMN tdv SET DEFAULT 'general'`);
-  await client.query(`ALTER TABLE passes ALTER COLUMN tdv SET NOT NULL`);
 
-  // 4) Optional: guard against empty strings
+  // 3) Backfill existing NULL/empty
+  await client.query(`UPDATE passes SET tdv='general' WHERE tdv IS NULL OR tdv=''`);
+
+  // 4) Trigger to guard future inserts
   await client.query(`
-    DO $$
+    CREATE OR REPLACE FUNCTION passes_tdv_default() RETURNS trigger AS $$
     BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='passes_tdv_nonempty') THEN
-        ALTER TABLE passes ADD CONSTRAINT passes_tdv_nonempty CHECK (length(btrim(tdv)) > 0);
-      END IF;
-    END $$;
+      IF NEW.tdv IS NULL OR NEW.tdv='' THEN NEW.tdv := 'general'; END IF;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+  `);
+  await client.query(`DROP TRIGGER IF EXISTS passes_tdv_default_trg ON passes`);
+  await client.query(`
+    CREATE TRIGGER passes_tdv_default_trg
+    BEFORE INSERT ON passes
+    FOR EACH ROW
+    EXECUTE FUNCTION passes_tdv_default();
   `);
 
   // 5) Verify
-  const r = await client.query(`
+  const col = await client.query(`
     SELECT column_default, is_nullable, data_type
     FROM information_schema.columns
     WHERE table_name='passes' AND column_name='tdv'
   `);
-  console.log('tdv column:', r.rows[0]);
-
-  const r2 = await client.query(`SELECT count(*) FROM passes WHERE tdv IS NULL OR btrim(tdv)=''`);
-  console.log('null_or_empty count:', r2.rows[0].count);
+  const cnt = await client.query(`SELECT count(*) FROM passes WHERE tdv IS NULL OR tdv=''`);
+  console.log('tdv column:', col.rows[0] ?? 'NOT FOUND');
+  console.log('null_or_empty count:', cnt.rows[0].count);
 
   await client.end();
-  console.log('✓ tdv default + NOT NULL + non-empty constraint installed.');
 }
-
-main().catch(e => { console.error(e); process.exit(1); });
+run().then(()=>console.log('✓ tdv fixed & guarded.')).catch(e=>{ console.error(e); process.exit(1); });
