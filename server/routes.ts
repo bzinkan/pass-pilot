@@ -2106,31 +2106,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/passes", requireAuth, async (req: any, res) => {
     try {
+      console.log('POST /api/passes - userId:', req.userId);
+      console.log('POST /api/passes - body:', req.body);
+
       const user = await storage.getUser(req.userId);
-      if (!user) return res.status(404).json({ message: "User not found" });
+      if (!user) {
+        console.log('User not found for userId:', req.userId);
+        return res.status(404).json({ message: 'User not found' });
+      }
 
-      // pick a value in this order and force non-empty text
-      const tdv =
-        (req.body.tdv ?? req.body.t ?? req.body.passType ?? 'general')
-          .toString()
-          .trim() || 'general';
+      // --- START DEFENSIVE FIX ---
+      const raw = req.body || {};
 
-      const td =
-        (req.body.t ?? req.body.passType ?? 'general')
-          .toString()
-          .trim() || 'general';
+      // Accept either 'td' or 'tdv' from the client:
+      const incomingTdv = (raw.tdv ?? raw.t ?? '').toString().trim();
 
+      // Force to a sane non-null, non-empty value:
+      const safeTdv = incomingTdv || 'general';
+
+      // The rest of your defaults that were already there:
+      const destination = raw.destination || 'Restroom';
+      const passType   = raw.passType   || 'general';
+
+      // Build the validated payload; make sure the key matches your DB column name: 'tdv'
       const { validatePassData } = await import("../shared/validation");
-
       const passInput = validatePassData({
-        ...req.body,
-        td,
-        tdv,                      // <-- never null/empty now
+        ...raw,
+        tdv: safeTdv,
+        destination,
+        passType,
         teacherId: req.userId,
         schoolId: user.schoolId,
-        destination: req.body.destination || "Restroom",
       });
+      // --- END DEFENSIVE FIX ---
 
+      // Final shape written to DB (still ok to keep your existing extras)
       const passData = {
         ...passInput,
         checkoutTime: new Date(),
@@ -2140,10 +2150,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         printRequested: false,
       };
 
+      console.log('Creating pass with data:', passData);
       const pass = await storage.createPass(passData);
+      console.log('Created pass:', pass);
       res.json(pass);
     } catch (error: any) {
-      console.error("Error creating pass:", error);
+      console.error('Error creating pass:', error);
       res.status(400).json({ message: error.message });
     }
   });
