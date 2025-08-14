@@ -268,31 +268,58 @@ export default function Login() {
       });
       return;
     }
+
+    if (!firstLoginInfo?.email) {
+      toast({
+        title: "Error", 
+        description: "Please enter your email address",
+        variant: "destructive",
+      });
+      return;
+    }
     
     setIsLoading(true);
     try {
-      const response = await fetch('/api/auth/first-login', {
+      // First, try to find the user to get their school ID
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          email: firstLoginInfo?.email,
-          password: firstLoginForm.password,
-          schoolId: firstLoginInfo?.schoolId
+          email: firstLoginInfo.email,
+          password: 'temp' // This will fail but give us the schoolId if user exists
         })
       });
       
       const data = await response.json();
       
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to set password');
+      if (data.isFirstLogin) {
+        // Now set the password
+        const setPasswordResponse = await fetch('/api/auth/first-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            email: firstLoginInfo.email,
+            password: firstLoginForm.password,
+            schoolId: data.schoolId
+          })
+        });
+        
+        const setPasswordData = await setPasswordResponse.json();
+        
+        if (!setPasswordResponse.ok) {
+          throw new Error(setPasswordData.message || 'Failed to set password');
+        }
+        
+        setLocation('/');
+        toast({
+          title: "Welcome!",
+          description: "Password set successfully! You're now logged in.",
+        });
+      } else {
+        throw new Error('Email not found or account already has a password set');
       }
-      
-      setLocation('/');
-      toast({
-        title: "Welcome!",
-        description: "Password set successfully! You're now logged in.",
-      });
       
     } catch (error: any) {
       toast({
@@ -341,7 +368,20 @@ export default function Login() {
           {mode === 'first-login' ? (
             <form onSubmit={handleFirstLogin} className="space-y-4">
               <div className="text-sm text-muted-foreground mb-4">
-                Welcome! Since this is your first login, please set a password for your account.
+                Enter your email and choose a password for your account.
+              </div>
+              
+              <div>
+                <Label htmlFor="teacherEmail">Email Address</Label>
+                <Input
+                  type="email"
+                  id="teacherEmail"
+                  placeholder="teacher@school.edu"
+                  value={firstLoginInfo?.email || ''}
+                  onChange={(e) => setFirstLoginInfo(prev => prev ? {...prev, email: e.target.value} : {email: e.target.value, schoolId: ''})}
+                  required
+                  data-testid="input-teacher-email"
+                />
               </div>
               
               <div>
@@ -423,11 +463,11 @@ export default function Login() {
                 {isLoading ? "Signing In..." : "Sign In"}
               </Button>
               
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center text-xs">
                 <Button 
                   type="button" 
                   variant="link" 
-                  className="text-sm text-muted-foreground hover:text-foreground p-0"
+                  className="text-xs text-muted-foreground hover:text-foreground p-0"
                   onClick={() => setMode('forgot-password')}
                   data-testid="button-forgot-password"
                 >
@@ -436,7 +476,16 @@ export default function Login() {
                 <Button 
                   type="button" 
                   variant="link" 
-                  className="text-sm text-muted-foreground hover:text-foreground p-0"
+                  className="text-xs text-muted-foreground hover:text-foreground p-0"
+                  onClick={() => setMode('first-login')}
+                  data-testid="button-set-password"
+                >
+                  New Teacher? Set Password
+                </Button>
+                <Button 
+                  type="button" 
+                  variant="link" 
+                  className="text-xs text-muted-foreground hover:text-foreground p-0"
                   onClick={() => setMode('register')}
                   data-testid="button-register-link"
                 >
