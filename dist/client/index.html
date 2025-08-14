@@ -25,11 +25,26 @@
     <meta name="apple-mobile-web-app-title" content="PassPilot" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="application-name" content="PassPilot" />
-    <script type="module" crossorigin src="/assets/index-B_TOljgw.js"></script>
+    <script type="module" crossorigin src="/assets/index-ek3ht1YN.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-BdkDl7ZP.css">
   </head>
   <body>
     <div id="root"></div>
+
+    <!-- TEMP: surface first runtime error instead of a blank page -->
+    <script>
+      window.addEventListener("error", (e) => {
+        const box = document.createElement("pre");
+        box.style.cssText =
+          "white-space:pre-wrap;padding:16px;margin:16px;border:1px solid #f00;background:#fff;color:#000;font-family:monospace";
+        box.textContent =
+          "Client error: " +
+          (e.message || e.error) +
+          "\n" +
+          (e.error && e.error.stack ? e.error.stack : "");
+        document.body.prepend(box);
+      });
+    </script>
 
     <!-- Replit dev banner when opened outside the Replit environment -->
     <script type="text/javascript" src="https://replit.com/public/js/replit-dev-banner.js"></script>
