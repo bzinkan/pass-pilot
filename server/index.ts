@@ -12,45 +12,51 @@ import "./passResetScheduler"; // Initialize the pass reset scheduler
 const app = express();
 
 // Trust proxy for Replit/Railway deployments - CRITICAL for cookies
-app.set('trust proxy', 1);
+app.set("trust proxy", 1);
 
-// Stripe webhook FIRST — raw body required  
-app.post('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }), async (req, res) => {
-  // Import webhook handler dynamically to avoid circular dependencies
-  const { stripeWebhook } = await import("./routes-billing");
-  return stripeWebhook(req, res);
-});
+/**
+ * Health endpoints used by Railway's health check.
+ * Returns plain text "ok" with 200.
+ */
+app.get("/api/healthz", (_req, res) => res.type("text/plain").send("ok"));
+app.get("/healthz", (_req, res) => res.type("text/plain").send("ok")); // extra path just in case
+
+/**
+ * Stripe webhook FIRST — raw body required.
+ * Must appear before express.json/urlencoded.
+ */
+app.post(
+  "/api/stripe/webhook",
+  bodyParser.raw({ type: "application/json" }),
+  async (req, res) => {
+    const { stripeWebhook } = await import("./routes-billing");
+    return stripeWebhook(req, res);
+  }
+);
 
 // Now regular parsers
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-app.use(cookieParser(process.env.SESSION_SECRET)); // Add signed cookie parsing for admin authentication
+app.use(cookieParser(process.env.SESSION_SECRET)); // signed cookies for admin auth
 
-// Middleware will be added after async setup
-
+// Request log (API-only), trimmed to avoid noisy logs
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+  let capturedJsonResponse: Record<string, any> | undefined;
 
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
+  const originalResJson = res.json.bind(res);
+  (res as any).json = (bodyJson: any, ...args: any[]) => {
     capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
+    return originalResJson(bodyJson, ...args);
   };
 
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
+      if (capturedJsonResponse) logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+      if (logLine.length > 80) logLine = logLine.slice(0, 79) + "…";
       log(logLine);
     }
   });
@@ -59,68 +65,67 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-
-  // Register bootstrap route first (only if BOOTSTRAP_TOKEN is set)
+  // Bootstrap route (only if BOOTSTRAP_TOKEN is set)
   registerBootstrapRoute(app);
-  
-  // Register multi-school authentication routes
-  registerAuthMultiRoutes(app);
-  
-  // Register super admin routes
-  registerSuperAdminRoutes(app);
-  
-  const server = await registerRoutes(app);
 
-  // Add sanitization middleware
+  // Sanitize incoming JSON before hitting any routes
   const { sanitizeBody } = await import("./middleware/sanitize");
   app.use(sanitizeBody);
-  
-  // Use enhanced error handler
+
+  // Multi-school auth + super admin routes
+  registerAuthMultiRoutes(app);
+  registerSuperAdminRoutes(app);
+
+  // Register the rest of your app routes (some setups return an HTTP server)
+  const routesServer = await registerRoutes(app);
+
+  // Centralized error handling
   const { errorHandler } = await import("./middleware/errorHandler");
   app.use(errorHandler);
-  
+
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
-
     res.status(status).json({ message });
-    throw err;
+    // (do not rethrow here; that would crash the process)
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  const isProduction = process.env.NODE_ENV === "production" || process.env.REPLIT_DEPLOYMENT === "1";
-  log(`Environment check - NODE_ENV: ${process.env.NODE_ENV}, REPLIT_DEPLOYMENT: ${process.env.REPLIT_DEPLOYMENT}, isProduction: ${isProduction}`);
-  
+  // Dev vs Production static handling
+  const isProduction =
+    process.env.NODE_ENV === "production" || process.env.REPLIT_DEPLOYMENT === "1";
+  log(
+    `Environment check - NODE_ENV: ${process.env.NODE_ENV}, REPLIT_DEPLOYMENT: ${process.env.REPLIT_DEPLOYMENT}, isProduction: ${isProduction}`
+  );
+
   if (!isProduction) {
     log("Setting up Vite development server");
-    await setupVite(app, server);
+    // If your setupVite accepts only (app), the extra arg is ignored at runtime
+    await setupVite(app as any, routesServer as any);
   } else {
     log("Setting up production static file serving");
-    
-    // Add cache-control headers for index.html to prevent aggressive caching
+
+    // Prevent index.html from being cached too aggressively
     app.use((req, res, next) => {
-      if (req.path === '/' || req.path.endsWith('/index.html')) {
-        res.set('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+      if (req.path === "/" || req.path.endsWith("/index.html")) {
+        res.set("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0");
         log(`No-cache headers set for: ${req.path}`);
       }
       next();
     });
-    
-    serveStatic(app);
+
+    // Don't crash if the client build folder is missing
+    try {
+      serveStatic(app);
+    } catch (e) {
+      console.warn("[static] skipping client serve:", (e as Error).message);
+    }
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
-    log(`serving on port ${port}`);
-  });
+  // IMPORTANT: listen on Railway's provided port and bind to 0.0.0.0
+  const port = Number(process.env.PORT ?? 5000);
+  const httpServer = app.listen(port, "0.0.0.0", () =>
+    log(`[express] listening on ${port} (NODE_ENV=${process.env.NODE_ENV})`)
+  );
+
+  // If something else needs the server instance, it’s available as `httpServer`
 })();
