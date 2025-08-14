@@ -97,6 +97,7 @@ export default function Kiosk() {
       
       return () => clearInterval(pollInterval);
     }
+    return; // Fix TypeScript "not all code paths return" error
   }, [session?.teacherId]);
 
   const loadStudents = async (schoolId: string) => {
