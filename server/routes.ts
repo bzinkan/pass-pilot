@@ -33,7 +33,7 @@ interface AuthenticatedRequest extends Request {
 }
 
 const requireAuth = (req: Request, res: Response, next: NextFunction) => {
-  const authToken = req.headers.authorization?.replace('Bearer ', '') || req.cookies.session;
+  const authToken = req.headers.authorization?.replace('Bearer ', '') || req.cookies.pp_session;
   
   if (!authToken) {
     return res.status(401).json({ message: 'Authentication required' });
@@ -137,14 +137,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           expires
         });
         
-        res.cookie('session', sessionToken, { 
-          httpOnly: true, 
+        res.cookie('pp_session', sessionToken, {
+          httpOnly: true,
           secure: ENV.NODE_ENV === 'production',
-          expires 
+          sameSite: ENV.NODE_ENV === 'production' ? 'none' : 'lax',
+          path: '/',
+          maxAge: 7 * 24 * 3600 * 1000,
+          signed: false
         });
         
         const { password: _, ...userWithoutPassword } = user;
-        return res.json({ success: true, user: userWithoutPassword, token: sessionToken });
+        return res.json({ ok: true, user: userWithoutPassword, redirect: '/app' });
       }
 
       // Multi-school flow: get all accounts for this email
@@ -171,14 +174,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           expires
         });
         
-        res.cookie('session', sessionToken, { 
-          httpOnly: true, 
+        res.cookie('pp_session', sessionToken, {
+          httpOnly: true,
           secure: ENV.NODE_ENV === 'production',
-          expires 
+          sameSite: ENV.NODE_ENV === 'production' ? 'none' : 'lax',
+          path: '/',
+          maxAge: 7 * 24 * 3600 * 1000,
+          signed: false
         });
         
         const { password: _, ...userWithoutPassword } = user;
-        return res.json({ success: true, user: userWithoutPassword, token: sessionToken });
+        return res.json({ ok: true, user: userWithoutPassword, redirect: '/app' });
       }
 
       // Multiple schools - return school picker data
@@ -198,13 +204,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get('/api/auth/me', requireAuth, async (req: Request, res: Response) => {
+    res.set('Cache-Control', 'no-store');
     try {
       const authReq = req as AuthenticatedRequest;
       const user = await storage.getUser(authReq.user.id);
       const validUser = unwrap(user, 'User not found');
       
       const { password: _, ...userWithoutPassword } = validUser;
-      res.json(userWithoutPassword);
+      res.json({ ok: true, user: userWithoutPassword });
     } catch (error) {
       console.error('Get user error:', error);
       res.status(500).json({ message: 'Failed to get user' });
@@ -212,11 +219,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post('/api/auth/logout', (req, res) => {
-    const authToken = req.headers.authorization?.replace('Bearer ', '') || req.cookies.session;
+    const authToken = req.headers.authorization?.replace('Bearer ', '') || req.cookies.pp_session;
     if (authToken) {
       sessions.delete(authToken);
     }
-    res.clearCookie('session');
+    res.clearCookie('pp_session');
     res.json({ success: true });
   });
 
@@ -717,17 +724,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         expires
       });
       
-      res.cookie('session', sessionToken, { 
-        httpOnly: true, 
+      res.cookie('pp_session', sessionToken, {
+        httpOnly: true,
         secure: ENV.NODE_ENV === 'production',
-        expires 
+        sameSite: ENV.NODE_ENV === 'production' ? 'none' : 'lax',
+        path: '/',
+        maxAge: 7 * 24 * 3600 * 1000,
+        signed: false
       });
       
       const { password: _, ...userWithoutPassword } = user;
       res.json({ 
-        success: true, 
+        ok: true, 
         user: { ...userWithoutPassword, isFirstLogin: false },
-        message: 'Password set successfully. Welcome to PassPilot!'
+        redirect: '/app'
       });
       
     } catch (error: any) {

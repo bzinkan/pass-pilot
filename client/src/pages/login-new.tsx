@@ -86,15 +86,12 @@ export default function Login() {
         throw new Error(data.message || 'Failed to set password');
       }
       
-      // Successful first login - refresh auth state and redirect
-      toast({
-        title: "Welcome!",
-        description: "Password set successfully. Welcome to PassPilot!",
-      });
-      
-      // Refresh auth state and redirect
-      await refreshUser();
-      setLocation('/app');
+      // Successful first login - redirect with full page reload
+      if (response.ok && data.ok) {
+        window.location.replace(data.redirect || '/app'); // Full reload ensures cookie is active
+      } else {
+        throw new Error(data.message || 'Failed to set password');
+      }
       
     } catch (error: any) {
       toast({
@@ -145,15 +142,11 @@ export default function Login() {
         return;
       }
       
-      // Successful login - refresh auth state and redirect
-      toast({
-        title: "Welcome back!",
-        description: "You have successfully logged in.",
-      });
-      
-      // Refresh auth state and redirect
-      await refreshUser();
-      setLocation('/app');
+      if (response.ok && data.ok) {
+        window.location.replace(data.redirect || '/app'); // Full reload ensures cookie is active
+      } else {
+        throw new Error(data.error || 'Login failed');
+      }
       
     } catch (error: any) {
       toast({
@@ -184,19 +177,11 @@ export default function Login() {
       
       const data = await response.json();
       
-      if (!response.ok || !data.success) {
+      if (response.ok && data.ok) {
+        window.location.replace(data.redirect || '/app'); // Full reload ensures cookie is active
+      } else {
         throw new Error(data.error || 'Login failed');
       }
-      
-      // Successful login - refresh auth state and redirect
-      toast({
-        title: "Welcome back!",
-        description: "You have successfully logged in.",
-      });
-      
-      // Refresh auth state and redirect
-      await refreshUser();
-      setLocation('/app');
       
     } catch (error: any) {
       toast({

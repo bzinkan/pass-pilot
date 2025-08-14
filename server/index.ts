@@ -7,6 +7,7 @@ import { ENV } from "./env";
 import "./passResetScheduler"; // Initialize the pass reset scheduler
 
 const app = express();
+app.set('trust proxy', 1); // Trust Railway/Replit proxy for secure cookies
 
 // Stripe webhook FIRST — raw body required  
 app.post('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }), async (req, res) => {
