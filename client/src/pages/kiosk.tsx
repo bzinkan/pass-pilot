@@ -118,6 +118,7 @@ export default function Kiosk() {
       const response = await apiRequest('GET', `/api/students?schoolId=${schoolId}`, undefined);
       const data = await response.json();
       console.log('Loaded students in kiosk:', data);
+      console.log('Students sample:', data.length > 0 ? data[0] : 'No students');
       setStudents(data);
     } catch (error) {
       console.error('Error loading students:', error);
@@ -145,41 +146,40 @@ export default function Kiosk() {
       }
       
       const data = await response.json();
+      console.log('Raw grades data:', data);
       
-      // Get teacher's profile to filter grades like MyClass tab
-      const userResponse = await apiRequest('GET', '/api/users/me', undefined);
-      if (!userResponse.ok) {
-        throw new Error(`User API failed with status ${userResponse.status}`);
-      }
+      // For kiosk, simplify the logic - just show all grades the teacher can access
+      // The complex filtering can cause empty results if localStorage is inconsistent
       
-      const userData = await userResponse.json();
-      const teacherAssignedGrades = userData?.assignedGrades || [];
-      
-      // Get teacher's selected grades from localStorage (same as MainApp does)
-      // This matches exactly what Roster tab and MyClass tab use
-      let selectedGrades;
       try {
-        const saved = localStorage.getItem(`selectedGrades_${userData.id}`);
-        selectedGrades = saved ? new Set(JSON.parse(saved)) : new Set();
-      } catch {
-        selectedGrades = new Set();
+        // Get teacher's profile to filter grades like MyClass tab
+        const userResponse = await apiRequest('GET', '/api/users/me', undefined);
+        if (!userResponse.ok) {
+          console.warn(`User API failed with status ${userResponse.status}, using all grades`);
+          setGrades(data); // Fallback: show all grades
+          return;
+        }
+        
+        const userData = await userResponse.json();
+        console.log('User data for kiosk:', userData);
+        const teacherAssignedGrades = userData?.assignedGrades || [];
+        console.log('Teacher assigned grades:', teacherAssignedGrades);
+        
+        // For kiosk: if teacher has assigned grades, use those. Otherwise, show all grades.
+        let filteredGrades;
+        if (teacherAssignedGrades.length > 0) {
+          filteredGrades = data.filter((grade: any) => teacherAssignedGrades.includes(grade.name));
+        } else {
+          filteredGrades = data; // Show all grades if no specific assignments
+        }
+        
+        console.log('Filtered grades for kiosk:', filteredGrades);
+        setGrades(filteredGrades);
+      } catch (error) {
+        console.error('Error in grade filtering:', error);
+        // Fallback: just show all grades
+        setGrades(data);
       }
-      
-      // Filter grades to match MyClass logic: selectedGrades AND assignedGrades
-      // If no selectedGrades, show all assignedGrades (fallback behavior)
-      let filteredGrades;
-      if (selectedGrades.size === 0) {
-        filteredGrades = data.filter((grade: any) => 
-          teacherAssignedGrades.length === 0 || teacherAssignedGrades.includes(grade.name)
-        );
-      } else {
-        filteredGrades = data.filter((grade: any) => 
-          selectedGrades.has(grade.name) && 
-          (teacherAssignedGrades.length === 0 || teacherAssignedGrades.includes(grade.name))
-        );
-      }
-      
-      setGrades(filteredGrades);
     } catch (error) {
       console.error('Failed to load grades:', error);
     }
@@ -440,6 +440,14 @@ export default function Kiosk() {
       </div>
 
       <div className="max-w-7xl mx-auto p-6 space-y-6">
+        {/* Debug Info */}
+        <div className="mb-4 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
+          <div>Session: {session ? 'OK' : 'Missing'}</div>
+          <div>Grades: {grades.length} loaded</div>
+          <div>Students: {students.length} loaded</div>
+          <div>Passes: {activePasses.length} active</div>
+        </div>
+
         {/* Grade Filter Tabs - Show for both versions */}
         <div className="flex flex-wrap gap-2 mb-6">
           {grades.length === 0 ? (
