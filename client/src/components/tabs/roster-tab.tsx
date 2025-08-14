@@ -435,7 +435,7 @@ export function RosterTab({ user, selectedGrades = new Set(), onGradeClick }: Ro
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {filteredGrades.map((grade: any) => {
-                const gradeStudents = students.filter(student => student.grade === grade.name);
+                const gradeStudents = students.filter(student => student.gradeId === grade.id);
                 const isSelected = selectedGrades.has(grade.name);
                 
                 return (
