@@ -27,11 +27,11 @@ export function ReportsTab({ user }: ReportsTabProps) {
   });
 
   // Helper function to calculate duration in minutes
-  const calculateDuration = (checkoutTime: string, returnTime?: string) => {
-    if (!returnTime) return null;
-    const checkout = new Date(checkoutTime);
-    const returned = new Date(returnTime);
-    const diffMs = returned.getTime() - checkout.getTime();
+  const calculateDuration = (issuedAt: string, returnedAt?: string) => {
+    if (!returnedAt) return null;
+    const issued = new Date(issuedAt);
+    const returned = new Date(returnedAt);
+    const diffMs = returned.getTime() - issued.getTime();
     const diffMinutes = Math.round(diffMs / (1000 * 60));
     // Return actual duration, but ensure it's at least 1 minute only if less than 1
     return diffMinutes < 1 ? 1 : diffMinutes;
@@ -123,15 +123,15 @@ export function ReportsTab({ user }: ReportsTabProps) {
 
     const csvHeaders = ["Student Name", "Grade", "Teacher", "Pass Type", "Custom Reason", "Checkout Time", "Return Time", "Duration (min)"];
     const csvRows = passes.map((pass: any) => {
-      const duration = pass.returnTime ? (calculateDuration(pass.checkoutTime, pass.returnTime) ?? pass.duration) : null;
+      const duration = pass.returnedAt ? (calculateDuration(pass.issuedAt, pass.returnedAt) ?? pass.duration) : null;
       return [
-        pass.student?.name || "Unknown",
+        `${pass.student?.firstName} ${pass.student?.lastName}` || "Unknown",
         pass.student?.grade || "Unknown", 
-        pass.teacher?.name || "Unknown",
-        pass.passType || "general",
-        pass.customReason || "",
-        new Date(pass.checkoutTime).toLocaleString(),
-        pass.returnTime ? new Date(pass.returnTime).toLocaleString() : "Still Out",
+        `${pass.teacher?.firstName} ${pass.teacher?.lastName}` || "Unknown",
+        pass.destination || "General",
+        pass.customDestination || "",
+        new Date(pass.issuedAt).toLocaleString(),
+        pass.returnedAt ? new Date(pass.returnedAt).toLocaleString() : "Still Out",
         duration !== null ? duration : "Still Out"
       ];
     });
@@ -164,9 +164,9 @@ export function ReportsTab({ user }: ReportsTabProps) {
   };
 
   // Calculate real statistics from pass data
-  const completedPasses = passes.filter(p => p.status === 'returned' && p.returnTime);
+  const completedPasses = passes.filter(p => p.status === 'returned' && p.returnedAt);
   const passesWithDuration = completedPasses.map(p => {
-    const duration = calculateDuration(p.checkoutTime, p.returnTime) ?? p.duration;
+    const duration = calculateDuration(p.issuedAt, p.returnedAt) ?? p.duration;
     return { ...p, calculatedDuration: duration };
   }).filter(p => p.calculatedDuration !== null);
 
@@ -177,8 +177,8 @@ export function ReportsTab({ user }: ReportsTabProps) {
       : 0,
     peakHour: passes.length > 0 
       ? new Date(passes.reduce((latest, pass) => 
-          new Date(pass.checkoutTime) > new Date(latest.checkoutTime) ? pass : latest
-        ).checkoutTime).toLocaleTimeString([], { hour: 'numeric' })
+          new Date(pass.issuedAt) > new Date(latest.issuedAt) ? pass : latest
+        ).issuedAt).toLocaleTimeString([], { hour: 'numeric' })
       : 'N/A',
     uniqueStudents: new Set(passes.map(p => p.studentId)).size,
   };
@@ -194,22 +194,22 @@ export function ReportsTab({ user }: ReportsTabProps) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todaysPasses = passes.filter(pass => {
-    const passDate = new Date(pass.checkoutTime);
+    const passDate = new Date(pass.issuedAt);
     return passDate >= today;
   });
 
   const recentActivity = todaysPasses.length > 0 ? todaysPasses
-    .sort((a, b) => new Date(b.checkoutTime).getTime() - new Date(a.checkoutTime).getTime())
+    .sort((a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime())
     .slice(0, 10)
     .map(pass => {
-      const calculatedDuration = calculateDuration(pass.checkoutTime, pass.returnTime);
+      const calculatedDuration = calculateDuration(pass.issuedAt, pass.returnedAt);
       return {
         id: pass.id,
-        studentName: pass.student?.name || 'Unknown Student',
+        studentName: `${pass.student?.firstName} ${pass.student?.lastName}` || 'Unknown Student',
         action: pass.status === 'returned' 
           ? `Returned after ${calculatedDuration !== null ? calculatedDuration : (pass.duration && pass.duration >= 1 ? pass.duration : 1)} minutes`
-          : `Checked out${pass.customReason ? ` - ${pass.customReason}` : (pass.passType && pass.passType !== 'general' ? ` for ${pass.passType}` : '')}`,
-        time: new Date(pass.checkoutTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+          : `Checked out${pass.customDestination ? ` - ${pass.customDestination}` : (pass.destination ? ` to ${pass.destination}` : '')}`,
+        time: new Date(pass.issuedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
         date: 'Today',
         passType: pass.passType || 'general'
       };

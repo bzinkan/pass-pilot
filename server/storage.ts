@@ -1170,14 +1170,16 @@ export class DatabaseStorage implements IStorage {
     dateEnd?: Date; 
     grade?: string; 
     teacherId?: string; 
-  }): Promise<(Pass & { student: Student; teacher: User })[]> {
+  }): Promise<(Pass & { student: Student & { grade?: string }; teacher: User })[]> {
     let query = db.select({
       pass: passes,
       student: students,
       teacher: users,
+      grade: grades,
     }).from(passes)
       .innerJoin(students, eq(passes.studentId, students.id))
       .innerJoin(users, eq(passes.teacherId, users.id))
+      .leftJoin(grades, eq(students.gradeId, grades.id))
       .where(eq(passes.schoolId, schoolId));
 
     const result = await query;
@@ -1187,18 +1189,18 @@ export class DatabaseStorage implements IStorage {
 
     if (filters?.dateStart) {
       filteredResult = filteredResult.filter(row => 
-        row.pass.checkoutTime && row.pass.checkoutTime >= filters.dateStart!
+        row.pass.issuedAt && row.pass.issuedAt >= filters.dateStart!
       );
     }
 
     if (filters?.dateEnd) {
       filteredResult = filteredResult.filter(row => 
-        row.pass.checkoutTime && row.pass.checkoutTime <= filters.dateEnd!
+        row.pass.issuedAt && row.pass.issuedAt <= filters.dateEnd!
       );
     }
 
     if (filters?.grade) {
-      filteredResult = filteredResult.filter(row => row.student.grade === filters.grade);
+      filteredResult = filteredResult.filter(row => row.grade?.name === filters.grade);
     }
 
     if (filters?.teacherId) {
@@ -1207,7 +1209,10 @@ export class DatabaseStorage implements IStorage {
 
     return filteredResult.map(row => ({
       ...row.pass,
-      student: row.student,
+      student: {
+        ...row.student,
+        grade: row.grade?.name || undefined,
+      },
       teacher: row.teacher,
     }));
   }
