@@ -66,9 +66,36 @@ export default function Login() {
       return;
     }
     
+    if (!loginForm.email) {
+      toast({
+        title: "Error", 
+        description: "Please enter your email address",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setIsLoading(true);
     
     try {
+      // First check if this is a valid pending teacher
+      const checkResponse = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          email: loginForm.email,
+          password: 'temp' // This will fail but give us the schoolId if user exists
+        })
+      });
+      
+      const checkData = await checkResponse.json();
+      
+      if (!checkData.isFirstLogin) {
+        throw new Error('Email not found or account already has a password set. Please contact your administrator.');
+      }
+      
+      // Now set the password
       const response = await fetch('/api/auth/first-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -76,7 +103,7 @@ export default function Login() {
         body: JSON.stringify({ 
           email: loginForm.email, 
           password: firstLoginForm.password,
-          schoolId: availableSchools[0]?.id // Use first school if multiple
+          schoolId: checkData.schoolId
         })
       });
       
@@ -297,27 +324,51 @@ export default function Login() {
                 {isLoading ? "Signing In..." : "Sign In"}
               </Button>
               
-              <div className="flex justify-center">
-                <Button 
-                  type="button" 
-                  variant="link" 
-                  className="text-sm text-muted-foreground hover:text-foreground"
-                  onClick={() => setMode('register')}
-                  data-testid="button-register-link"
-                >
-                  Register Your School
-                </Button>
+              <div className="space-y-3">
+                <div className="text-center bg-blue-50 p-3 rounded">
+                  <Button 
+                    type="button" 
+                    variant="link" 
+                    className="text-sm text-blue-700 hover:text-blue-900 font-bold underline"
+                    onClick={() => setMode('first-login')}
+                    data-testid="button-set-password"
+                  >
+                    🔑 New Teacher? Set Your Password Here
+                  </Button>
+                </div>
+                <div className="flex justify-center">
+                  <Button 
+                    type="button" 
+                    variant="link" 
+                    className="text-sm text-muted-foreground hover:text-foreground"
+                    onClick={() => setMode('register')}
+                    data-testid="button-register-link"
+                  >
+                    Register Your School
+                  </Button>
+                </div>
               </div>
             </form>
           ) : mode === 'first-login' ? (
             <form onSubmit={handleFirstLogin} className="space-y-4">
               <div className="text-center mb-4">
                 <p className="text-sm text-muted-foreground">
-                  Welcome! Please set your password to access PassPilot.
+                  Enter your email and choose a password for your account.
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Email: {loginForm.email}
-                </p>
+              </div>
+              
+              <div>
+                <Label htmlFor="teacherEmail">Email Address</Label>
+                <Input
+                  type="email"
+                  id="teacherEmail"
+                  name="teacherEmail"
+                  placeholder="teacher@school.edu"
+                  value={loginForm.email}
+                  onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                  required
+                  data-testid="input-teacher-email"
+                />
               </div>
               <div>
                 <Label htmlFor="firstPassword">Choose Password</Label>

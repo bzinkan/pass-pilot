@@ -484,15 +484,15 @@ export default function Login() {
                     Register School
                   </Button>
                 </div>
-                <div className="text-center">
+                <div className="text-center bg-blue-50 p-2 rounded">
                   <Button 
                     type="button" 
                     variant="link" 
-                    className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                    className="text-sm text-blue-700 hover:text-blue-900 font-bold underline"
                     onClick={() => setMode('first-login')}
                     data-testid="button-set-password"
                   >
-                    New Teacher? Set Your Password Here
+                    🔑 New Teacher? Set Your Password Here
                   </Button>
                 </div>
               </div>
