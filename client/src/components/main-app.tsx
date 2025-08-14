@@ -78,15 +78,20 @@ export function MainApp({ user, onLogout }: MainAppProps) {
     }
   }, [currentGrade, user.id]);
 
-  const tabs = [
+  // Base tabs available to all teachers
+  const baseTabs = [
     { id: 'passes', label: 'Passes', icon: 'fas fa-clipboard-list' },
     { id: 'myclass', label: 'My Class', icon: 'fas fa-chalkboard-teacher' },
     { id: 'roster', label: 'Roster', icon: 'fas fa-users' },
     { id: 'upload', label: 'Upload', icon: 'fas fa-cloud-upload-alt' },
     { id: 'reports', label: 'Reports', icon: 'fas fa-chart-bar' },
     { id: 'profile', label: 'Profile', icon: 'fas fa-user' },
-    { id: 'admin', label: 'Admin', icon: 'fas fa-cog' },
   ];
+
+  // Add admin tab only for admins
+  const tabs = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN' 
+    ? [...baseTabs, { id: 'admin', label: 'Admin', icon: 'fas fa-cog' }]
+    : baseTabs;
 
   const renderTabContent = () => {
     switch (currentTab) {
@@ -185,7 +190,7 @@ export function MainApp({ user, onLogout }: MainAppProps) {
 
       {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-40">
-        <div className={`grid h-16 ${tabs.length === 6 ? 'grid-cols-6' : 'grid-cols-7'}`}>
+        <div className={`grid h-16 grid-cols-${tabs.length}`}>
           {tabs.map((tab) => (
             <Button
               key={tab.id}
