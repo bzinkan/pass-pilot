@@ -1,8 +1,11 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton, SkeletonLayouts } from "@/components/ui/skeleton";
+import { ErrorView } from "@/components/ui/error-view";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { safeMap, hasItems } from "@/lib/ui-guards";
 
 interface PassesTabProps {
   user: any;
@@ -10,22 +13,37 @@ interface PassesTabProps {
 }
 
 export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) {
-  const { data: passes = [], isLoading } = useQuery<any[]>({
+  const { data: passes, isLoading, error, refetch } = useQuery<any[]>({
     queryKey: ['/api/passes/active'],
     refetchInterval: 5000, // Poll every 5 seconds for real-time updates
   });
   const [filterType, setFilterType] = useState<string>("all");
 
+  // Gate on loading states - stop rendering until data exists
   if (isLoading) {
     return (
-      <div className="p-4">
-        <div className="animate-pulse space-y-4">
-          <div className="h-4 bg-muted rounded w-1/4"></div>
-          <div className="h-20 bg-muted rounded"></div>
-          <div className="h-20 bg-muted rounded"></div>
-        </div>
+      <div className="p-4" data-testid="passes-loading">
+        <SkeletonLayouts.List count={4} />
       </div>
     );
+  }
+
+  // Error state - provide fallback for errors
+  if (error) {
+    return (
+      <div className="p-4" data-testid="passes-error">
+        <ErrorView 
+          message="Could not load passes" 
+          description={error.message}
+          onRetry={() => refetch()}
+        />
+      </div>
+    );
+  }
+
+  // Guard against missing data - never assume arrays exist
+  if (!passes) {
+    return null; // guarded fallback
   }
 
   const formatDuration = (checkoutTime: string) => {
@@ -70,8 +88,8 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
     }
   };
 
-  // Filter passes based on selected type and teacher's selected grades
-  const filteredPasses = passes.filter((pass: any) => {
+  // Safe filtering - filter passes based on selected type and teacher's selected grades
+  const filteredPasses = safeMap(passes, (pass: any) => pass).filter((pass: any) => {
     // First filter by pass type
     const typeMatch = filterType === "all" || pass.passType === filterType;
     
