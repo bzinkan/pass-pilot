@@ -1,17 +1,8 @@
-import { useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { AuthModal } from "@/components/auth-modal";
 
 export function LandingPage() {
   const [, setLocation] = useLocation();
-  const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-
-  const handleShowAuth = (mode: 'login' | 'register') => {
-    setAuthMode(mode);
-    setShowAuthModal(true);
-  };
 
   return (
     <div className="min-h-screen">
@@ -50,7 +41,7 @@ export function LandingPage() {
                 Start Free Trial
               </Button>
               <Button 
-                onClick={() => handleShowAuth('login')}
+                onClick={() => setLocation('/login')}
                 variant="outline"
                 className="bg-transparent border-2 border-white text-white px-8 py-4 rounded-lg font-semibold hover:bg-white hover:text-primary transition duration-200"
                 data-testid="button-login"
@@ -250,11 +241,7 @@ export function LandingPage() {
       </footer>
 
 
-      <AuthModal 
-        open={showAuthModal} 
-        onOpenChange={setShowAuthModal} 
-        mode={authMode} 
-      />
+
     </div>
   );
 }
