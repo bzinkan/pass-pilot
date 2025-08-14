@@ -31,14 +31,14 @@ export function registerBillingRoutes(app: Express) {
         }
       };
 
-      res.json({
+      return res.json({
         sessionId: checkoutSession.id,
         url: checkoutSession.url
       });
 
     } catch (error: any) {
       console.error('Checkout creation error:', error);
-      res.status(500).json({ error: 'Failed to create checkout session' });
+      return res.status(500).json({ error: 'Failed to create checkout session' });
     }
   });
 
@@ -70,11 +70,11 @@ export function registerBillingRoutes(app: Express) {
       // This would be done via webhook in production
       // await storage.upgradeSchoolPlan(schoolId, plan as string, planInfo.maxTeachers, planInfo.maxStudents);
       
-      res.redirect('/app?payment=success');
+      return res.redirect('/app?payment=success');
       
     } catch (error: any) {
       console.error('Payment success handling error:', error);
-      res.redirect('/app?payment=error');
+      return res.redirect('/app?payment=error');
     }
   });
 
@@ -101,11 +101,11 @@ export function registerBillingRoutes(app: Express) {
         stripeSubscriptionId: school.stripeSubscriptionId
       };
 
-      res.json(billingInfo);
+      return res.json(billingInfo);
       
     } catch (error: any) {
       console.error('Get billing info error:', error);
-      res.status(500).json({ error: 'Failed to get billing information' });
+      return res.status(500).json({ error: 'Failed to get billing information' });
     }
   });
 
@@ -119,30 +119,31 @@ export function registerBillingRoutes(app: Express) {
       
       await storage.updateSchool(authReq.user.schoolId, {
         status: 'cancelled',
-        subscriptionCancelledAt: new Date(),
-        subscriptionEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days grace period
+        subscriptionStatus: 'cancelled'
       });
 
-      res.json({ success: true, message: 'Subscription cancelled successfully' });
+      return res.json({ success: true, message: 'Subscription cancelled successfully' });
       
     } catch (error: any) {
       console.error('Cancel subscription error:', error);
-      res.status(500).json({ error: 'Failed to cancel subscription' });
+      return res.status(500).json({ error: 'Failed to cancel subscription' });
     }
   });
 
-  // Webhook endpoint (placeholder for when Stripe keys are available)
-  app.post('/api/billing/webhook', async (req, res) => {
-    try {
-      // This will be implemented when Stripe webhook secret is available
-      // For now, just acknowledge the webhook
-      
-      console.log('Webhook received:', req.body);
-      res.status(200).json({ received: true });
-      
-    } catch (error: any) {
-      console.error('Webhook processing error:', error);
-      res.status(400).json({ error: 'Webhook processing failed' });
-    }
-  });
+  // Note: Webhook is now handled directly in server/index.ts to avoid circular imports
+}
+
+// Export standalone webhook handler for use in server/index.ts
+export async function stripeWebhook(req: any, res: any) {
+  try {
+    // This will be implemented when Stripe webhook secret is available
+    // For now, just acknowledge the webhook
+    
+    console.log('Webhook received:', req.body);
+    res.status(200).json({ received: true });
+    
+  } catch (error: any) {
+    console.error('Webhook processing error:', error);
+    res.status(400).json({ error: 'Webhook processing failed' });
+  }
 }
