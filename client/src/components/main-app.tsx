@@ -84,8 +84,8 @@ export function MainApp({ user, onLogout }: MainAppProps) {
     { id: 'roster', label: 'Roster', icon: 'fas fa-users' },
     { id: 'upload', label: 'Upload', icon: 'fas fa-cloud-upload-alt' },
     { id: 'reports', label: 'Reports', icon: 'fas fa-chart-bar' },
-    { id: 'admin', label: 'Admin', icon: 'fas fa-cog' },
     { id: 'profile', label: 'Profile', icon: 'fas fa-user' },
+    { id: 'admin', label: 'Admin', icon: 'fas fa-cog' },
   ];
 
   const renderTabContent = () => {
