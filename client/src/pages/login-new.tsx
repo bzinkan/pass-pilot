@@ -77,7 +77,7 @@ export default function Login() {
         throw new Error(data.message || 'Failed to set password');
       }
       
-      setLocation('/');
+      setLocation('/app');
       toast({
         title: "Welcome to PassPilot!",
         description: "Your password has been set successfully.",
@@ -129,14 +129,15 @@ export default function Login() {
           title: "Multiple Schools Found",
           description: "Please select which school you want to access.",
         });
-      } else if (data.success) {
-        // Single school login success - redirect to app
-        setLocation('/');
-        toast({
-          title: "Welcome!",
-          description: "Successfully logged in!",
-        });
+        return;
       }
+      
+      // Successful login - redirect to app
+      setLocation('/app');
+      toast({
+        title: "Welcome back!",
+        description: "You have successfully logged in.",
+      });
       
     } catch (error: any) {
       toast({
@@ -171,7 +172,7 @@ export default function Login() {
         throw new Error(data.error || 'Login failed');
       }
       
-      setLocation('/');
+      setLocation('/app');
       toast({
         title: "Welcome!",
         description: "Successfully logged in!",

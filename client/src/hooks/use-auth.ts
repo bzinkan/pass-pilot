@@ -87,7 +87,7 @@ export function useAuth(): AuthState {
   });
 
   const login = async (email: string, password: string, schoolId?: string) => {
-    await loginMutation.mutateAsync({ email, password, schoolId });
+    await loginMutation.mutateAsync({ email, password, ...(schoolId && { schoolId }) });
   };
 
   const logout = async () => {
