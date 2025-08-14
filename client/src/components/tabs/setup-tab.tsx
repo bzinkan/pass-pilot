@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, UserPlus, UserMinus, Users, Mail, Crown, AlertTriangle } from "lucide-react";
+import { Trash2, UserPlus, UserMinus, Users, Mail, Crown, AlertTriangle, Edit, Key, Settings } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -39,6 +39,18 @@ export function SetupTab({ user }: SetupTabProps) {
   const [newTeacherEmail, setNewTeacherEmail] = useState('');
   const [newTeacherName, setNewTeacherName] = useState('');
   const [isAddingTeacher, setIsAddingTeacher] = useState(false);
+  
+  // Edit teacher state
+  const [editingTeacher, setEditingTeacher] = useState<any>(null);
+  const [editTeacherForm, setEditTeacherForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: ''
+  });
+  
+  // Password reset state
+  const [resettingPasswordFor, setResettingPasswordFor] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState('');
   const { toast } = useToast();
 
   const { data: grades = [] } = useQuery<any[]>({
@@ -171,6 +183,50 @@ export function SetupTab({ user }: SetupTabProps) {
     },
   });
 
+  const editTeacherMutation = useMutation({
+    mutationFn: async ({ teacherId, updates }: { teacherId: string; updates: any }) => {
+      const response = await apiRequest('PATCH', `/api/admin/teachers/${teacherId}`, updates);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/teachers'] });
+      setEditingTeacher(null);
+      toast({
+        title: "Teacher Updated",
+        description: "Teacher information has been updated successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update teacher",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: async ({ teacherId, password }: { teacherId: string; password: string }) => {
+      const response = await apiRequest('POST', `/api/admin/teachers/${teacherId}/reset-password`, { password });
+      return response.json();
+    },
+    onSuccess: () => {
+      setResettingPasswordFor(null);
+      setNewPassword('');
+      toast({
+        title: "Password Reset",
+        description: "Teacher's password has been reset successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to reset password",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleAddTeacher = () => {
     if (!newTeacherEmail || !newTeacherName) {
       toast({
@@ -195,6 +251,37 @@ export function SetupTab({ user }: SetupTabProps) {
       email: newTeacherEmail, 
       name: newTeacherName
     });
+  };
+
+  const handleEditTeacher = (teacher: any) => {
+    setEditingTeacher(teacher);
+    setEditTeacherForm({
+      firstName: teacher.firstName || '',
+      lastName: teacher.lastName || '',
+      email: teacher.email || ''
+    });
+  };
+
+  const handleSaveTeacherEdit = () => {
+    if (!editingTeacher) return;
+    
+    editTeacherMutation.mutate({
+      teacherId: editingTeacher.id,
+      updates: editTeacherForm
+    });
+  };
+
+  const handleResetPassword = (teacherId: string) => {
+    if (!newPassword || newPassword.length < 6) {
+      toast({
+        title: "Error",
+        description: "Password must be at least 6 characters long",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    resetPasswordMutation.mutate({ teacherId, password: newPassword });
   };
 
   const getMaxTeachersForPlan = (plan: string) => {
@@ -366,6 +453,26 @@ export function SetupTab({ user }: SetupTabProps) {
                           <Badge variant={teacher.isAdmin ? 'default' : 'outline'}>
                             {teacher.isAdmin ? 'Admin' : 'Teacher'}
                           </Badge>
+                          
+                          {/* Edit Teacher Button */}
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => handleEditTeacher(teacher)}
+                            data-testid={`button-edit-teacher-${teacher.email}`}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          
+                          {/* Reset Password Button */}
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => setResettingPasswordFor(teacher.id)}
+                            data-testid={`button-reset-password-${teacher.email}`}
+                          >
+                            <Key className="w-4 h-4" />
+                          </Button>
                           
                           {/* Admin Management Actions - Allow management of all users except yourself when you're the only admin */}
                           {(teacher.id !== user?.id || teachers.filter((t: any) => t.isAdmin).length > 1) && (
@@ -597,6 +704,104 @@ export function SetupTab({ user }: SetupTabProps) {
         >
           Save Settings
         </Button>
+
+        {/* Edit Teacher Dialog */}
+        {editingTeacher && (
+          <Dialog open={!!editingTeacher} onOpenChange={() => setEditingTeacher(null)}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit Teacher</DialogTitle>
+                <DialogDescription>
+                  Update teacher information for {editingTeacher.firstName} {editingTeacher.lastName}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="edit-firstName">First Name</Label>
+                  <Input
+                    id="edit-firstName"
+                    value={editTeacherForm.firstName}
+                    onChange={(e) => setEditTeacherForm({ ...editTeacherForm, firstName: e.target.value })}
+                    data-testid="input-edit-first-name"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-lastName">Last Name</Label>
+                  <Input
+                    id="edit-lastName"
+                    value={editTeacherForm.lastName}
+                    onChange={(e) => setEditTeacherForm({ ...editTeacherForm, lastName: e.target.value })}
+                    data-testid="input-edit-last-name"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-email">Email</Label>
+                  <Input
+                    id="edit-email"
+                    type="email"
+                    value={editTeacherForm.email}
+                    onChange={(e) => setEditTeacherForm({ ...editTeacherForm, email: e.target.value })}
+                    data-testid="input-edit-email"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setEditingTeacher(null)}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleSaveTeacherEdit}
+                  disabled={editTeacherMutation.isPending}
+                  data-testid="button-save-teacher-edit"
+                >
+                  {editTeacherMutation.isPending ? 'Saving...' : 'Save Changes'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+
+        {/* Reset Password Dialog */}
+        {resettingPasswordFor && (
+          <Dialog open={!!resettingPasswordFor} onOpenChange={() => setResettingPasswordFor(null)}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Reset Password</DialogTitle>
+                <DialogDescription>
+                  Set a new password for this teacher. They will be able to use this password to log in.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="new-password">New Password</Label>
+                  <Input
+                    id="new-password"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Enter new password (min 6 characters)"
+                    data-testid="input-new-password"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => {
+                  setResettingPasswordFor(null);
+                  setNewPassword('');
+                }}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={() => handleResetPassword(resettingPasswordFor)}
+                  disabled={resetPasswordMutation.isPending}
+                  data-testid="button-confirm-reset-password"
+                >
+                  {resetPasswordMutation.isPending ? 'Resetting...' : 'Reset Password'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
     </div>
   );

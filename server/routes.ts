@@ -364,7 +364,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: 'Admin access required' });
       }
       
-      const teachers = await storage.getTeachersBySchool(validUser.schoolId);
+      const teachers = await storage.getUsersBySchool(validUser.schoolId);
       const teachersWithoutPasswords = teachers.map(teacher => {
         const { password: _, ...teacherWithoutPassword } = teacher;
         return teacherWithoutPassword;
@@ -510,6 +510,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error('Demote admin error:', error);
       res.status(500).json({ message: error.message || 'Failed to demote admin' });
+    }
+  });
+
+  // Edit teacher information
+  app.patch('/api/admin/teachers/:teacherId', requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthenticatedRequest;
+      const user = await storage.getUser(authReq.user.id);
+      const validUser = unwrap(user, 'User not found');
+      
+      if (!validUser.isAdmin) {
+        return res.status(403).json({ message: 'Admin access required' });
+      }
+      
+      const { teacherId } = req.params;
+      const { firstName, lastName, email } = req.body;
+      
+      // Get teacher to verify they belong to same school
+      const teacher = await storage.getUser(teacherId);
+      if (!teacher || teacher.schoolId !== validUser.schoolId) {
+        return res.status(404).json({ message: 'Teacher not found' });
+      }
+      
+      // Update teacher information
+      const updatedTeacher = await storage.updateUser(teacherId, {
+        firstName: firstName || teacher.firstName,
+        lastName: lastName || teacher.lastName,
+        email: email || teacher.email
+      });
+      
+      res.json({ message: 'Teacher updated successfully', teacher: updatedTeacher });
+    } catch (error: any) {
+      console.error('Teacher update error:', error);
+      res.status(400).json({ message: error.message || 'Failed to update teacher' });
+    }
+  });
+
+  // Reset teacher password
+  app.post('/api/admin/teachers/:teacherId/reset-password', requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthenticatedRequest;
+      const user = await storage.getUser(authReq.user.id);
+      const validUser = unwrap(user, 'User not found');
+      
+      if (!validUser.isAdmin) {
+        return res.status(403).json({ message: 'Admin access required' });
+      }
+      
+      const { teacherId } = req.params;
+      const { password } = req.body;
+      
+      if (!password || password.length < 6) {
+        return res.status(400).json({ message: 'Password must be at least 6 characters' });
+      }
+      
+      // Get teacher to verify they belong to same school
+      const teacher = await storage.getUser(teacherId);
+      if (!teacher || teacher.schoolId !== validUser.schoolId) {
+        return res.status(404).json({ message: 'Teacher not found' });
+      }
+      
+      // Hash new password and update
+      const hashedPassword = await auth.hashPassword(password);
+      await storage.updateUser(teacherId, {
+        password: hashedPassword,
+        isFirstLogin: false // Reset first login flag
+      });
+      
+      res.json({ message: 'Password reset successfully' });
+    } catch (error: any) {
+      console.error('Password reset error:', error);
+      res.status(400).json({ message: error.message || 'Failed to reset password' });
     }
   });
 
