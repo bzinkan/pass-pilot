@@ -33,17 +33,19 @@ interface AuthenticatedRequest extends Request {
   user: { id: string; schoolId: string };
 }
 
-const requireAuth = (req: Request, res: Response, next: NextFunction) => {
+const requireAuth = (req: Request, res: Response, next: NextFunction): void => {
   const authToken = req.headers.authorization?.replace('Bearer ', '') || req.cookies.pp_session;
   
   if (!authToken) {
-    return res.status(401).json(ErrorResponses.unauthorized());
+    res.status(401).json(ErrorResponses.unauthorized());
+    return;
   }
   
   const session = sessions.get(authToken);
   if (!session || session.expires < new Date()) {
     sessions.delete(authToken);
-    return res.status(401).json(ErrorResponses.unauthorized('Session expired'));
+    res.status(401).json(ErrorResponses.unauthorized('Session expired'));
+    return;
   }
   
   (req as AuthenticatedRequest).user = { id: session.userId, schoolId: session.schoolId };
@@ -123,7 +125,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     schoolId: z.string().uuid().optional(),
   });
 
-  app.post('/api/auth/login', validate({ body: loginBodySchema }), async (req, res) => {
+  app.post('/api/auth/login', validate({ body: loginBodySchema }), async (req: any, res) => {
     try {
       const { email, password, schoolId } = req.valid.body;
       
@@ -168,7 +170,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Verify password against first account (prevents email enumeration)
-      const isValid = await auth.comparePassword(password, candidates[0].password);
+      const isValid = candidates.length > 0 && await auth.comparePassword(password, candidates[0].password);
       if (!isValid) {
         return res.status(401).json({ error: 'Invalid credentials' });
       }
@@ -253,7 +255,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Grades endpoints
   app.get('/api/grades/:schoolId', requireAuth, async (req, res) => {
     try {
-      const grades = await storage.getGradesBySchool(req.params.schoolId);
+      const schoolId = req.params.schoolId;
+      if (!schoolId) {
+        return res.status(400).json({ message: 'School ID is required' });
+      }
+      const grades = await storage.getGradesBySchool(schoolId);
       res.json(grades);
     } catch (error) {
       console.error('Get grades error:', error);
@@ -286,8 +292,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put('/api/grades/:id', requireAuth, validate({ body: insertGradeSchema }), async (req: any, res) => {
     try {
+      const gradeId = req.params.id;
+      if (!gradeId) {
+        return res.status(400).json({ message: 'Grade ID is required' });
+      }
       const data = req.valid.body;
-      const grade = await storage.updateGrade(req.params.id, data);
+      const grade = await storage.updateGrade(gradeId, data);
       res.json(grade);
     } catch (error: any) {
       console.error('Update grade error:', error);
@@ -297,7 +307,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/grades/:id', requireAuth, async (req, res) => {
     try {
-      await storage.deleteGrade(req.params.id);
+      const gradeId = req.params.id;
+      if (!gradeId) {
+        return res.status(400).json({ message: 'Grade ID is required' });
+      }
+      await storage.deleteGrade(gradeId);
       res.json({ success: true });
     } catch (error: any) {
       console.error('Delete grade error:', error);
@@ -308,7 +322,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Students endpoints
   app.get('/api/students/:schoolId', requireAuth, async (req, res) => {
     try {
-      const students = await storage.getStudentsBySchool(req.params.schoolId);
+      const schoolId = req.params.schoolId;
+      if (!schoolId) {
+        return res.status(400).json({ message: 'School ID is required' });
+      }
+      const students = await storage.getStudentsBySchool(schoolId);
       res.json(students);
     } catch (error) {
       console.error('Get students error:', error);
@@ -351,8 +369,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put('/api/students/:id', requireAuth, validate({ body: insertStudentSchema }), async (req: any, res) => {
     try {
+      const studentId = req.params.id;
+      if (!studentId) {
+        return res.status(400).json({ message: 'Student ID is required' });
+      }
       const data = req.valid.body;
-      const student = await storage.updateStudent(req.params.id, data);
+      const student = await storage.updateStudent(studentId, data);
       res.json(student);
     } catch (error: any) {
       console.error('Update student error:', error);
@@ -362,7 +384,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/students/:id', requireAuth, async (req, res) => {
     try {
-      await storage.deleteStudent(req.params.id);
+      const studentId = req.params.id;
+      if (!studentId) {
+        return res.status(400).json({ message: 'Student ID is required' });
+      }
+      await storage.deleteStudent(studentId);
       res.json({ success: true });
     } catch (error: any) {
       console.error('Delete student error:', error);
@@ -373,7 +399,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Passes endpoints
   app.get('/api/passes/active/:schoolId', requireAuth, async (req, res) => {
     try {
-      const passes = await storage.getActivePassesBySchool(req.params.schoolId);
+      const schoolId = req.params.schoolId;
+      if (!schoolId) {
+        return res.status(400).json({ message: 'School ID is required' });
+      }
+      const passes = await storage.getActivePassesBySchool(schoolId);
       res.json(passes);
     } catch (error) {
       console.error('Get active passes error:', error);
@@ -424,8 +454,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch('/api/passes/:id/status', requireAuth, async (req, res) => {
     try {
+      const passId = req.params.id;
+      if (!passId) {
+        return res.status(400).json({ message: 'Pass ID is required' });
+      }
       const { status } = req.body;
-      const pass = await storage.updatePass(req.params.id, { status });
+      const pass = await storage.updatePass(passId, { status });
       res.json(pass);
     } catch (error) {
       console.error('Update pass error:', error);
@@ -436,7 +470,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dedicated return endpoint for semantic clarity (used by both kiosk and MyClass)
   app.put('/api/passes/:id/return', requireAuth, async (req, res) => {
     try {
-      const pass = await storage.updatePass(req.params.id, { status: 'returned' });
+      const passId = req.params.id;
+      if (!passId) {
+        return res.status(400).json({ message: 'Pass ID is required' });
+      }
+      const pass = await storage.updatePass(passId, { status: 'returned' });
       res.json(pass);
     } catch (error) {
       console.error('Return pass error:', error);
@@ -447,7 +485,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Payments endpoints
   app.get('/api/payments/:schoolId', requireAuth, async (req, res) => {
     try {
-      const payments = await storage.getPaymentsBySchool(req.params.schoolId);
+      const schoolId = req.params.schoolId;
+      if (!schoolId) {
+        return res.status(400).json({ message: 'School ID is required' });
+      }
+      const payments = await storage.getPaymentsBySchool(schoolId);
       res.json(payments);
     } catch (error) {
       console.error('Get payments error:', error);
@@ -675,15 +717,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       res.json({ success: true, message: 'Password reset successfully. Teacher will set new password on next login.' });
-      
-      // Hash new password and update
-      const hashedPassword = await auth.hashPassword(password);
-      await storage.updateUser(teacherId, {
-        password: hashedPassword,
-        isFirstLogin: false // Reset first login flag
-      });
-      
-      res.json({ message: 'Password reset successfully' });
     } catch (error: any) {
       console.error('Password reset error:', error);
       res.status(400).json({ message: error.message || 'Failed to reset password' });
@@ -785,14 +818,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (dateStart) {
         const startDate = new Date(dateStart as string);
         filteredPasses = filteredPasses.filter(pass => 
-          new Date(pass.checkoutTime) >= startDate
+          new Date(pass.issuedAt) >= startDate
         );
       }
       
       if (dateEnd) {
         const endDate = new Date(dateEnd as string);
         filteredPasses = filteredPasses.filter(pass => 
-          new Date(pass.checkoutTime) <= endDate
+          new Date(pass.issuedAt) <= endDate
         );
       }
       
@@ -802,7 +835,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (passType && passType !== 'all') {
         filteredPasses = filteredPasses.filter(pass => 
-          (pass.passType || 'general') === passType
+          (pass.destination || 'general') === passType
         );
       }
       
@@ -871,7 +904,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         // Verify current password
-        const isCurrentPasswordValid = await auth.verifyPassword(currentPassword, validUser.password);
+        const isCurrentPasswordValid = await auth.comparePassword(currentPassword, validUser.password);
         if (!isCurrentPasswordValid) {
           return res.status(400).json({ message: 'Current password is incorrect' });
         }
