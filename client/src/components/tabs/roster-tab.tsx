@@ -148,7 +148,31 @@ export function RosterTab({ user, selectedGrades = new Set(), onGradeClick }: Ro
     }
     
     try {
-      await apiRequest('POST', '/api/students', studentForm);
+      // Find the grade ID from the grade name
+      const selectedGrade = filteredGrades.find((g: any) => g.name === studentForm.grade);
+      if (!selectedGrade) {
+        toast({
+          title: "Invalid Grade",
+          description: "Please select a valid grade.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Split name into first and last name
+      const nameParts = studentForm.name.trim().split(' ');
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+
+      const studentData = {
+        firstName,
+        lastName,
+        gradeId: selectedGrade.id,
+        studentId: studentForm.studentId || undefined,
+        status: 'active'
+      };
+      
+      await apiRequest('POST', '/api/students', studentData);
       queryClient.invalidateQueries({ queryKey: ['/api/students'] });
       setStudentForm({ name: '', grade: '', studentId: '' });
       setShowAddStudentModal(false);
@@ -192,13 +216,32 @@ export function RosterTab({ user, selectedGrades = new Set(), onGradeClick }: Ro
     }
 
     try {
-      const promises = names.map(name => 
-        apiRequest('POST', '/api/students', {
-          name,
-          grade: bulkGrade,
-          studentId: ''
-        })
-      );
+      // Find the grade ID from the grade name
+      const selectedGrade = filteredGrades.find((g: any) => g.name === bulkGrade);
+      if (!selectedGrade) {
+        toast({
+          title: "Invalid Grade",
+          description: "Please select a valid grade.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const promises = names.map(name => {
+        // Split name into first and last name
+        const nameParts = name.trim().split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+
+        const studentData = {
+          firstName,
+          lastName,
+          gradeId: selectedGrade.id,
+          status: 'active'
+        };
+
+        return apiRequest('POST', '/api/students', studentData);
+      });
       
       await Promise.all(promises);
       queryClient.invalidateQueries({ queryKey: ['/api/students'] });
@@ -221,9 +264,16 @@ export function RosterTab({ user, selectedGrades = new Set(), onGradeClick }: Ro
 
   const handleEditStudent = (student: any) => {
     setEditingStudent(student);
+    // Combine firstName and lastName back into a single name field for the form
+    const fullName = `${student.firstName || ''} ${student.lastName || ''}`.trim();
+    
+    // Find the grade name from gradeId
+    const grade = filteredGrades.find((g: any) => g.id === student.gradeId);
+    const gradeName = grade ? grade.name : '';
+    
     setStudentForm({
-      name: student.name,
-      grade: student.grade,
+      name: fullName,
+      grade: gradeName,
       studentId: student.studentId || ''
     });
   };
@@ -240,7 +290,31 @@ export function RosterTab({ user, selectedGrades = new Set(), onGradeClick }: Ro
     }
     
     try {
-      await apiRequest('PUT', `/api/students/${editingStudent.id}`, studentForm);
+      // Find the grade ID from the grade name
+      const selectedGrade = filteredGrades.find((g: any) => g.name === studentForm.grade);
+      if (!selectedGrade) {
+        toast({
+          title: "Invalid Grade",
+          description: "Please select a valid grade.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Split name into first and last name
+      const nameParts = studentForm.name.trim().split(' ');
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+
+      const studentData = {
+        firstName,
+        lastName,
+        gradeId: selectedGrade.id,
+        studentId: studentForm.studentId || undefined,
+        status: 'active'
+      };
+
+      await apiRequest('PUT', `/api/students/${editingStudent.id}`, studentData);
       queryClient.invalidateQueries({ queryKey: ['/api/students'] });
       setStudentForm({ name: '', grade: '', studentId: '' });
       setEditingStudent(null);
