@@ -155,6 +155,8 @@ Complete end-to-end testing has validated that the school registration system fu
     - Price configuration support for multiple plan tiers (TRIAL, BASIC, SMALL, MEDIUM, LARGE, UNLIMITED)
     - Real-time status polling for registration completion
     - Enhanced environment variable validation for Stripe configuration
+    - Unique slug generation prevents duplicate school name conflicts (bayside -> bayside-2 -> bayside-3)
+    - Fixed "duplicate key value violates unique constraint" errors for school registration
 
 ## User Preferences
 

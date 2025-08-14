@@ -81,10 +81,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { schoolName, adminEmail, adminFirstName, adminLastName, adminPassword, plan } = req.valid.body;
       
+      // Generate unique slug to prevent conflicts
+      const { generateUniqueSlug } = await import('./utils/slugify');
+      const uniqueSlug = await generateUniqueSlug(schoolName);
+      
       // Create school first
       const schoolData = {
         name: schoolName,
-        slug: schoolName.toLowerCase().replace(/\s+/g, '-'),
+        slug: uniqueSlug,
         status: 'active',
         plan: plan.toLowerCase(),
         trialStartDate: new Date(),

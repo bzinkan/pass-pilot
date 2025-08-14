@@ -5,7 +5,7 @@ import type { Express } from "express";
 import { ENV } from "../env";
 import { db } from "../db";
 import { registrations, schools, users } from "../../shared/schema";
-import { slugify } from "../utils/slugify";
+import { generateUniqueSlug } from "../utils/slugify";
 import { eq } from "drizzle-orm";
 
 export function registerStripeWebhook(app: Express) {
@@ -33,7 +33,7 @@ export function registerStripeWebhook(app: Express) {
       const schoolName = md.schoolName || "";
       const adminEmail = md.adminEmail || "";
       const plan = (md.plan || "TRIAL") as any;
-      const slug = slugify(schoolName);
+      const slug = await generateUniqueSlug(schoolName);
 
       try {
         // Idempotency: if already ACTIVE for this session, ack
