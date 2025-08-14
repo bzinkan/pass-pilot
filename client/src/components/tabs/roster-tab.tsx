@@ -201,15 +201,15 @@ export function RosterTab({ user, selectedGrades = new Set(), onGradeClick }: Ro
       return;
     }
     
-    const names = bulkStudentNames
+    const lines = bulkStudentNames
       .split('\n')
-      .map(name => name.trim())
-      .filter(name => name.length > 0);
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
     
-    if (names.length === 0) {
+    if (lines.length === 0) {
       toast({
         title: "No students to add",
-        description: "Please enter at least one student name.",
+        description: "Please enter at least one line of student information.",
         variant: "destructive",
       });
       return;
@@ -227,10 +227,29 @@ export function RosterTab({ user, selectedGrades = new Set(), onGradeClick }: Ro
         return;
       }
 
-      const promises = names.map(name => {
-        // Split name into first and last name
-        const nameParts = name.trim().split(' ');
-        const firstName = nameParts[0] || '';
+      const promises = lines.map(line => {
+        // Extract name from any line format - very flexible approach
+        // Remove common prefixes, numbers, special characters, etc.
+        let cleanLine = line
+          .replace(/^\d+\.\s*/, '') // Remove "1. " numbering
+          .replace(/^\d+\)\s*/, '') // Remove "1) " numbering  
+          .replace(/^\d+\s*-\s*/, '') // Remove "1 - " numbering
+          .replace(/^-\s*/, '') // Remove leading dashes
+          .replace(/^\*\s*/, '') // Remove leading asterisks
+          .replace(/,.*$/, '') // Remove everything after first comma
+          .replace(/\s*\(.*?\)\s*/g, ' ') // Remove anything in parentheses
+          .replace(/\s*\[.*?\]\s*/g, ' ') // Remove anything in brackets
+          .replace(/\s+/g, ' ') // Normalize whitespace
+          .trim();
+        
+        // If after cleaning we still have text, use it as name
+        if (!cleanLine) {
+          cleanLine = line.trim(); // Fallback to original if cleaning removed everything
+        }
+
+        // Split into first and last name
+        const nameParts = cleanLine.split(' ').filter(part => part.length > 0);
+        const firstName = nameParts[0] || 'Student';
         const lastName = nameParts.slice(1).join(' ') || '';
 
         const studentData = {
@@ -251,7 +270,7 @@ export function RosterTab({ user, selectedGrades = new Set(), onGradeClick }: Ro
       
       toast({
         title: "Students added",
-        description: `${names.length} student${names.length !== 1 ? 's' : ''} have been added to grade ${bulkGrade}.`,
+        description: `${lines.length} student${lines.length !== 1 ? 's' : ''} have been added to grade ${bulkGrade}.`,
       });
     } catch (error: any) {
       toast({
@@ -647,17 +666,17 @@ export function RosterTab({ user, selectedGrades = new Set(), onGradeClick }: Ro
               </Select>
             </div>
             <div>
-              <Label htmlFor="bulkStudentNames">Student Names (one per line)</Label>
+              <Label htmlFor="bulkStudentNames">Student Information (one per line)</Label>
               <textarea
                 id="bulkStudentNames"
                 value={bulkStudentNames}
                 onChange={(e) => setBulkStudentNames(e.target.value)}
-                placeholder="Enter student names, one per line:&#10;John Smith&#10;Jane Doe&#10;Alex Johnson"
+                placeholder="Paste any student information, one per line:&#10;John Smith&#10;1. Jane Doe (Student ID: 12345)&#10;Alex Johnson, Grade 6&#10;- Sarah Wilson&#10;* Mike Davis"
                 className="w-full h-32 p-3 border rounded-md resize-none"
                 data-testid="textarea-bulk-student-names"
               />
               <p className="text-sm text-muted-foreground mt-1">
-                Enter each student name on a new line
+                Paste any student information - I'll extract the names automatically. Works with lists, numbers, commas, etc.
               </p>
             </div>
             <div className="flex justify-end space-x-2">
