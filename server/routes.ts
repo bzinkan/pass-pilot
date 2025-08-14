@@ -63,6 +63,19 @@ function isTrialExpired(trialEndDate: Date | null): boolean {
   return new Date() > trialEndDate;
 }
 
+// --- Normalize td (pass type / destination) so it is never null ---
+function normalizeTd(body: any): string {
+  const candidate =
+    (typeof body?.td === "string" && body.td) ||
+    (typeof body?.passType === "string" && body.passType) ||
+    (typeof body?.type === "string" && body.type) ||
+    (typeof body?.reason === "string" && body.reason) ||
+    "";
+
+  const td = String(candidate).trim();
+  return td.length ? td : "general";
+}
+
 // Initialize Stripe if key is available
 let stripe: Stripe | null = null;
 if (process.env.STRIPE_SECRET_KEY) {
@@ -2054,8 +2067,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log('Found user:', user.name, user.email);
 
-      // Use enhanced validation to prevent null values
-      const { validatePassData } = await import("../shared/validation");
+      // Ensure td is never null (maps td | passType | type | reason -> td, defaults to 'general')
+      const td = normalizeTd(req.body);
+
+      // Use enhanced validation to prevent other nulls
+     const { validatePassData } = await import("../shared/validation");
       
       const passInput = validatePassData({
         ...req.body,
@@ -2064,11 +2080,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         destination: req.body.destination || "Restroom"
       });
       
-      // Create complete pass data with required fields
+      // Final payload to DB — make sure "td" exists
       const passData = {
         ...passInput,
+        td,                                 // << GUARANTEED non-empty
         checkoutTime: new Date(),
-        timeOut: new Date(), 
+        timeOut: new Date(),
         issuingTeacher: user.name,
         status: "active" as const,
         printRequested: false
