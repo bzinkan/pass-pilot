@@ -1,0 +1,58 @@
+1) Add this helper (right after your isTrialExpired function)
+// --- Normalize td (pass type / reason) so it's never null or empty ---
+function normalizeTd(body: any): string {
+  const candidate =
+    (typeof body?.td === "string" && body.td) ||
+    (typeof body?.passType === "string" && body.passType) ||
+    (typeof body?.type === "string" && body.type) ||
+    (typeof body?.reason === "string" && body.reason) ||
+    "";
+
+  const td = String(candidate).trim();
+  return td.length ? td : "general";
+}
+
+2) Replace your existing POST /api/passes handler with this one
+app.post("/api/passes", requireAuth, async (req: any, res) => {
+  try {
+    console.log('POST /api/passes - userId:', req.userId);
+    console.log('POST /api/passes - body:', req.body);
+    
+    const user = await storage.getUser(req.userId);
+    if (!user) {
+      console.log('User not found for userId:', req.userId);
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Ensure td cannot be null (maps td | passType | type | reason -> td, defaults "general")
+    const td = normalizeTd(req.body);
+
+    // Use your existing validation (keeps other fields clean)
+    const { validatePassData } = await import("../shared/validation");
+
+    const passInput = validatePassData({
+      ...req.body,
+      teacherId: req.userId,
+      schoolId: user.schoolId,
+      destination: req.body.destination || "Restroom",
+    });
+
+    // Final payload to DB — make sure "td" exists
+    const passData = {
+      ...passInput,
+      td,                              // << GUARANTEED non-null/non-empty
+      checkoutTime: new Date(),
+      timeOut: new Date(),
+      issuingTeacher: user.name,
+      status: "active" as const,
+      printRequested: false,
+    };
+
+    console.log('Creating pass with data:', passData);
+    const pass = await storage.createPass(passData);
+    res.json(pass);
+  } catch (error: any) {
+    console.error('Error creating pass:', error);
+    res.status(400).json({ message: error.message });
+  }
+});
