@@ -25,11 +25,15 @@ export function useAuth(): AuthState {
       try {
         const response = await apiRequest('GET', '/api/auth/me');
         const userData = await response.json();
-        if (response.ok) {
-          setUser(userData);
+        if (response.ok && userData.data) {
+          setUser(userData.data.user);
+        } else {
+          // Clear any stale session data
+          setUser(null);
         }
       } catch (error) {
-        // No existing session
+        // No existing session - clear user state
+        setUser(null);
       } finally {
         setIsLoading(false);
       }
