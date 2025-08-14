@@ -74,20 +74,21 @@ export default function Login() {
       
       const data = await response.json();
       
+      // Check if this is a first-time login scenario (even if response is ok)
+      if (data.isFirstLogin) {
+        setFirstLoginInfo({
+          email: data.email,
+          schoolId: data.schoolId
+        });
+        toast({
+          title: "First Time Login",
+          description: "Please set your password to continue.",
+        });
+        setMode('first-login');
+        return;
+      }
+      
       if (!response.ok) {
-        // Check if this is a first-time login scenario
-        if (data.isFirstLogin) {
-          setFirstLoginInfo({
-            email: data.email,
-            schoolId: data.schoolId
-          });
-          toast({
-            title: "First Time Login",
-            description: "Please set your password to continue.",
-          });
-          setMode('first-login');
-          return;
-        }
         throw new Error(data.error || 'Login failed');
       }
       
