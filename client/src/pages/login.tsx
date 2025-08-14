@@ -463,34 +463,38 @@ export default function Login() {
                 {isLoading ? "Signing In..." : "Sign In"}
               </Button>
               
-              <div className="flex justify-between items-center text-xs">
-                <Button 
-                  type="button" 
-                  variant="link" 
-                  className="text-xs text-muted-foreground hover:text-foreground p-0"
-                  onClick={() => setMode('forgot-password')}
-                  data-testid="button-forgot-password"
-                >
-                  Forgot Password?
-                </Button>
-                <Button 
-                  type="button" 
-                  variant="link" 
-                  className="text-xs text-muted-foreground hover:text-foreground p-0"
-                  onClick={() => setMode('first-login')}
-                  data-testid="button-set-password"
-                >
-                  New Teacher? Set Password
-                </Button>
-                <Button 
-                  type="button" 
-                  variant="link" 
-                  className="text-xs text-muted-foreground hover:text-foreground p-0"
-                  onClick={() => setMode('register')}
-                  data-testid="button-register-link"
-                >
-                  Register School
-                </Button>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <Button 
+                    type="button" 
+                    variant="link" 
+                    className="text-sm text-muted-foreground hover:text-foreground p-0"
+                    onClick={() => setMode('forgot-password')}
+                    data-testid="button-forgot-password"
+                  >
+                    Forgot Password?
+                  </Button>
+                  <Button 
+                    type="button" 
+                    variant="link" 
+                    className="text-sm text-muted-foreground hover:text-foreground p-0"
+                    onClick={() => setMode('register')}
+                    data-testid="button-register-link"
+                  >
+                    Register School
+                  </Button>
+                </div>
+                <div className="text-center">
+                  <Button 
+                    type="button" 
+                    variant="link" 
+                    className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                    onClick={() => setMode('first-login')}
+                    data-testid="button-set-password"
+                  >
+                    New Teacher? Set Your Password Here
+                  </Button>
+                </div>
               </div>
             </form>
           ) : mode === 'forgot-password' ? (
