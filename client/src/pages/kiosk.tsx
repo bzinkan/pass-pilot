@@ -440,13 +440,7 @@ export default function Kiosk() {
       </div>
 
       <div className="max-w-7xl mx-auto p-6 space-y-6">
-        {/* Debug Info */}
-        <div className="mb-4 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
-          <div>Session: {session ? 'OK' : 'Missing'}</div>
-          <div>Grades: {grades.length} loaded</div>
-          <div>Students: {students.length} loaded</div>
-          <div>Passes: {activePasses.length} active</div>
-        </div>
+
 
         {/* Grade Filter Tabs - Show for both versions */}
         <div className="flex flex-wrap gap-2 mb-6">
