@@ -161,6 +161,7 @@ export const insertPassSchema = z.object({
   teacherId: z.string().optional(), // Will be set by server
   passType: z.string().optional().default('general'),
   customReason: z.string().optional(),
+  destination: z.string().optional(), // Will be derived from passType if not provided
 });
 
 // Keep the original schema for future database use

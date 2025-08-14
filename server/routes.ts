@@ -521,10 +521,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const authReq = req as AuthenticatedRequest;
       const { schoolId } = authReq.user;
       
+      // Convert passType to destination if not provided
+      let destination = req.valid.body.destination;
+      if (!destination) {
+        const passType = req.valid.body.passType || 'general';
+        switch (passType) {
+          case 'nurse':
+            destination = 'Nurse\'s Office';
+            break;
+          case 'discipline':
+            destination = 'Principal\'s Office';
+            break;
+          case 'restroom':
+            destination = 'Restroom';
+            break;
+          case 'library':
+            destination = 'Library';
+            break;
+          case 'office':
+            destination = 'Main Office';
+            break;
+          default:
+            destination = req.valid.body.customReason || 'General Hall Pass';
+        }
+      }
+      
       const data = {
         ...req.valid.body,
         schoolId: schoolId,  // Ensure schoolId from auth user
-        teacherId: authReq.user.id  // Ensure teacherId from auth user
+        teacherId: authReq.user.id,  // Ensure teacherId from auth user
+        destination: destination,  // Ensure destination is provided
+        duration: req.valid.body.duration || 10,  // Default 10 minutes
+        passNumber: Math.floor(Math.random() * 9000) + 1000,  // Generate 4-digit pass number
+        expiresAt: new Date(Date.now() + (req.valid.body.duration || 10) * 60 * 1000),  // Set expiration time
       };
       
       const pass = await storage.createPass(data);
