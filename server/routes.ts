@@ -370,7 +370,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const teacherPasses = allPasses.filter(pass => pass.teacherId === teacherId);
         res.json(teacherPasses);
       } else {
-        // Return all for the school
+        // Return all for the school (already includes student and teacher data)
         const passes = await storage.getActivePassesBySchool(schoolId);
         res.json(passes);
       }
