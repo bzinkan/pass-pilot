@@ -13,7 +13,7 @@ export function registerStripeWebhook(app: Express) {
     console.warn("Stripe configuration missing, webhook not registered");
     return;
   }
-  const stripe = new Stripe(ENV.STRIPE_SECRET_KEY, { apiVersion: "2024-06-20" });
+  const stripe = new Stripe(ENV.STRIPE_SECRET_KEY, { apiVersion: "2025-07-30.basil" });
 
   app.post("/api/stripe/webhook", bodyParser.raw({ type: "application/json" }), async (req, res) => {
     const sig = req.headers["stripe-signature"] as string | undefined;

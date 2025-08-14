@@ -22,10 +22,10 @@ function originFromRequest(req: any) {
 
 export function registerV2Routes(app: Express) {
   if (!ENV.STRIPE_SECRET_KEY) {
-    console.warn("STRIPE_SECRET_KEY not configured, V2 registration routes will not work");
-    return;
+    console.warn("STRIPE_SECRET_KEY not configured, V2 registration routes will work in demo mode");
   }
-  const stripe = new Stripe(ENV.STRIPE_SECRET_KEY, { apiVersion: "2024-06-20" });
+  
+  const stripe = ENV.STRIPE_SECRET_KEY ? new Stripe(ENV.STRIPE_SECRET_KEY, { apiVersion: "2025-07-30.basil" }) : null;
 
   app.post("/api/register/init", async (req, res) => {
     try {
@@ -33,14 +33,23 @@ export function registerV2Routes(app: Express) {
       if (!parsed.success) return res.status(400).json({ ok: false, error: "Invalid body" });
       const { schoolName, adminEmail, plan } = parsed.data;
 
-      const session = await stripe.checkout.sessions.create({
-        mode: "subscription",
-        line_items: [{ price: priceIdForPlan(plan), quantity: 1 }],
-        success_url: `${originFromRequest(req)}/register/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${originFromRequest(req)}/register/cancel`,
-        metadata: { schoolName, adminEmail, plan },
-        client_reference_id: adminEmail,
-      });
+      let session: any;
+      if (stripe) {
+        session = await stripe.checkout.sessions.create({
+          mode: "subscription",
+          line_items: [{ price: priceIdForPlan(plan), quantity: 1 }],
+          success_url: `${originFromRequest(req)}/register/success?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${originFromRequest(req)}/register/cancel`,
+          metadata: { schoolName, adminEmail, plan },
+          client_reference_id: adminEmail,
+        });
+      } else {
+        // Demo mode - create a fake session
+        session = {
+          id: `cs_demo_${Date.now()}`,
+          url: `${originFromRequest(req)}/register/success?session_id=cs_demo_${Date.now()}`
+        };
+      }
 
       // Optional visibility row; idempotent insert via unique session id handled on webhook
       await db.insert(registrations).values({
@@ -53,7 +62,7 @@ export function registerV2Routes(app: Express) {
       res.json({ ok: true, url: session.url });
     } catch (error: any) {
       console.error('Registration init error:', error);
-      res.status(500).json({ ok: false, error: error.message });
+      return res.status(500).json({ ok: false, error: error.message });
     }
   });
 
@@ -66,7 +75,7 @@ export function registerV2Routes(app: Express) {
       res.json({ ok: true, status: row?.status ?? "PENDING" });
     } catch (error: any) {
       console.error('Registration status error:', error);
-      res.status(500).json({ ok: false, error: error.message });
+      return res.status(500).json({ ok: false, error: error.message });
     }
   });
 }
