@@ -101,8 +101,14 @@ app.use((req, res, next) => {
   });
 })();
 
-// Global error handler - must be at the very end
-app.use((err: any, _req: any, res: any, _next: any) => {
-  console.error(err);
-  res.status(500).json({ ok: false, error: "Internal Server Error" });
-});
+  // Enhanced error monitoring and request tracking
+  import { globalErrorHandler, requestTrackingMiddleware, healthCheckHandler } from './monitoring';
+
+  // Add request tracking to all routes
+  app.use(requestTrackingMiddleware);
+
+  // Health check endpoint for monitoring services
+  app.get('/api/health', healthCheckHandler);
+
+  // Global error handler - must be at the very end
+  app.use(globalErrorHandler);

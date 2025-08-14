@@ -21,6 +21,11 @@ const EnvSchema = z.object({
   
   // Email Configuration - Optional but validated if present
   SENDGRID_API_KEY: z.string().optional(),
+
+  // Error monitoring configuration
+  DISCORD_WEBHOOK_URL: z.string().url().optional(),
+  SLACK_WEBHOOK_URL: z.string().url().optional(),
+  ENABLE_DEV_NOTIFICATIONS: z.string().transform(val => val === 'true').optional(),
   
   // Firebase Configuration - Optional for legacy support
   FIREBASE_PROJECT_ID: z.string().optional(),
