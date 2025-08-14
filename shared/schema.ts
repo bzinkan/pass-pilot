@@ -47,8 +47,10 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
-  isAdmin: boolean("is_admin").notNull().default(false),
+  role: text("role").notNull().default("TEACHER"), // ADMIN, TEACHER, STAFF, STUDENT
+  isAdmin: boolean("is_admin").notNull().default(false), // Maintained for backward compatibility
   isFirstLogin: boolean("is_first_login").notNull().default(false),
+  enableNotifications: boolean("enable_notifications").notNull().default(true),
   status: text("status").notNull().default("active"), // active, suspended, pending
   resetToken: text("reset_token"),
   resetTokenExpiry: timestamp("reset_token_expiry"),

@@ -9,7 +9,8 @@ export interface User {
   name: string;
   schoolId: string;
   schoolName: string | null;
-  isAdmin: boolean;
+  role: 'ADMIN' | 'TEACHER' | 'STAFF' | 'STUDENT';
+  isAdmin: boolean; // Maintained for backward compatibility
   isFirstLogin: boolean;
   enableNotifications: boolean;
   createdAt: Date;
