@@ -314,16 +314,29 @@ export function SetupTab({ user }: SetupTabProps) {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Crown className="w-5 h-5" />
-                  School Plan & Limits
+                  School Plan & Billing
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <Label>Current Plan</Label>
-                    <Badge variant="outline" className="mt-1">
-                      {schoolInfo?.plan?.replace('_', ' ').toUpperCase() || 'FREE'}
-                    </Badge>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge variant="outline">
+                        {schoolInfo?.plan?.replace('_', ' ').toUpperCase() || 'FREE'}
+                      </Badge>
+                      {schoolInfo?.plan && schoolInfo.plan !== 'trial' && schoolInfo.plan !== 'free' && (
+                        <Button 
+                          variant="link" 
+                          size="sm" 
+                          className="text-red-600 hover:text-red-700 p-0 h-auto"
+                          onClick={() => window.open('mailto:support@passpilotsystem.com?subject=Cancellation Request&body=I would like to cancel my subscription for school: ' + encodeURIComponent(schoolInfo?.schoolName || ''), '_blank')}
+                          data-testid="link-cancel-subscription"
+                        >
+                          Cancel Subscription
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <Label>Teachers</Label>
@@ -332,12 +345,55 @@ export function SetupTab({ user }: SetupTabProps) {
                     </p>
                   </div>
                   <div>
-                    <Label>School ID</Label>
-                    <p className="text-xs text-muted-foreground mt-1 font-mono">
-                      {schoolInfo?.schoolId || 'Loading...'}
-                    </p>
+                    <Label>Support</Label>
+                    <div className="mt-1 space-y-1">
+                      <p className="text-xs text-muted-foreground">
+                        Need help? Contact support
+                      </p>
+                      <Button 
+                        variant="link" 
+                        size="sm" 
+                        className="text-blue-600 hover:text-blue-700 p-0 h-auto text-xs"
+                        onClick={() => window.open('mailto:support@passpilotsystem.com?subject=Support Request&body=School: ' + encodeURIComponent(schoolInfo?.schoolName || '') + '%0ASchool ID: ' + encodeURIComponent(schoolInfo?.schoolId || ''), '_blank')}
+                        data-testid="link-contact-support"
+                      >
+                        support@passpilotsystem.com
+                      </Button>
+                    </div>
                   </div>
                 </div>
+                
+                {/* Billing Actions for Paid Plans */}
+                {schoolInfo?.plan && schoolInfo.plan !== 'trial' && schoolInfo.plan !== 'free' && (
+                  <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+                    <h4 className="text-sm font-medium text-red-800 dark:text-red-200 mb-2">
+                      Subscription Management
+                    </h4>
+                    <p className="text-xs text-red-700 dark:text-red-300 mb-3">
+                      Need to cancel your subscription? Contact our support team for assistance with plan changes or cancellations.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="text-red-600 border-red-300 hover:bg-red-50 hover:text-red-700"
+                        onClick={() => window.open('mailto:support@passpilotsystem.com?subject=Cancellation Request&body=School: ' + encodeURIComponent(schoolInfo?.schoolName || '') + '%0ASchool ID: ' + encodeURIComponent(schoolInfo?.schoolId || '') + '%0APlan: ' + encodeURIComponent(schoolInfo?.plan || '') + '%0A%0AI would like to cancel my subscription.', '_blank')}
+                        data-testid="button-cancel-subscription"
+                      >
+                        Cancel Subscription
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="text-blue-600 border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                        onClick={() => window.open('mailto:support@passpilotsystem.com?subject=Plan Change Request&body=School: ' + encodeURIComponent(schoolInfo?.schoolName || '') + '%0ASchool ID: ' + encodeURIComponent(schoolInfo?.schoolId || '') + '%0ACurrent Plan: ' + encodeURIComponent(schoolInfo?.plan || '') + '%0A%0AI would like to change my plan.', '_blank')}
+                        data-testid="button-change-plan"
+                      >
+                        Change Plan
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
