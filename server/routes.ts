@@ -113,9 +113,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/auth/login', async (req, res) => {
+  const loginBodySchema = z.object({
+    email: z.string().email("Invalid email format"),
+    password: z.string().min(1, "Password is required"),
+    schoolId: z.string().uuid().optional(),
+  });
+
+  app.post('/api/auth/login', validate({ body: loginBodySchema }), async (req, res) => {
     try {
-      const { email, password, schoolId } = req.body;
+      const { email, password, schoolId } = req.valid.body;
       
       // Normalize email
       const normalizedEmail = email.trim().toLowerCase();

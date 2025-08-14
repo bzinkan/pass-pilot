@@ -7,11 +7,16 @@ import { db } from "../db";
 import { priceIdForPlan, type Plan } from "../utils/priceId";
 import { ENV } from "../env";
 import { eq } from "drizzle-orm";
+import { validate } from "../validate";
 
-const Body = z.object({
-  schoolName: z.string().min(2),
-  adminEmail: z.string().email(),
+const registrationBodySchema = z.object({
+  schoolName: z.string().min(2, "School name must be at least 2 characters"),
+  adminEmail: z.string().email("Invalid email format"),
   plan: z.enum(["TRIAL","BASIC","SMALL","MEDIUM","LARGE","UNLIMITED"]) as unknown as z.ZodType<Plan>,
+});
+
+const registrationParamsSchema = z.object({
+  sessionId: z.string().min(1, "Session ID is required"),
 });
 
 function originFromRequest(req: any) {
@@ -27,11 +32,9 @@ export function registerV2Routes(app: Express) {
   
   const stripe = ENV.STRIPE_SECRET_KEY ? new Stripe(ENV.STRIPE_SECRET_KEY, { apiVersion: "2025-07-30.basil" }) : null;
 
-  app.post("/api/register/init", async (req, res) => {
+  app.post("/api/register/init", validate({ body: registrationBodySchema }), async (req, res) => {
     try {
-      const parsed = Body.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ ok: false, error: "Invalid body" });
-      const { schoolName, adminEmail, plan } = parsed.data;
+      const { schoolName, adminEmail, plan } = req.valid.body;
 
       let session: any;
       if (stripe) {
@@ -66,10 +69,13 @@ export function registerV2Routes(app: Express) {
     }
   });
 
-  app.get("/api/register/status", async (req, res) => {
+  const statusQuerySchema = z.object({
+    session_id: z.string().min(1, "Session ID is required"),
+  });
+
+  app.get("/api/register/status", validate({ query: statusQuerySchema }), async (req, res) => {
     try {
-      const sessionId = String(req.query.session_id || "");
-      if (!sessionId) return res.status(400).json({ ok: false, error: "missing session_id" });
+      const { session_id: sessionId } = req.valid.query;
       
       const [row] = await db.select().from(registrations).where(eq(registrations.stripeCheckoutSessionId, sessionId)).limit(1);
       res.json({ ok: true, status: row?.status ?? "PENDING" });
