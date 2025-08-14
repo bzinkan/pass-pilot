@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { db } from "./db";
 import { users, schools, grades, students, passes, payments } from "@shared/schema";
 import { eq, and, lt } from "drizzle-orm";
+import { unwrap } from "./safe";
 
 export interface IStorage {
   // Users

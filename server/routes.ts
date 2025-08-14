@@ -7,6 +7,7 @@ import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
 import { ENV } from "./env";
 import { validate } from "./validate";
+import { invariant, unwrap } from "./safe";
 
 // Authentication utilities
 const auth = {
@@ -109,14 +110,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user = await storage.getUserByEmail(email);
       }
       
-      if (!user) {
-        return res.status(401).json({ message: 'Invalid credentials' });
-      }
+      invariant(user, 'Invalid credentials');
       
       const isValid = await auth.comparePassword(password, user.password);
-      if (!isValid) {
-        return res.status(401).json({ message: 'Invalid credentials' });
-      }
+      invariant(isValid, 'Invalid credentials');
       
       // Create session
       const sessionToken = auth.generateSessionToken();
@@ -145,11 +142,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const authReq = req as AuthenticatedRequest;
       const user = await storage.getUser(authReq.user.id);
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
+      const validUser = unwrap(user, 'User not found');
       
-      const { password: _, ...userWithoutPassword } = user;
+      const { password: _, ...userWithoutPassword } = validUser;
       res.json(userWithoutPassword);
     } catch (error) {
       console.error('Get user error:', error);
@@ -170,10 +165,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/school/:id', requireAuth, async (req, res) => {
     try {
       const school = await storage.getSchool(req.params.id);
-      if (!school) {
-        return res.status(404).json({ message: 'School not found' });
-      }
-      res.json(school);
+      const validSchool = unwrap(school, 'School not found');
+      res.json(validSchool);
     } catch (error) {
       console.error('Get school error:', error);
       res.status(500).json({ message: 'Failed to get school' });
