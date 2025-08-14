@@ -7,7 +7,7 @@ import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
 import { ENV } from "./env";
 import { validate } from "./validate";
-import { invariant, unwrap } from "./safe";
+import { invariant, unwrap, assertValidUuid, assertNonEmpty } from "./safe";
 
 // Authentication utilities
 const auth = {
@@ -236,8 +236,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // School endpoints
   app.get('/api/school/:id', requireAuth, async (req, res) => {
     try {
-      const school = await storage.getSchool(req.params.id);
-      const validSchool = unwrap(school, 'School not found');
+      const schoolId = assertValidUuid(req.params.id, "Invalid school ID format");
+      const school = await storage.getSchool(schoolId);
+      const validSchool = unwrap(school, 'School not found or access denied');
       res.json(validSchool);
     } catch (error) {
       console.error('Get school error:', error);
