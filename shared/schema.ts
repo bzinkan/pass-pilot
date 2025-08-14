@@ -133,7 +133,17 @@ export const insertStudentSchema = createInsertSchema(students).omit({
   updatedAt: true,
 });
 
-export const insertPassSchema = createInsertSchema(passes).omit({
+// Simple pass schema for in-memory storage compatibility
+export const insertPassSchema = z.object({
+  studentId: z.string(),
+  schoolId: z.string().optional(), // Will be set by server
+  teacherId: z.string().optional(), // Will be set by server
+  passType: z.string().optional().default('general'),
+  customReason: z.string().optional(),
+});
+
+// Keep the original schema for future database use
+export const insertPassSchemaFull = createInsertSchema(passes).omit({
   id: true,
   createdAt: true,
   updatedAt: true,

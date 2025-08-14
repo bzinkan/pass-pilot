@@ -382,7 +382,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/passes', requireAuth, validate({ body: insertPassSchema }), async (req: any, res) => {
     try {
-      const data = req.valid.body;
+      const authReq = req as AuthenticatedRequest;
+      const { schoolId } = authReq.user;
+      
+      const data = {
+        ...req.valid.body,
+        schoolId: schoolId,  // Ensure schoolId from auth user
+        teacherId: authReq.user.id  // Ensure teacherId from auth user
+      };
+      
       const pass = await storage.createPass(data);
       res.json(pass);
     } catch (error: any) {
