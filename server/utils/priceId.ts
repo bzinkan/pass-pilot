@@ -14,12 +14,6 @@ const map: Record<Plan, string | undefined> = {
 
 export function priceIdForPlan(plan: Plan): string {
   const id = map[plan as Plan];
-  if (!id) {
-    // For development, return a placeholder
-    if (ENV.NODE_ENV === 'development') {
-      return `price_dev_${plan.toLowerCase()}`;
-    }
-    throw new Error(`No price id configured for plan ${plan}`);
-  }
+  if (!id) throw new Error(`No price id configured for plan ${plan}`);
   return id;
 }

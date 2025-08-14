@@ -71,6 +71,7 @@ export function registerStripeWebhook(app: Express) {
               firstName: "Admin", // Will be updated on first login
               lastName: "User",
               password: "", // Will be set on first login
+              role: "SUPER_ADMIN",
               isAdmin: true,
               isFirstLogin: true,
               schoolId: school.id,

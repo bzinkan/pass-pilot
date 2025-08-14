@@ -19,6 +19,14 @@ const EnvSchema = z.object({
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   
+  // Stripe Price IDs for different plans
+  PRICE_TRIAL: z.string().optional(),
+  PRICE_BASIC: z.string().optional(),
+  PRICE_SMALL: z.string().optional(),
+  PRICE_MEDIUM: z.string().optional(),
+  PRICE_LARGE: z.string().optional(),
+  PRICE_UNLIMITED: z.string().optional(),
+  
   // Email Configuration - Optional but validated if present
   SENDGRID_API_KEY: z.string().optional(),
 

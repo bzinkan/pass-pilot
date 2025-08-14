@@ -144,6 +144,18 @@ Complete end-to-end testing has validated that the school registration system fu
     - Enhanced error responses with timestamps and request IDs
     - Environment-aware notifications (disabled in development by default)
 
+15. **V2 Registration System (Webhook-First)** ✅
+    - Comprehensive webhook-first provisioning (`server/routes/register-v2.ts`, `server/stripe/webhook-v2.ts`)
+    - Idempotent registration (unique on Checkout Session ID)
+    - Atomic school + admin creation in single DB transaction
+    - Status tracking via registrations table with PENDING/ACTIVE/FAILED states
+    - Demo mode fallback when Stripe not configured
+    - SUPER_ADMIN role assignment for school administrators
+    - Comprehensive error handling with detailed API responses
+    - Price configuration support for multiple plan tiers (TRIAL, BASIC, SMALL, MEDIUM, LARGE, UNLIMITED)
+    - Real-time status polling for registration completion
+    - Enhanced environment variable validation for Stripe configuration
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.

@@ -1,0 +1,405 @@
+# PassPilot V2 Registration (Webhook‑First) — Drop‑In Bundle
+
+**What this gives you**
+
+* Stripe **webhook‑first** provisioning (single source of truth)
+* **Idempotent** (unique on Checkout Session ID)
+* **Atomic** (school + admin created in **one DB transaction**)
+* No email restrictions; creates **SUPER\_ADMIN** for the new school
+* Status tracking via a `registrations` table
+
+**One‑time installs (Shell):**
+
+```bash
+npm i stripe zod
+```
+
+---
+
+## 1) ENV – required variables
+
+Add these to Replit (Secrets **and** Deploy env), and Railway if you deploy there:
+
+```
+STRIPE_SECRET_KEY=sk_...         # Test or Live, match your mode
+STRIPE_WEBHOOK_SECRET=whsec_...  # From Developers → Webhooks → your endpoint → Reveal
+SESSION_SECRET=32+random_chars
+PRICE_TRIAL=price_...
+PRICE_BASIC=price_...
+PRICE_SMALL=price_...
+PRICE_MEDIUM=price_...
+PRICE_LARGE=price_...
+PRICE_UNLIMITED=price_...
+```
+
+---
+
+## 2) DB Schema (Drizzle)
+
+> If you already have `schools` and `users`, adapt field names. The **registrations** table is new and safe to add.
+
+### 2.1 `db/schema/registrations.ts`
+
+```ts
+// db/schema/registrations.ts
+import { pgTable, uuid, text, timestamp } from "drizzle-orm/pg-core";
+
+export const registrations = pgTable("registrations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  status: text("status").notNull().default("PENDING"), // PENDING|ACTIVE|FAILED
+  adminEmail: text("admin_email").notNull(),
+  schoolName: text("school_name").notNull(),
+  plan: text("plan").notNull(), // TRIAL|BASIC|SMALL|MEDIUM|LARGE|UNLIMITED
+  stripeCheckoutSessionId: text("stripe_checkout_session_id").notNull().unique(),
+  stripeCustomerId: text("stripe_customer_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+```
+
+### 2.2 Example `schools` and `users` (adjust if you already have them)
+
+```ts
+// db/schema/schools.ts
+import { pgTable, uuid, text, timestamp } from "drizzle-orm/pg-core";
+
+export const schools = pgTable("schools", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  plan: text("plan").notNull().default("TRIAL"),
+  status: text("status").notNull().default("ACTIVE"),
+  stripeCustomerId: text("stripe_customer_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+```
+
+```ts
+// db/schema/users.ts
+import { pgTable, uuid, text, timestamp } from "drizzle-orm/pg-core";
+import { schools } from "./schools";
+
+export const users = pgTable("users", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  schoolId: uuid("school_id").notNull().references(() => schools.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  role: text("role").notNull().default("TEACHER"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+```
+
+**Apply schema**
+
+```bash
+npm run db:push
+```
+
+---
+
+## 3) Helpers
+
+### 3.1 `server/env.ts` (env validation)
+
+```ts
+// server/env.ts
+import { z } from "zod";
+
+const EnvSchema = z.object({
+  STRIPE_SECRET_KEY: z.string().min(1),
+  STRIPE_WEBHOOK_SECRET: z.string().min(1),
+  SESSION_SECRET: z.string().min(32),
+  PRICE_TRIAL: z.string().optional(),
+  PRICE_BASIC: z.string().optional(),
+  PRICE_SMALL: z.string().optional(),
+  PRICE_MEDIUM: z.string().optional(),
+  PRICE_LARGE: z.string().optional(),
+  PRICE_UNLIMITED: z.string().optional(),
+});
+
+export const ENV = EnvSchema.parse(process.env);
+```
+
+### 3.2 `server/utils/priceId.ts`
+
+```ts
+// server/utils/priceId.ts
+import { ENV } from "../env";
+
+export type Plan = "TRIAL"|"BASIC"|"SMALL"|"MEDIUM"|"LARGE"|"UNLIMITED";
+
+const map: Record<Plan, string | undefined> = {
+  TRIAL: ENV.PRICE_TRIAL,
+  BASIC: ENV.PRICE_BASIC,
+  SMALL: ENV.PRICE_SMALL,
+  MEDIUM: ENV.PRICE_MEDIUM,
+  LARGE: ENV.PRICE_LARGE,
+  UNLIMITED: ENV.PRICE_UNLIMITED,
+};
+
+export function priceIdForPlan(plan: Plan): string {
+  const id = map[plan as Plan];
+  if (!id) throw new Error(`No price id configured for plan ${plan}`);
+  return id;
+}
+```
+
+### 3.3 `server/utils/slugify.ts`
+
+```ts
+// server/utils/slugify.ts
+export function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "");
+}
+```
+
+---
+
+## 4) Routes — Init + Status
+
+### 4.1 `server/routes/register-v2.ts`
+
+```ts
+// server/routes/register-v2.ts
+import { z } from "zod";
+import Stripe from "stripe";
+import type { Express } from "express";
+import { registrations } from "../../db/schema/registrations";
+import { db } from "../../db"; // your Drizzle instance
+import { priceIdForPlan, type Plan } from "../utils/priceId";
+import { ENV } from "../env";
+
+const Body = z.object({
+  schoolName: z.string().min(2),
+  adminEmail: z.string().email(),
+  plan: z.enum(["TRIAL","BASIC","SMALL","MEDIUM","LARGE","UNLIMITED"]) as unknown as z.ZodType<Plan>,
+});
+
+function originFromRequest(req: any) {
+  const proto = (req.headers["x-forwarded-proto"] || "http").toString();
+  const host = req.headers["x-forwarded-host"] || req.headers.host;
+  return `${proto}://${host}`;
+}
+
+export function registerV2Routes(app: Express) {
+  const stripe = new Stripe(ENV.STRIPE_SECRET_KEY, { apiVersion: "2024-06-20" });
+
+  app.post("/api/register/init", async (req, res) => {
+    const parsed = Body.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ ok:false, error:"Invalid body" });
+    const { schoolName, adminEmail, plan } = parsed.data;
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      line_items: [{ price: priceIdForPlan(plan), quantity: 1 }],
+      success_url: `${originFromRequest(req)}/register/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${originFromRequest(req)}/register/cancel`,
+      metadata: { schoolName, adminEmail, plan },
+      client_reference_id: adminEmail,
+    });
+
+    // Optional visibility row; idempotent insert via unique session id handled on webhook
+    await db.insert(registrations).values({
+      adminEmail,
+      schoolName,
+      plan,
+      stripeCheckoutSessionId: session.id,
+    }).onConflictDoNothing();
+
+    res.json({ ok: true, url: session.url });
+  });
+
+  app.get("/api/register/status", async (req, res) => {
+    const sessionId = String(req.query.session_id || "");
+    if (!sessionId) return res.status(400).json({ ok:false, error:"missing session_id" });
+    const [row] = await db.select().from(registrations).where(registrations.stripeCheckoutSessionId.eq(sessionId)).limit(1);
+    res.json({ ok:true, status: row?.status ?? "PENDING" });
+  });
+}
+```
+
+---
+
+## 5) Webhook — Provision everything (atomic + idempotent)
+
+### 5.1 `server/stripe/webhook-v2.ts`
+
+```ts
+// server/stripe/webhook-v2.ts
+import Stripe from "stripe";
+import bodyParser from "body-parser";
+import type { Express } from "express";
+import { ENV } from "../env";
+import { db } from "../../db"; // your Drizzle instance
+import { registrations } from "../../db/schema/registrations";
+import { schools } from "../../db/schema/schools";
+import { users } from "../../db/schema/users";
+import { slugify } from "../utils/slugify";
+import { eq } from "drizzle-orm";
+
+export function registerStripeWebhook(app: Express) {
+  const stripe = new Stripe(ENV.STRIPE_SECRET_KEY, { apiVersion: "2024-06-20" });
+
+  app.post("/api/stripe/webhook", bodyParser.raw({ type: "application/json" }), async (req, res) => {
+    const sig = req.headers["stripe-signature"] as string | undefined;
+    let event: Stripe.Event;
+    try {
+      if (!sig) throw new Error("Missing stripe-signature header");
+      event = stripe.webhooks.constructEvent(req.body, sig, ENV.STRIPE_WEBHOOK_SECRET);
+    } catch (err: any) {
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    if (event.type === "checkout.session.completed") {
+      const s = event.data.object as Stripe.Checkout.Session;
+      const md = (s.metadata ?? {}) as Record<string, string>;
+      const schoolName = md.schoolName || "";
+      const adminEmail = md.adminEmail || "";
+      const plan = (md.plan || "TRIAL") as any;
+      const slug = slugify(schoolName);
+
+      // Idempotency: if already ACTIVE for this session, ack
+      const [existing] = await db.select().from(registrations).where(eq(registrations.stripeCheckoutSessionId, s.id)).limit(1);
+      if (existing?.status === "ACTIVE") return res.json({ received: true });
+
+      await db.transaction(async (tx) => {
+        // Ensure registration row exists
+        if (!existing) {
+          await tx.insert(registrations).values({
+            adminEmail, schoolName, plan, stripeCheckoutSessionId: s.id, stripeCustomerId: String(s.customer || "")
+          }).onConflictDoNothing();
+        }
+
+        // Create school
+        const [school] = await tx.insert(schools).values({
+          name: schoolName,
+          slug,
+          plan,
+          status: "ACTIVE",
+          stripeCustomerId: String(s.customer || ""),
+        }).onConflictDoNothing().returning();
+
+        // Create admin user
+        if (school) {
+          await tx.insert(users).values({
+            email: adminEmail,
+            role: "SUPER_ADMIN",
+            schoolId: school.id,
+          }).onConflictDoNothing();
+        }
+
+        // Mark registration ACTIVE
+        await tx.update(registrations).set({
+          status: "ACTIVE",
+          stripeCustomerId: String(s.customer || ""),
+        }).where(eq(registrations.stripeCheckoutSessionId, s.id));
+      });
+    }
+
+    res.json({ received: true });
+  });
+}
+```
+
+---
+
+## 6) Server wiring (`server/index.ts` excerpt)
+
+> Keep the **webhook route before** `express.json()` because it uses `bodyParser.raw()`.
+
+```ts
+// server/index.ts
+import express from "express";
+import cookieParser from "cookie-parser";
+import cors from "cors";
+import { ENV } from "./env";
+import { registerStripeWebhook } from "./stripe/webhook-v2";
+import { registerV2Routes } from "./routes/register-v2";
+
+const app = express();
+app.set("trust proxy", 1);
+
+// Health check
+app.get('/api/healthz', (_req, res) => res.type('text/plain').send('ok'));
+
+// 1) Webhook FIRST (raw body)
+registerStripeWebhook(app);
+
+// 2) Now regular parsers
+app.use(cors({
+  origin: [
+    "http://localhost:5173",
+    "https://YOUR-REPLIT-PREVIEW-ORIGIN",
+    "https://YOUR-PROD-DOMAIN"
+  ],
+  credentials: true,
+}));
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+app.use(cookieParser(ENV.SESSION_SECRET));
+
+// 3) V2 registration endpoints
+registerV2Routes(app);
+
+// ...your other routes here
+
+// Error handler (always last)
+app.use((err: any, _req: any, res: any, _next: any) => {
+  console.error(err);
+  res.status(500).json({ ok: false, error: 'Internal Server Error' });
+});
+
+export default app;
+```
+
+---
+
+## 7) Client usage (minimal)
+
+* Start: `POST /api/register/init` with `{ schoolName, adminEmail, plan }` → redirect to `data.url`.
+* After Stripe success, you land on `/register/success?session_id=...`; poll `GET /api/register/status?session_id=...` until it returns `{ status: "ACTIVE" }`, then show a **Login** button or send a magic link.
+
+```ts
+// Example start (client)
+const res = await fetch('/api/register/init', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ schoolName, adminEmail, plan })
+});
+const data = await res.json();
+window.location.assign(data.url);
+```
+
+---
+
+## 8) Stripe Dashboard steps (once per environment)
+
+1. Create prices (BASIC/SMALL/MEDIUM/LARGE/UNLIMITED) and copy their IDs into env (`PRICE_*`).
+2. Add a webhook endpoint pointing to your deployed URL: `https://YOURDOMAIN/api/stripe/webhook` (Test **and** Live as needed). Use the **Signing secret** for `STRIPE_WEBHOOK_SECRET`.
+
+---
+
+## 9) Notes & Safety
+
+* **Idempotency:** webhook checks/unique on `stripe_checkout_session_id` prevent double creates.
+* **Atomic:** all DB writes occur inside a transaction.
+* **No email restriction:** any `adminEmail` is accepted; add verification later if you want.
+* **Conflicts:** `onConflictDoNothing()` keeps retries safe. If you require stricter uniqueness (e.g., `schools.slug`), add a unique index (already in schema).
+* **Migrations:** run `npm run db:push` after schema changes.
+
+---
+
+## 10) Optional: Make `schools.slug` unique from legacy data
+
+If you already have schools, you may need to backfill slugs:
+
+```sql
+UPDATE schools SET slug = lower(regexp_replace(name, '[^a-z0-9]+', '-', 'g')) WHERE slug IS NULL OR slug = '';
+```
+
+Then ensure a unique index on `slug` (Drizzle schema above already has `.unique()`).
+
+---
+
+**Done.** Paste these files, set envs, run `npm run db:push`, create the webhook in Stripe, and you’re on V2.
