@@ -122,6 +122,17 @@ Complete end-to-end testing has validated that the school registration system fu
     - Test IDs for reliable component testing
     - Prevents crashes from undefined/null data access
 
+13. **Secure Stripe Webhook Validation** ✅
+    - Comprehensive webhook validation (`server/stripe/webhook-v2.ts`)
+    - Uses bodyParser.raw to preserve signature verification data
+    - Validates stripe-signature header before touching request body
+    - stripe.webhooks.constructEvent() verifies authenticity first
+    - Never access event.data.object until after verification
+    - Fail-fast on missing/invalid signatures with detailed error logging
+    - Type-safe event handling with proper error responses
+    - Prevents malicious webhook payload processing
+    - Applied to checkout.session.completed and other critical events
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
