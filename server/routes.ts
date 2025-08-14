@@ -242,6 +242,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Alternative endpoint for query parameter (used by kiosk)
+  app.get('/api/passes/active', requireAuth, async (req, res) => {
+    try {
+      const { teacherId } = req.query;
+      const { schoolId } = (req as AuthenticatedRequest).user;
+      
+      if (teacherId) {
+        // Filter by teacher
+        const allPasses = await storage.getActivePassesBySchool(schoolId);
+        const teacherPasses = allPasses.filter(pass => pass.teacherId === teacherId);
+        res.json(teacherPasses);
+      } else {
+        // Return all for the school
+        const passes = await storage.getActivePassesBySchool(schoolId);
+        res.json(passes);
+      }
+    } catch (error) {
+      console.error('Get active passes error:', error);
+      res.status(500).json({ message: 'Failed to get active passes' });
+    }
+  });
+
   app.post('/api/passes', requireAuth, validate({ body: insertPassSchema }), async (req: any, res) => {
     try {
       const data = req.valid.body;
@@ -261,6 +283,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Update pass error:', error);
       res.status(500).json({ message: 'Failed to update pass' });
+    }
+  });
+
+  // Dedicated return endpoint for semantic clarity (used by both kiosk and MyClass)
+  app.put('/api/passes/:id/return', requireAuth, async (req, res) => {
+    try {
+      const pass = await storage.updatePass(req.params.id, { status: 'returned' });
+      res.json(pass);
+    } catch (error) {
+      console.error('Return pass error:', error);
+      res.status(500).json({ message: 'Failed to return pass' });
     }
   });
 
