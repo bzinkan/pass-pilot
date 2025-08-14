@@ -2118,11 +2118,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // --- START DEFENSIVE FIX ---
       const raw = req.body || {};
 
-      // Accept either 'td' or 'tdv' from the client:
-      const incomingTdv = (raw.tdv ?? raw.t ?? '').toString().trim();
-
-      // Force to a sane non-null, non-empty value:
-      const safeTdv = incomingTdv || 'general';
+      // coalesce ANY of the legacy/new names to tdv, default 'general'
+      const tdv =
+        (req.body.tdv ?? req.body.td ?? req.body.passType ?? 'general') || 'general';
 
       // The rest of your defaults that were already there:
       const destination = raw.destination || 'Restroom';
@@ -2132,7 +2130,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { validatePassData } = await import("../shared/validation");
       const passInput = validatePassData({
         ...raw,
-        tdv: safeTdv,
+        tdv,
         destination,
         passType,
         teacherId: req.userId,
