@@ -2116,37 +2116,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // --- START DEFENSIVE FIX ---
-      const raw = req.body || {};
-
       // coalesce ANY of the legacy/new names to tdv, default 'general'
       const tdv =
         (req.body.tdv ?? req.body.td ?? req.body.passType ?? 'general') || 'general';
 
-      // The rest of your defaults that were already there:
-      const destination = raw.destination || 'Restroom';
-      const passType   = raw.passType   || 'general';
-
-      // Build the validated payload; make sure the key matches your DB column name: 'tdv'
+      // Build the validated payload
       const { validatePassData } = await import("../shared/validation");
       const passInput = validatePassData({
-        ...raw,
-        tdv,
-        destination,
-        passType,
+        ...req.body,
         teacherId: req.userId,
         schoolId: user.schoolId,
+        destination: req.body.destination || "Restroom"
       });
-      // --- END DEFENSIVE FIX ---
 
-      // Final shape written to DB (still ok to keep your existing extras)
+      // force tdv into the final payload (never null)
       const passData = {
         ...passInput,
+        tdv,                             // <- add this line
         checkoutTime: new Date(),
         timeOut: new Date(),
         issuingTeacher: user.name,
         status: "active" as const,
-        printRequested: false,
+        printRequested: false
       };
+      // --- END DEFENSIVE FIX ---
 
       console.log('Creating pass with data:', passData);
       const pass = await storage.createPass(passData);
