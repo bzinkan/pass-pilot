@@ -76,11 +76,12 @@ function normalizeTd(body: any): string {
   return td.length ? td : "general";
 }
 
-// Force-safe createPass: guarantees td is never null before hitting the DB
+// Force-safe createPass: guarantees td and tdv are never null before hitting the DB
 const _origCreatePass = storage.createPass.bind(storage);
 (storage as any).createPass = async (data: any) => {
   const td = normalizeTd(data);
-  return _origCreatePass({ ...data, td });
+  const tdv = data.tdv || td || 'general';  // Use tdv if provided, fall back to td, then 'general'
+  return _origCreatePass({ ...data, td, tdv });
 };
 
 // Initialize Stripe if key is available
