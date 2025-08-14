@@ -1,0 +1,71 @@
+// scripts/fix-td.mjs
+import pg from 'pg';
+const { Client } = pg;
+
+function buildConn() {
+  if (process.env.DATABASE_URL) {
+    return { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } };
+  }
+  const { PGHOST, PGPORT = '5432', PGUSER, PGPASSWORD = '', PGDATABASE } = process.env;
+  if (PGHOST && PGUSER && PGDATABASE) {
+    const enc = encodeURIComponent;
+    const url = `postgres://${enc(PGUSER)}:${enc(PGPASSWORD)}@${PGHOST}:${PGPORT}/${enc(PGDATABASE)}`;
+    return { connectionString: url, ssl: { rejectUnauthorized: false } };
+  }
+  throw new Error('No DATABASE_URL or PG* variables found.');
+}
+
+const client = new Client(buildConn());
+
+async function main() {
+  await client.connect();
+
+  // Confirm table exists in public schema
+  const { rows: rel } = await client.query(`SELECT to_regclass('public.passes') AS rel;`);
+  if (!rel[0]?.rel) throw new Error('Table "passes" not found in schema "public". Are you on the right DB?');
+
+  // Create "td" column if missing
+  const { rows: haveTd } = await client.query(`
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='passes' AND column_name='td';
+  `);
+  if (haveTd.length === 0) {
+    console.log('Column "td" does not exist. Creating it…');
+    await client.query(`ALTER TABLE public.passes ADD COLUMN td text;`);
+  } else {
+    console.log('Column "td" already exists.');
+  }
+
+  // Set default and backfill
+  await client.query(`ALTER TABLE public.passes ALTER COLUMN td SET DEFAULT 'general';`);
+  await client.query(`UPDATE public.passes SET td = 'general' WHERE td IS NULL OR td = '' ;`);
+
+  // Guard future inserts
+  await client.query(`
+    CREATE OR REPLACE FUNCTION passes_td_default() RETURNS trigger AS $$
+    BEGIN
+      IF NEW.td IS NULL OR NEW.td = '' THEN NEW.td := 'general'; END IF;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+  `);
+  await client.query(`DROP TRIGGER IF EXISTS passes_td_default_trg ON public.passes;`);
+  await client.query(`
+    CREATE TRIGGER passes_td_default_trg
+    BEFORE INSERT ON public.passes
+    FOR EACH ROW EXECUTE FUNCTION passes_td_default();
+  `);
+
+  // Show the default we ended with
+  const { rows: def } = await client.query(`
+    SELECT column_default
+    FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='passes' AND column_name='td';
+  `);
+  console.log('column_default:', def[0]?.column_default ?? null);
+
+  await client.end();
+  console.log('✅ td fixed and guarded.');
+}
+
+main().catch((e) => { console.error(e); process.exit(1); });

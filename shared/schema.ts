@@ -99,6 +99,7 @@ export const passes = pgTable("passes", {
   returnTime: timestamp("return_time"),
   issuingTeacher: text("issuing_teacher").notNull(),
   passType: text("pass_type").default("general"),
+  td: text("td").default("general"), // Pass type/destination - guaranteed non-null by trigger
   customReason: text("custom_reason"),
   notes: text("notes"),
   printRequested: boolean("print_requested").default(false),
