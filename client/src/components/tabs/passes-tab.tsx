@@ -14,7 +14,14 @@ interface PassesTabProps {
 
 export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) {
   const { data: passes, isLoading, error, refetch } = useQuery<any[]>({
-    queryKey: ['/api/passes/active'],
+    queryKey: ['/api/passes/active', { teacherId: user?.id }],
+    queryFn: () => {
+      const url = new URL('/api/passes/active', window.location.origin);
+      if (user?.id) {
+        url.searchParams.set('teacherId', user.id);
+      }
+      return fetch(url.toString()).then(res => res.json());
+    },
     refetchInterval: 5000, // Poll every 5 seconds for real-time updates
   });
   const [filterType, setFilterType] = useState<string>("all");
