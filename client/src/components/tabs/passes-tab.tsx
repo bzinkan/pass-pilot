@@ -53,12 +53,24 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
     return null; // guarded fallback
   }
 
-  const formatDuration = (issuedAt: string) => {
-    const now = new Date();
-    const issued = new Date(issuedAt);
-    const diffMs = now.getTime() - issued.getTime();
-    const diffMinutes = Math.floor(diffMs / (1000 * 60));
-    return `${diffMinutes} min`;
+  const formatDuration = (issuedAt: string | Date | null | undefined) => {
+    if (!issuedAt) return "Unknown";
+    
+    try {
+      const now = new Date();
+      const issued = new Date(issuedAt);
+      
+      // Check if date is valid
+      if (isNaN(issued.getTime())) {
+        return "Unknown";
+      }
+      
+      const diffMs = now.getTime() - issued.getTime();
+      const diffMinutes = Math.floor(diffMs / (1000 * 60));
+      return `${diffMinutes} min`;
+    } catch (error) {
+      return "Unknown";
+    }
   };
 
   const getInitials = (name: string) => {

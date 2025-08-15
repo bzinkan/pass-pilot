@@ -621,15 +621,17 @@ export class MemStorage implements IStorage {
 
   async createPass(insertPass: InsertPass): Promise<Pass> {
     const id = randomUUID();
+    const now = new Date();
     const pass: Pass = { 
       ...insertPass,
       id,
-      checkoutTime: new Date(),
+      checkoutTime: now,
+      issuedAt: now, // Add issuedAt timestamp
       returnTime: null,
       status: "out",
       passType: insertPass.passType || "general",
       customReason: insertPass.customReason || null,
-      duration: null,
+      duration: insertPass.duration || 10,
     };
     this.passes.set(id, pass);
     return pass;

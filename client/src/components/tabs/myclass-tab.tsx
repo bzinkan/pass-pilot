@@ -67,12 +67,13 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
     (teacherAssignedGrades.length === 0 || teacherAssignedGrades.includes(grade.name))
   );
 
-  const handleMarkOut = async (studentId: string, studentName: string, passType: string = 'general', customReason: string = '') => {
+  const handleMarkOut = async (studentId: string, studentName: string, passType: string = 'general', customReason: string = '', duration: number = 15) => {
     try {
       await apiRequest('POST', '/api/passes', { 
         studentId, 
         passType,
         customReason: customReason || undefined,
+        duration,
       });
       queryClient.invalidateQueries({ queryKey: ['/api/passes/active'] });
       queryClient.invalidateQueries({ queryKey: ['/api/students'] });
@@ -94,7 +95,7 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
 
   const handleCustomReasonSubmit = () => {
     if (selectedStudentForCustom && customReason.trim()) {
-      handleMarkOut(selectedStudentForCustom.id, `${selectedStudentForCustom.firstName} ${selectedStudentForCustom.lastName}`, 'general', customReason.trim());
+      handleMarkOut(selectedStudentForCustom.id, `${selectedStudentForCustom.firstName} ${selectedStudentForCustom.lastName}`, 'general', customReason.trim(), 15);
       setCustomReason('');
       setSelectedStudentForCustom(null);
       setIsCustomReasonDialogOpen(false);
@@ -427,12 +428,12 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
                       </div>
                       <div className="flex items-center gap-2">
                         <Button 
-                          onClick={() => handleMarkOut(student.id, `${student.firstName} ${student.lastName}`, 'general')}
+                          onClick={() => handleMarkOut(student.id, `${student.firstName} ${student.lastName}`, 'restroom', '', 5)}
                           size="sm"
                           variant="outline"
                           data-testid={`button-checkout-${student.id}`}
                         >
-                          Mark Out
+                          Restroom (5 min)
                         </Button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -447,18 +448,25 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem 
-                              onClick={() => handleMarkOut(student.id, `${student.firstName} ${student.lastName}`, 'nurse')}
+                              onClick={() => handleMarkOut(student.id, `${student.firstName} ${student.lastName}`, 'restroom', '', 10)}
+                              className="flex items-center gap-2"
+                            >
+                              <Users className="w-4 h-4 text-blue-500" />
+                              Restroom (10 min)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => handleMarkOut(student.id, `${student.firstName} ${student.lastName}`, 'nurse', '', 30)}
                               className="flex items-center gap-2"
                             >
                               <Heart className="w-4 h-4 text-red-500" />
-                              Nurse
+                              Nurse (30 min)
                             </DropdownMenuItem>
                             <DropdownMenuItem 
-                              onClick={() => handleMarkOut(student.id, `${student.firstName} ${student.lastName}`, 'discipline')}
+                              onClick={() => handleMarkOut(student.id, `${student.firstName} ${student.lastName}`, 'office', '', 20)}
                               className="flex items-center gap-2"
                             >
                               <AlertTriangle className="w-4 h-4 text-orange-500" />
-                              Discipline
+                              Office (20 min)
                             </DropdownMenuItem>
                             <DropdownMenuItem 
                               onClick={() => openCustomReasonDialog(student)}
