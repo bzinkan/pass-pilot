@@ -1,43 +1,10 @@
-import { initializeApp } from "firebase/app";
-import { getAuth, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth";
-import { getFirestore, doc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, orderBy } from "firebase/firestore";
+// Firebase removed - using session-based authentication with JWT cookies
+// This is a compatibility stub to prevent import errors
 
-// Check if Firebase is configured
-const isFirebaseConfigured = !!(
-  import.meta.env.VITE_FIREBASE_API_KEY &&
-  import.meta.env.VITE_FIREBASE_PROJECT_ID &&
-  import.meta.env.VITE_FIREBASE_APP_ID
-);
+export const auth = null;
+export const db = null;
 
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: `${import.meta.env.VITE_FIREBASE_PROJECT_ID}.firebaseapp.com`,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: `${import.meta.env.VITE_FIREBASE_PROJECT_ID}.firebasestorage.app`,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-};
-
-// Initialize Firebase only if configured
-let app: any = null;
-let auth: any = null;
-let db: any = null;
-
-if (isFirebaseConfigured) {
-  try {
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
-    console.log('Firebase initialized successfully');
-  } catch (error) {
-    console.error('Firebase initialization failed:', error);
-  }
-}
-
-export { auth, db };
-
-// Google Auth Provider
-const googleProvider = new GoogleAuthProvider();
-
+// Compatibility stub for FirebaseService
 export class FirebaseService {
   private static instance: FirebaseService;
   
@@ -50,95 +17,51 @@ export class FirebaseService {
     return FirebaseService.instance;
   }
 
-  // Check if Firebase is properly configured
+  // Firebase is not configured - using session auth instead
   isConfigured(): boolean {
-    return !!(
-      import.meta.env.VITE_FIREBASE_API_KEY &&
-      import.meta.env.VITE_FIREBASE_PROJECT_ID &&
-      import.meta.env.VITE_FIREBASE_APP_ID
-    );
+    return false;
   }
 
-  // Google Sign In with redirect
+  // Stubs to prevent errors - not functional
   async signInWithGoogle() {
-    if (!this.isConfigured()) {
-      throw new Error('Firebase not configured');
-    }
-    return signInWithRedirect(auth, googleProvider);
+    throw new Error('Firebase not configured - use session-based auth');
   }
 
-  // Handle redirect result
   async handleRedirectResult() {
-    if (!this.isConfigured()) {
-      throw new Error('Firebase not configured');
-    }
-    return getRedirectResult(auth);
+    return null;
   }
 
-  // Email/Password authentication
+  // Email/Password authentication stubs
   async signInWithEmailAndPassword(email: string, password: string) {
-    if (!this.isConfigured()) {
-      throw new Error('Firebase not configured');
-    }
-    return signInWithEmailAndPassword(auth, email, password);
+    throw new Error('Firebase not configured - use session-based auth');
   }
 
   async createUserWithEmailAndPassword(email: string, password: string) {
-    if (!this.isConfigured()) {
-      throw new Error('Firebase not configured');
-    }
-    return createUserWithEmailAndPassword(auth, email, password);
+    throw new Error('Firebase not configured - use session-based auth');
   }
 
   async signOut() {
-    if (!this.isConfigured()) {
-      throw new Error('Firebase not configured');
-    }
-    return signOut(auth);
+    // No-op for compatibility
+    return Promise.resolve();
   }
 
-  // Firestore methods
+  // Firestore method stubs
   async setDocument(path: string, data: any) {
-    if (!this.isConfigured()) {
-      throw new Error('Firebase not configured');
-    }
-    const docRef = doc(db, path);
-    return setDoc(docRef, data);
+    throw new Error('Firebase not configured - use API endpoints');
   }
 
   async updateDocument(path: string, data: any) {
-    if (!this.isConfigured()) {
-      throw new Error('Firebase not configured');
-    }
-    const docRef = doc(db, path);
-    return updateDoc(docRef, data);
+    throw new Error('Firebase not configured - use API endpoints');
   }
 
   async deleteDocument(path: string) {
-    if (!this.isConfigured()) {
-      throw new Error('Firebase not configured');
-    }
-    const docRef = doc(db, path);
-    return deleteDoc(docRef);
+    throw new Error('Firebase not configured - use API endpoints');
   }
 
-  // Real-time listeners
+  // Real-time listeners stub
   onSnapshot(collectionPath: string, callback: (data: any[]) => void) {
-    if (!this.isConfigured()) {
-      console.warn('Firebase not configured, using mock data');
-      return () => {};
-    }
-
-    const collectionRef = collection(db, collectionPath);
-    const q = query(collectionRef, orderBy('createdAt', 'desc'));
-    
-    return onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      callback(data);
-    });
+    console.warn('Firebase not configured - use React Query for data fetching');
+    return () => {}; // Return empty unsubscribe function
   }
 }
 
