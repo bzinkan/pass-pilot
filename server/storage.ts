@@ -88,71 +88,65 @@ export class MemStorage implements IStorage {
     // Create demo school
     const school: School = {
       id: randomUUID(),
-      schoolId: "school_demo123",
       name: "Lincoln Elementary School",
-      district: null,
-      emailDomain: "lincolnelementary.edu", // Add email domain for demo
-      plan: "standard_50",
+      slug: "lincoln-elementary-school",
+      emailDomain: "lincolnelementary.edu",
+      status: "active",
+      plan: "free_trial",
+      maxTeachers: 10,
+      maxStudents: 500,
+      currentTeachers: 0,
+      currentStudents: 0,
+      trialStartDate: new Date(),
+      trialEndDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+      isTrialExpired: false,
+      subscriptionStatus: null,
       stripeCustomerId: null,
       stripeSubscriptionId: null,
-      maxTeachers: 50,
-      maxStudents: 1000, // Add missing maxStudents property
-      adminEmail: "admin@lincolnelementary.edu",
-      verified: false,
-      verificationToken: null,
-      verificationTokenExpiry: null,
-      trialStartDate: null,
-      trialEndDate: null,
-      isTrialExpired: false,
-      subscriptionCancelledAt: null,
-      subscriptionEndsAt: null,
+      emailVerified: false,
+      emailVerificationToken: null,
       createdAt: new Date(),
+      updatedAt: new Date(),
     };
     this.schools.set(school.id, school);
 
     // Create demo admin user
     const admin: User = {
       id: randomUUID(),
-      firebaseUid: null,
+      schoolId: school.id,
       email: "admin@lincolnelementary.edu",
       password: "password123", // In real app, this would be hashed
-      name: "Principal Smith",
-      schoolId: school.id,
+      firstName: "Principal",
+      lastName: "Smith",
+      role: "ADMIN",
       isAdmin: true,
-      isPlatformOwner: false,
-      assignedGrades: [] as string[],
-      invitedBy: null,
+      isFirstLogin: false,
+      enableNotifications: true,
       status: "active",
-      createdAt: new Date(),
       resetToken: null,
       resetTokenExpiry: null,
-      enableNotifications: true,
-      autoReturn: false,
-      passTimeout: 15,
-      kioskPin: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
     this.users.set(admin.id, admin);
 
     // Create demo teacher
     const teacher: User = {
       id: randomUUID(),
-      firebaseUid: null,
+      schoolId: school.id,
       email: "johnson@lincolnelementary.edu",
       password: "password123",
-      name: "Ms. Johnson",
-      schoolId: school.id,
+      firstName: "Ms.",
+      lastName: "Johnson",
+      role: "TEACHER",
       isAdmin: false,
-      isPlatformOwner: false,
-      assignedGrades: ["3", "4"],
-      invitedBy: null,
+      isFirstLogin: false,
+      enableNotifications: true,
       status: "active",
-      createdAt: new Date(),
       resetToken: null,
       resetTokenExpiry: null,
-      enableNotifications: true,
-      autoReturn: false,
-      passTimeout: 15,
-      kioskPin: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
     this.users.set(teacher.id, teacher);
 
@@ -161,6 +155,7 @@ export class MemStorage implements IStorage {
       id: randomUUID(),
       name: "3",
       schoolId: school.id,
+      displayOrder: 3,
       createdAt: new Date(),
     };
     this.grades.set(grade3.id, grade3);
@@ -169,6 +164,7 @@ export class MemStorage implements IStorage {
       id: randomUUID(),
       name: "4",
       schoolId: school.id,
+      displayOrder: 4,
       createdAt: new Date(),
     };
     this.grades.set(grade4.id, grade4);
@@ -185,139 +181,20 @@ export class MemStorage implements IStorage {
     students.forEach(studentData => {
       const student: Student = {
         id: randomUUID(),
-        name: studentData.name,
-        grade: studentData.grade,
-        studentId: studentData.studentId,
         schoolId: school.id,
+        gradeId: studentData.grade === "3" ? grade3.id : grade4.id,
+        firstName: studentData.name.split(' ')[0],
+        lastName: studentData.name.split(' ').slice(1).join(' '),
+        studentId: studentData.studentId,
+        email: null,
+        status: "active",
         createdAt: new Date(),
+        updatedAt: new Date(),
       };
       this.students.set(student.id, student);
     });
 
-    // Create platform owner account
-    const platformOwner: User = {
-      id: randomUUID(),
-      firebaseUid: null,
-      email: "passpilotapp@gmail.com",
-      password: "platformowner123", // In real app, this would be hashed
-      name: "PassPilot Platform Owner",
-      schoolId: null, // Platform owner doesn't belong to a specific school
-      isAdmin: false, // Not a school admin
-      isPlatformOwner: true, // Platform owner flag
-      assignedGrades: [] as string[],
-      invitedBy: null,
-      status: "active",
-      createdAt: new Date(),
-      resetToken: null,
-      resetTokenExpiry: null,
-      enableNotifications: true,
-      autoReturn: false,
-      passTimeout: 30,
-      kioskPin: null,
-    };
-    this.users.set(platformOwner.id, platformOwner);
-
-    // Create additional demo schools for the platform owner to manage
-    const demoSchools = [
-      {
-        schoolId: "school_riverside",
-        name: "Riverside Middle School",
-        district: "Central District",
-        plan: "basic_10",
-        adminEmail: "admin@riverside.edu",
-        maxTeachers: 10,
-        isCancelled: false
-      },
-      {
-        schoolId: "school_oakwood",
-        name: "Oakwood High School", 
-        district: "North District",
-        plan: "premium_50",
-        adminEmail: "principal@oakwood.edu",
-        maxTeachers: 50,
-        isCancelled: true, // Cancelled subscription
-        cancelledDays: 15  // Cancelled 15 days ago, still has time left
-      },
-      {
-        schoolId: "school_valley",
-        name: "Valley Elementary",
-        district: null,
-        plan: "free_trial",
-        adminEmail: "admin@valley.k12.edu",
-        maxTeachers: -1,
-        isCancelled: false
-      },
-      {
-        schoolId: "school_sunset",
-        name: "Sunset High School",
-        district: "West District", 
-        plan: "standard_25",
-        adminEmail: "admin@sunsethigh.edu",
-        maxTeachers: 25,
-        isCancelled: true, // Cancelled subscription
-        cancelledDays: 5   // Recently cancelled, lots of time left
-      },
-      // Demo schools for Cincinnati Public Schools (shared domain example)
-      {
-        schoolId: "school_roosevelt_cps",
-        name: "Roosevelt Elementary School",
-        district: "Cincinnati Public Schools",
-        plan: "premium_100",
-        adminEmail: "principal.roosevelt@cps.k12.oh.us",
-        maxTeachers: 100,
-        isCancelled: false
-      },
-      {
-        schoolId: "school_washington_cps",
-        name: "Washington High School",
-        district: "Cincinnati Public Schools",
-        plan: "premium_100",
-        adminEmail: "principal.washington@cps.k12.oh.us",
-        maxTeachers: 100,
-        isCancelled: false
-      },
-      {
-        schoolId: "school_jefferson_cps",
-        name: "Jefferson Middle School",
-        district: "Cincinnati Public Schools",
-        plan: "standard_50",
-        adminEmail: "principal.jefferson@cps.k12.oh.us",
-        maxTeachers: 50,
-        isCancelled: false
-      }
-    ];
-
-    demoSchools.forEach(schoolData => {
-      const now = new Date();
-      const isCancelled = schoolData.isCancelled || false;
-      const cancelledDaysAgo = schoolData.cancelledDays || 0;
-      
-      const demoSchool: School = {
-        id: randomUUID(),
-        schoolId: schoolData.schoolId,
-        name: schoolData.name,
-        district: schoolData.district,
-        emailDomain: schoolData.adminEmail.split('@')[1], // Extract domain from admin email
-        plan: schoolData.plan as any,
-        status: "ACTIVE" as any,
-        stripeCustomerId: schoolData.plan !== "TRIAL" ? `cus_${randomUUID().slice(0, 8)}` : null,
-        stripeSubscriptionId: schoolData.plan !== "TRIAL" ? `sub_${randomUUID().slice(0, 8)}` : null,
-        maxTeachers: schoolData.maxTeachers,
-        maxStudents: schoolData.maxStudents || 1000,
-        adminEmail: schoolData.adminEmail,
-        verified: true,
-        verificationToken: null,
-        verificationTokenExpiry: null,
-        trialStartDate: schoolData.plan === "TRIAL" ? new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000) : null,
-        trialEndDate: schoolData.plan === "TRIAL" ? new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000) : null,
-        isTrialExpired: false,
-        // Set cancellation dates if this is a cancelled subscription
-        subscriptionCancelledAt: isCancelled ? new Date(now.getTime() - cancelledDaysAgo * 24 * 60 * 60 * 1000) : null,
-        subscriptionEndsAt: isCancelled ? new Date(now.getTime() + (30 - cancelledDaysAgo) * 24 * 60 * 60 * 1000) : null, // 30 days from cancellation
-        createdAt: new Date(),
-      };
-      this.schools.set(demoSchool.id, demoSchool);
-    });
+    // Demo data initialization complete
   }
 
   // Users
@@ -349,21 +226,16 @@ export class MemStorage implements IStorage {
     const user: User = { 
       ...insertUser, 
       id,
-      firebaseUid: insertUser.firebaseUid ?? null,
-      password: insertUser.password ?? null,
-      schoolId: insertUser.schoolId ?? null,
-      isAdmin: insertUser.isAdmin ?? false,
-      isPlatformOwner: insertUser.isPlatformOwner ?? false,
-      assignedGrades: (insertUser.assignedGrades as string[]) ?? [],
-      invitedBy: insertUser.invitedBy ?? null,
-      status: insertUser.status ?? "pending",
       createdAt: new Date(),
+      updatedAt: new Date(),
       resetToken: null,
       resetTokenExpiry: null,
-      enableNotifications: true,
-      autoReturn: false,
-      passTimeout: 15,
-      kioskPin: null,
+      // Ensure required fields have defaults
+      role: insertUser.role || 'TEACHER',
+      status: insertUser.status || 'active',
+      isAdmin: insertUser.isAdmin || false,
+      isFirstLogin: insertUser.isFirstLogin || false,
+      enableNotifications: insertUser.enableNotifications || true,
     };
     this.users.set(id, user);
     return user;
@@ -376,11 +248,7 @@ export class MemStorage implements IStorage {
     const updatedUser: User = { 
       ...user, 
       ...updates,
-      // Ensure required fields are not undefined
-      password: updates.password !== undefined ? updates.password : user.password,
-      firebaseUid: updates.firebaseUid !== undefined ? updates.firebaseUid : user.firebaseUid,
-      invitedBy: updates.invitedBy !== undefined ? updates.invitedBy : user.invitedBy,
-      status: updates.status !== undefined ? updates.status : user.status,
+      updatedAt: new Date(),
     };
     this.users.set(id, updatedUser);
     return updatedUser;

@@ -107,7 +107,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         password: hashedPassword,
         firstName: adminFirstName,
         lastName: adminLastName,
+        role: 'ADMIN',
         isAdmin: true,
+        status: 'active',
       };
       
       const user = await storage.createUser(userData);
