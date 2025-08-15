@@ -88,10 +88,8 @@ export function MainApp({ user, onLogout }: MainAppProps) {
     { id: 'profile', label: 'Profile', icon: 'fas fa-user' },
   ];
 
-  // Add admin tab only for admins
-  const tabs = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN' 
-    ? [...baseTabs, { id: 'admin', label: 'Admin', icon: 'fas fa-cog' }]
-    : baseTabs;
+  // Add admin tab for all teachers (temporary workaround)
+  const tabs = [...baseTabs, { id: 'admin', label: 'Admin', icon: 'fas fa-cog' }];
 
   const renderTabContent = () => {
     switch (currentTab) {

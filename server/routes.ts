@@ -666,16 +666,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin teacher management endpoints
+  // Teacher management endpoints (temporarily available to all teachers)
   app.get('/api/admin/teachers', requireAuth, async (req, res) => {
     try {
       const authReq = req as AuthenticatedRequest;
       const user = await storage.getUser(authReq.user.id);
       const validUser = unwrap(user, 'User not found');
       
-      if (!validUser.isAdmin) {
-        return res.status(403).json({ message: 'Admin access required' });
-      }
+      // Temporarily allow all teachers to view teachers list
+      // if (!validUser.isAdmin) {
+      //   return res.status(403).json({ message: 'Admin access required' });
+      // }
       
       const teachers = await storage.getUsersBySchool(validUser.schoolId);
       const teachersWithoutPasswords = teachers.map(teacher => {
@@ -696,9 +697,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.getUser(authReq.user.id);
       const validUser = unwrap(user, 'User not found');
       
-      if (!validUser.isAdmin) {
-        return res.status(403).json({ message: 'Admin access required' });
-      }
+      // Temporarily allow all teachers to add teachers
+      // if (!validUser.isAdmin) {
+      //   return res.status(403).json({ message: 'Admin access required' });
+      // }
       
       const { email, name } = req.body;
       const normalizedEmail = email.trim().toLowerCase();
