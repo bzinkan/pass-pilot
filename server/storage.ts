@@ -631,7 +631,7 @@ export class MemStorage implements IStorage {
       status: "out",
       passType: insertPass.passType || "general",
       customReason: insertPass.customReason || null,
-      duration: insertPass.duration || 10,
+      duration: insertPass.duration || null,
     };
     this.passes.set(id, pass);
     return pass;

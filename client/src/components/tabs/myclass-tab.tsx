@@ -67,13 +67,12 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
     (teacherAssignedGrades.length === 0 || teacherAssignedGrades.includes(grade.name))
   );
 
-  const handleMarkOut = async (studentId: string, studentName: string, passType: string = 'general', customReason: string = '', duration: number = 15) => {
+  const handleMarkOut = async (studentId: string, studentName: string, passType: string = 'general', customReason: string = '') => {
     try {
       await apiRequest('POST', '/api/passes', { 
         studentId, 
         passType,
         customReason: customReason || undefined,
-        duration,
       });
       queryClient.invalidateQueries({ queryKey: ['/api/passes/active'] });
       queryClient.invalidateQueries({ queryKey: ['/api/students'] });
@@ -95,7 +94,7 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
 
   const handleCustomReasonSubmit = () => {
     if (selectedStudentForCustom && customReason.trim()) {
-      handleMarkOut(selectedStudentForCustom.id, `${selectedStudentForCustom.firstName} ${selectedStudentForCustom.lastName}`, 'general', customReason.trim(), 15);
+      handleMarkOut(selectedStudentForCustom.id, `${selectedStudentForCustom.firstName} ${selectedStudentForCustom.lastName}`, 'general', customReason.trim());
       setCustomReason('');
       setSelectedStudentForCustom(null);
       setIsCustomReasonDialogOpen(false);
@@ -376,7 +375,7 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
                               </span>
                             </div>
                             <p className="text-sm text-muted-foreground">
-                              {pass.customReason || `Out for ${formatDuration(pass.checkoutTime)}`} • Since {new Date(pass.checkoutTime).toLocaleTimeString()}
+                              {pass.customReason || `Out for ${formatDuration(pass.checkoutTime)}`} • Since {pass.checkoutTime ? new Date(pass.checkoutTime).toLocaleTimeString() : 'Unknown time'}
                             </p>
                           </div>
                         </div>
@@ -428,12 +427,12 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
                       </div>
                       <div className="flex items-center gap-2">
                         <Button 
-                          onClick={() => handleMarkOut(student.id, `${student.firstName} ${student.lastName}`, 'restroom', '', 5)}
+                          onClick={() => handleMarkOut(student.id, `${student.firstName} ${student.lastName}`, 'general', '')}
                           size="sm"
                           variant="outline"
                           data-testid={`button-checkout-${student.id}`}
                         >
-                          Restroom (5 min)
+                          Mark Out
                         </Button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -448,25 +447,25 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem 
-                              onClick={() => handleMarkOut(student.id, `${student.firstName} ${student.lastName}`, 'restroom', '', 10)}
+                              onClick={() => handleMarkOut(student.id, `${student.firstName} ${student.lastName}`, 'restroom')}
                               className="flex items-center gap-2"
                             >
                               <Users className="w-4 h-4 text-blue-500" />
-                              Restroom (10 min)
+                              Restroom
                             </DropdownMenuItem>
                             <DropdownMenuItem 
-                              onClick={() => handleMarkOut(student.id, `${student.firstName} ${student.lastName}`, 'nurse', '', 30)}
+                              onClick={() => handleMarkOut(student.id, `${student.firstName} ${student.lastName}`, 'nurse')}
                               className="flex items-center gap-2"
                             >
                               <Heart className="w-4 h-4 text-red-500" />
-                              Nurse (30 min)
+                              Nurse
                             </DropdownMenuItem>
                             <DropdownMenuItem 
-                              onClick={() => handleMarkOut(student.id, `${student.firstName} ${student.lastName}`, 'office', '', 20)}
+                              onClick={() => handleMarkOut(student.id, `${student.firstName} ${student.lastName}`, 'office')}
                               className="flex items-center gap-2"
                             >
                               <AlertTriangle className="w-4 h-4 text-orange-500" />
-                              Office (20 min)
+                              Office
                             </DropdownMenuItem>
                             <DropdownMenuItem 
                               onClick={() => openCustomReasonDialog(student)}
