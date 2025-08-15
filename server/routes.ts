@@ -608,9 +608,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         schoolId: schoolId,  // Ensure schoolId from auth user
         teacherId: authReq.user.id,  // Ensure teacherId from auth user
         destination: destination,  // Ensure destination is provided
-        duration: req.valid.body.duration || null,  // No default duration - just track time
+        duration: req.valid.body.duration || 0,  // Use 0 to indicate unlimited time tracking
         passNumber: Math.floor(Math.random() * 9000) + 1000,  // Generate 4-digit pass number
-        expiresAt: req.valid.body.duration ? new Date(Date.now() + req.valid.body.duration * 60 * 1000) : null,  // Only set if duration provided
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),  // Set to 24 hours from now as default
       };
       
       const pass = await storage.createPass(data);
