@@ -153,6 +153,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const isValid = await auth.comparePassword(password, user.password);
         invariant(isValid, 'Invalid credentials');
         
+        // Check if this user should be promoted to admin (first login to school)
+        await storage.checkAndPromoteFirstAdmin(user.schoolId, user.id);
+        
+        // Get updated user data in case they were promoted
+        const updatedUser = await storage.getUser(user.id);
+        const finalUser = updatedUser || user;
+        
         // Create session
         const sessionToken = auth.generateSessionToken();
         const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
@@ -171,7 +178,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           signed: false
         });
         
-        const { password: _, ...userWithoutPassword } = user;
+        const { password: _, ...userWithoutPassword } = finalUser;
         return res.json({ ok: true, user: userWithoutPassword, redirect: '/app' });
       }
 
@@ -220,11 +227,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Single school - auto login
       if (candidates.length === 1) {
         const user = candidates[0];
+        
+        // Check if this user should be promoted to admin (first login to school)
+        await storage.checkAndPromoteFirstAdmin(user.schoolId, user.id);
+        
+        // Get updated user data in case they were promoted
+        const updatedUser = await storage.getUser(user.id);
+        const finalUser = updatedUser || user;
+        
         const sessionToken = auth.generateSessionToken();
         const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
         sessions.set(sessionToken, {
-          userId: user.id,
-          schoolId: user.schoolId,
+          userId: finalUser.id,
+          schoolId: finalUser.schoolId,
           expires
         });
         
@@ -237,7 +252,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           signed: false
         });
         
-        const { password: _, ...userWithoutPassword } = user;
+        const { password: _, ...userWithoutPassword } = finalUser;
         return res.json({ ok: true, user: userWithoutPassword, redirect: '/app' });
       }
 

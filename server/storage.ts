@@ -853,6 +853,27 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(users).where(eq(users.schoolId, schoolId));
   }
 
+  async checkAndPromoteFirstAdmin(schoolId: string, userId: string): Promise<boolean> {
+    // Check if this school has any existing admins
+    const existingAdmins = await db.select()
+      .from(users)
+      .where(and(eq(users.schoolId, schoolId), eq(users.isAdmin, true)));
+    
+    // If no admins exist, promote this user to admin
+    if (existingAdmins.length === 0) {
+      await db.update(users)
+        .set({ 
+          role: 'ADMIN',
+          isAdmin: true 
+        })
+        .where(eq(users.id, userId));
+      console.log(`Promoted first user ${userId} to admin for school ${schoolId}`);
+      return true;
+    }
+    
+    return false;
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
     const userWithDefaults = {
       ...insertUser,

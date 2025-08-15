@@ -38,7 +38,7 @@ Preferred communication style: Simple, everyday language.
 - **Input Validation**: Comprehensive Zod schema validation for all API endpoints.
 
 ### Key Features and Implementations
-- **School Registration**: Supports multiple plan types, auto-assigns registrant as admin (FIXED: resolved role assignment bug), generates unique school IDs.
+- **School Registration**: Supports multiple plan types, auto-promotes first login user to admin (FIXED: bulletproof admin assignment), generates unique school IDs.
 - **Teacher Invitation**: Admins can invite teachers, teachers set passwords on first login, proper school isolation.
 - **Admin Management**: Edit teacher info, reset passwords, promote/demote roles, remove teachers.
 - **Kiosk Functionality**: Self-service student interface mirroring MyClass, teacher-initiated with PIN protection, real-time pass sync, pass type selection, live statistics.
