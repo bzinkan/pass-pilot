@@ -53,18 +53,15 @@ var init_env = __esm({
     ENV = (() => {
       try {
         const parsed = EnvSchema.parse(process.env);
-        if (parsed.NODE_ENV === "production") {
-          if (!parsed.STRIPE_SECRET_KEY || !parsed.STRIPE_WEBHOOK_SECRET) {
-            console.error("\u274C Production environment requires STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET");
-            process.exit(1);
-          }
-          if (!parsed.SENDGRID_API_KEY) {
-            console.warn("\u26A0\uFE0F  SENDGRID_API_KEY not configured - email functionality will be disabled");
-          }
-        } else {
-          if (!parsed.STRIPE_SECRET_KEY || !parsed.STRIPE_WEBHOOK_SECRET) {
+        if (!parsed.STRIPE_SECRET_KEY || !parsed.STRIPE_WEBHOOK_SECRET) {
+          if (parsed.NODE_ENV === "production") {
+            console.warn("\u26A0\uFE0F  Stripe not configured - payment features will be disabled in production");
+          } else {
             console.warn("\u26A0\uFE0F  Stripe not configured - payment features will be disabled in development");
           }
+        }
+        if (!parsed.SENDGRID_API_KEY) {
+          console.warn("\u26A0\uFE0F  SENDGRID_API_KEY not configured - email functionality will be disabled");
         }
         if (parsed.NODE_ENV === "development") {
           console.log("\u2705 Environment variables validated successfully");

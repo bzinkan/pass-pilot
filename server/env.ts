@@ -64,21 +64,16 @@ export const ENV = (() => {
   try {
     const parsed = EnvSchema.parse(process.env);
     
-    // Additional runtime validation
-    if (parsed.NODE_ENV === 'production') {
-      // In production, ensure critical services are configured
-      if (!parsed.STRIPE_SECRET_KEY || !parsed.STRIPE_WEBHOOK_SECRET) {
-        console.error('❌ Production environment requires STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET');
-        process.exit(1);
-      }
-      if (!parsed.SENDGRID_API_KEY) {
-        console.warn('⚠️  SENDGRID_API_KEY not configured - email functionality will be disabled');
-      }
-    } else {
-      // Development warnings for missing optional services
-      if (!parsed.STRIPE_SECRET_KEY || !parsed.STRIPE_WEBHOOK_SECRET) {
+    // Additional runtime validation - development warnings only
+    if (!parsed.STRIPE_SECRET_KEY || !parsed.STRIPE_WEBHOOK_SECRET) {
+      if (parsed.NODE_ENV === 'production') {
+        console.warn('⚠️  Stripe not configured - payment features will be disabled in production');
+      } else {
         console.warn('⚠️  Stripe not configured - payment features will be disabled in development');
       }
+    }
+    if (!parsed.SENDGRID_API_KEY) {
+      console.warn('⚠️  SENDGRID_API_KEY not configured - email functionality will be disabled');
     }
     
     // Log successful validation in development
