@@ -858,9 +858,12 @@ export class DatabaseStorage implements IStorage {
       ...insertUser,
       resetToken: null,
       resetTokenExpiry: null,
-      enableNotifications: true,
-      autoReturn: false,
-      passTimeout: 15
+      // Ensure required fields have proper values, preserving explicit admin assignments
+      role: insertUser.role || 'TEACHER',
+      status: insertUser.status || 'active',
+      isAdmin: insertUser.isAdmin !== undefined ? insertUser.isAdmin : false,
+      isFirstLogin: insertUser.isFirstLogin !== undefined ? insertUser.isFirstLogin : false,
+      enableNotifications: insertUser.enableNotifications !== undefined ? insertUser.enableNotifications : true,
     };
     const [user] = await db.insert(users).values(userWithDefaults).returning();
     return user;
