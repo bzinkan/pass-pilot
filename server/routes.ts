@@ -1086,6 +1086,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin promotion endpoint - temporarily for fixing existing accounts
+  app.post('/api/debug/promote-to-admin/:email', async (req, res) => {
+    try {
+      const { email } = req.params;
+      const users = await storage.getUsersByEmail(email);
+      
+      if (users.length === 0) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      // Update all users with this email to admin (in case of multiple schools)
+      const updatedUsers = [];
+      for (const user of users) {
+        const updatedUser = await storage.updateUser(user.id, {
+          role: 'ADMIN',
+          isAdmin: true
+        });
+        updatedUsers.push(updatedUser);
+      }
+
+      res.json({ 
+        message: `Updated ${updatedUsers.length} user(s) to admin`, 
+        users: updatedUsers.map(u => ({ id: u.id, email: u.email, role: u.role, isAdmin: u.isAdmin }))
+      });
+    } catch (error) {
+      console.error('Promote user error:', error);
+      res.status(500).json({ message: 'Failed to promote user' });
+    }
+  });
+
   const server = createServer(app);
   return server;
 }
