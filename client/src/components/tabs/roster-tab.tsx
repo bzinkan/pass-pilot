@@ -333,16 +333,13 @@ export function RosterTab({ user, selectedGrades = new Set(), onGradeClick }: Ro
     }
   };
 
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(word => word[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
+  const getInitials = (student: any) => {
+    const firstName = student.firstName || '';
+    const lastName = student.lastName || '';
+    return (firstName[0] || '') + (lastName[0] || '').toUpperCase();
   };
 
-  const getAvatarColor = (name: string) => {
+  const getAvatarColor = (student: any) => {
     const colors = [
       'bg-blue-100 text-blue-600',
       'bg-pink-100 text-pink-600',
@@ -351,7 +348,8 @@ export function RosterTab({ user, selectedGrades = new Set(), onGradeClick }: Ro
       'bg-yellow-100 text-yellow-600',
       'bg-red-100 text-red-600'
     ];
-    const index = name.length % colors.length;
+    const fullName = (student.firstName || '') + (student.lastName || '');
+    const index = fullName.length % colors.length;
     return colors[index];
   };
 
@@ -744,7 +742,7 @@ export function RosterTab({ user, selectedGrades = new Set(), onGradeClick }: Ro
             </DialogHeader>
             <div className="max-h-96 overflow-y-auto">
               {(() => {
-                const gradeStudents = students.filter(student => student.grade === viewingGrade.name);
+                const gradeStudents = students.filter(student => student.gradeId === viewingGrade.id);
                 
                 if (gradeStudents.length === 0) {
                   return (
@@ -813,11 +811,11 @@ export function RosterTab({ user, selectedGrades = new Set(), onGradeClick }: Ro
                     {gradeStudents.map((student: any) => (
                       <div key={student.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
                         <div className="flex items-center space-x-3">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${getAvatarColor(student.name)}`}>
-                            {getInitials(student.name)}
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${getAvatarColor(student)}`}>
+                            {getInitials(student)}
                           </div>
                           <div>
-                            <p className="font-medium">{student.name}</p>
+                            <p className="font-medium">{student.firstName} {student.lastName}</p>
                             {student.studentId && (
                               <p className="text-sm text-muted-foreground">ID: {student.studentId}</p>
                             )}
@@ -838,7 +836,7 @@ export function RosterTab({ user, selectedGrades = new Set(), onGradeClick }: Ro
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => handleDeleteStudent(student.id, student.name)}
+                            onClick={() => handleDeleteStudent(student.id, `${student.firstName} ${student.lastName}`)}
                             className="hover:text-red-600"
                             data-testid={`button-delete-student-${student.id}`}
                           >
