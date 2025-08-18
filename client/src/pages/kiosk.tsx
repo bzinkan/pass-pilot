@@ -561,7 +561,7 @@ export default function Kiosk() {
                               {pass.customDestination && ` • ${pass.customDestination}`}
                             </div>
                             <div className="text-sm text-gray-500">
-                              Out for {Math.floor((currentTime - new Date(pass.issuedAt).getTime()) / 60000)} min • Since {new Date(pass.issuedAt).toLocaleTimeString()}
+                              Out for {pass.issuedAt && !isNaN(new Date(pass.issuedAt).getTime()) ? Math.max(1, Math.floor((currentTime - new Date(pass.issuedAt).getTime()) / 60000)) : 0} min • Since {pass.issuedAt ? new Date(pass.issuedAt).toLocaleTimeString() : 'Unknown time'}
                             </div>
                           </div>
                         </div>

@@ -113,7 +113,7 @@ export function StudentKiosk({ onBack }: StudentKioskProps) {
                 <p className="font-medium">{currentStudent.name}</p>
                 <p className="text-sm text-slate-600">{currentStudent.grade}</p>
                 <Badge className="mt-2 bg-orange-100 text-orange-700">
-                  Out for 8 minutes
+                  Out for {currentStudent.duration || 'Unknown'} minutes
                 </Badge>
               </div>
               

@@ -195,9 +195,11 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
     return () => clearInterval(interval);
   }, []);
 
-  const formatDuration = (checkoutTime: string) => {
-    const checkout = new Date(checkoutTime);
-    const diffMs = currentTime.getTime() - checkout.getTime();
+  const formatDuration = (issuedAt: string) => {
+    if (!issuedAt) return '0 min';
+    const issued = new Date(issuedAt);
+    if (isNaN(issued.getTime())) return '0 min';
+    const diffMs = currentTime.getTime() - issued.getTime();
     const diffMinutes = Math.floor(diffMs / (1000 * 60));
     // Show at least 1 minute if they've been out for any time
     return `${Math.max(1, diffMinutes)} min`;
@@ -375,7 +377,7 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
                               </span>
                             </div>
                             <p className="text-sm text-muted-foreground">
-                              {pass.customReason || `Out for ${formatDuration(pass.checkoutTime)}`} • Since {pass.checkoutTime ? new Date(pass.checkoutTime).toLocaleTimeString() : 'Unknown time'}
+                              {pass.customReason || `Out for ${formatDuration(pass.issuedAt)}`} • Since {pass.issuedAt ? new Date(pass.issuedAt).toLocaleTimeString() : 'Unknown time'}
                             </p>
                           </div>
                         </div>
