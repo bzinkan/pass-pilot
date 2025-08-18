@@ -220,7 +220,7 @@ export function AdminTab({ user }: AdminTabProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Teacher Management</h1>
+          <h1 className="text-2xl font-bold text-foreground">School Set Up</h1>
           <p className="text-muted-foreground">
             Add and manage teachers for your school. New teachers will receive login instructions via email.
           </p>

@@ -88,8 +88,8 @@ export function MainApp({ user, onLogout }: MainAppProps) {
     { id: 'profile', label: 'Profile', icon: 'fas fa-user' },
   ];
 
-  // Add admin tab for all teachers (temporary workaround)
-  const tabs = [...baseTabs, { id: 'admin', label: 'Admin', icon: 'fas fa-cog' }];
+  // Add setup tab for all users to configure their school
+  const tabs = [...baseTabs, { id: 'admin', label: 'Set Up', icon: 'fas fa-cog' }];
 
   const renderTabContent = () => {
     switch (currentTab) {
