@@ -20,7 +20,14 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
       if (user?.id) {
         url.searchParams.set('teacherId', user.id);
       }
-      return fetch(url.toString()).then(res => res.json());
+      return fetch(url.toString(), {
+        credentials: 'include', // Include cookies for authentication
+      }).then(res => {
+        if (!res.ok) {
+          throw new Error(`Failed to fetch passes: ${res.status} ${res.statusText}`);
+        }
+        return res.json();
+      });
     },
     refetchInterval: 5000, // Poll every 5 seconds for real-time updates
   });
