@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from './use-toast';
+import { useSessionHeartbeat } from './use-session-heartbeat';
 import type { User } from '@shared/schema';
 
 interface AuthState {
@@ -19,7 +20,7 @@ export function useAuth(): AuthState {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Check for existing session on mount
+  // Check for existing session on mount and handle session expiry
   useEffect(() => {
     const checkSession = async () => {
       try {
@@ -40,7 +41,39 @@ export function useAuth(): AuthState {
     };
 
     checkSession();
-  }, []);
+    
+    // Listen for session expiry events from failed API calls
+    const handleSessionExpired = (event: CustomEvent) => {
+      setUser(null);
+      queryClient.clear();
+      toast({
+        title: "Session expired",
+        description: event.detail.message || "Please log in again to continue.",
+        variant: "destructive",
+      });
+    };
+
+    window.addEventListener('session-expired', handleSessionExpired as EventListener);
+    
+    return () => {
+      window.removeEventListener('session-expired', handleSessionExpired as EventListener);
+    };
+  }, [queryClient, toast]);
+
+  // Use session heartbeat to keep session alive and detect expiry
+  useSessionHeartbeat({
+    enabled: !!user, // Only when user is logged in
+    interval: 15 * 60 * 1000, // Check every 15 minutes
+    onSessionExpired: () => {
+      setUser(null);
+      queryClient.clear();
+      toast({
+        title: "Session expired",
+        description: "Your session has expired. Please log in again.",
+        variant: "destructive",
+      });
+    },
+  });
 
   const loginMutation = useMutation({
     mutationFn: async ({ email, password, schoolId }: { email: string; password: string; schoolId?: string }) => {

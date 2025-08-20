@@ -23,6 +23,13 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
       return fetch(url.toString(), {
         credentials: 'include', // Include cookies for authentication
       }).then(res => {
+        if (res.status === 401) {
+          // Trigger session expired event for consistent handling
+          window.dispatchEvent(new CustomEvent('session-expired', { 
+            detail: { message: 'Session expired, please log in again' }
+          }));
+          throw new Error('Session expired');
+        }
         if (!res.ok) {
           throw new Error(`Failed to fetch passes: ${res.status} ${res.statusText}`);
         }

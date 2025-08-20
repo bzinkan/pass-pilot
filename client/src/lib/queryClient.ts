@@ -43,6 +43,13 @@ export async function apiRequest(
 
   const res = await fetch(url, fetchOptions);
 
+  // Handle 401 errors by triggering session expired event
+  if (res.status === 401) {
+    window.dispatchEvent(new CustomEvent('session-expired', { 
+      detail: { message: 'Session expired, please log in again' }
+    }));
+  }
+
   await throwIfResNotOk(res);
   return res;
 }
@@ -57,8 +64,18 @@ export const getQueryFn: <T>(options: {
       credentials: "include", // Session-based auth via cookies
     });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+    // Handle 401 errors by triggering session refresh or logout
+    if (res.status === 401) {
+      if (unauthorizedBehavior === "returnNull") {
+        return null;
+      }
+      
+      // Dispatch a custom event to notify the auth system of session expiry
+      window.dispatchEvent(new CustomEvent('session-expired', { 
+        detail: { message: 'Session expired, please log in again' }
+      }));
+      
+      throw new Error('Session expired');
     }
 
     return await safeJSON(res);
