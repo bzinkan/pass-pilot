@@ -28,20 +28,29 @@ interface MyClassTabProps {
   selectedGrades?: Set<string>;
   currentGrade?: string | null;
   onRemoveGrade?: (gradeName: string) => void;
+  onGradeChange?: (gradeName: string) => void;
 }
 
-export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onRemoveGrade }: MyClassTabProps) {
-  const [activeGrade, setActiveGrade] = useState(currentGrade || (selectedGrades.size > 0 ? Array.from(selectedGrades)[0] : ''));
+export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onRemoveGrade, onGradeChange }: MyClassTabProps) {
+  const [activeGrade, setActiveGrade] = useState(currentGrade || '');
   const [customReason, setCustomReason] = useState('');
   const [selectedStudentForCustom, setSelectedStudentForCustom] = useState<any>(null);
   const [isCustomReasonDialogOpen, setIsCustomReasonDialogOpen] = useState(false);
   
   // Update active grade when prop changes
   React.useEffect(() => {
-    if (currentGrade && currentGrade !== activeGrade) {
-      setActiveGrade(currentGrade);
+    if (currentGrade !== undefined && currentGrade !== activeGrade) {
+      setActiveGrade(currentGrade || '');
     }
   }, [currentGrade]);
+  
+  // If no activeGrade is set but we have selected grades, default to the first one
+  React.useEffect(() => {
+    if (!activeGrade && selectedGrades.size > 0) {
+      const firstGrade = Array.from(selectedGrades)[0];
+      setActiveGrade(firstGrade || '');
+    }
+  }, [selectedGrades, activeGrade]);
   
   const { toast } = useToast();
 
@@ -272,7 +281,10 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
                 <Button
                   variant={isActive ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setActiveGrade(grade.name)}
+                  onClick={() => {
+                    setActiveGrade(grade.name);
+                    onGradeChange?.(grade.name);
+                  }}
                   data-testid={`tab-grade-${grade.name}`}
                   className={`flex items-center gap-2 ${isActive ? 'ring-2 ring-primary' : ''}`}
                 >

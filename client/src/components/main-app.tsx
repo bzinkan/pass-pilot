@@ -100,6 +100,9 @@ export function MainApp({ user, onLogout }: MainAppProps) {
           user={user} 
           selectedGrades={selectedGrades} 
           currentGrade={currentGrade}
+          onGradeChange={(gradeName) => {
+            setCurrentGrade(gradeName);
+          }}
           onRemoveGrade={(gradeName) => {
             const newSelectedGrades = new Set(selectedGrades);
             newSelectedGrades.delete(gradeName);
