@@ -643,7 +643,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!passId) {
         return res.status(400).json({ message: 'Pass ID is required' });
       }
-      const pass = await storage.updatePass(passId, { status: 'returned' });
+      // Set both status and returnedAt timestamp when returning a pass
+      const pass = await storage.updatePass(passId, { 
+        status: 'returned',
+        returnedAt: new Date()
+      });
       res.json(pass);
     } catch (error) {
       console.error('Return pass error:', error);
