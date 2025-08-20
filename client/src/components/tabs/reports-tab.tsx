@@ -123,16 +123,19 @@ export function ReportsTab({ user }: ReportsTabProps) {
 
     const csvHeaders = ["Student Name", "Grade", "Teacher", "Pass Type", "Custom Reason", "Checkout Time", "Return Time", "Duration (min)"];
     const csvRows = passes.map((pass: any) => {
-      const duration = pass.returnedAt ? (calculateDuration(pass.issuedAt, pass.returnedAt) ?? pass.duration) : null;
+      const calculatedDuration = pass.returnedAt ? calculateDuration(pass.issuedAt, pass.returnedAt) : null;
+      const displayDuration = calculatedDuration !== null ? calculatedDuration : (pass.duration && pass.duration >= 1 ? pass.duration : null);
+      
       return [
         `${pass.student?.firstName} ${pass.student?.lastName}` || "Unknown",
         pass.student?.grade || "Unknown", 
         `${pass.teacher?.firstName} ${pass.teacher?.lastName}` || "Unknown",
-        pass.destination || "General",
-        pass.customDestination || "",
+        pass.passType === 'nurse' ? 'Nurse' : 
+        pass.passType === 'discipline' ? 'Discipline' : 'General Hall Pass',
+        pass.customDestination || pass.customReason || "",
         new Date(pass.issuedAt).toLocaleString(),
         pass.returnedAt ? new Date(pass.returnedAt).toLocaleString() : "Still Out",
-        duration !== null ? duration : "Still Out"
+        displayDuration !== null ? displayDuration : "Still Out"
       ];
     });
 
