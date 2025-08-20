@@ -978,29 +978,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get all passes for the school with query filtering
       const { dateStart, dateEnd, grade, teacherId, passType } = req.query;
       
-      // Get all passes for the school (active and completed)
-      const allPasses = await storage.getPassesBySchool(schoolId);
-      
-      // Apply filters (basic implementation)
-      let filteredPasses = allPasses;
-      
+      // Build filters object for storage layer
+      const filters: any = {};
       if (dateStart) {
-        const startDate = new Date(dateStart as string);
-        filteredPasses = filteredPasses.filter(pass => 
-          new Date(pass.issuedAt) >= startDate
-        );
+        filters.dateStart = new Date(dateStart as string);
       }
-      
       if (dateEnd) {
-        const endDate = new Date(dateEnd as string);
-        filteredPasses = filteredPasses.filter(pass => 
-          new Date(pass.issuedAt) <= endDate
-        );
+        filters.dateEnd = new Date(dateEnd as string);
+      }
+      if (grade && grade !== 'all') {
+        filters.grade = grade as string;
+      }
+      if (teacherId && teacherId !== 'all') {
+        filters.teacherId = teacherId as string;
       }
       
-      if (teacherId && teacherId !== 'all') {
-        filteredPasses = filteredPasses.filter(pass => pass.teacherId === teacherId);
-      }
+      // Get passes with filters applied at storage layer
+      const allPasses = await storage.getPassesBySchool(schoolId, filters);
+      
+      // Apply additional filters that aren't handled at storage layer
+      let filteredPasses = allPasses;
       
       if (passType && passType !== 'all') {
         filteredPasses = filteredPasses.filter(pass => 
