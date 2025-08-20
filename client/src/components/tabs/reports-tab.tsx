@@ -33,8 +33,8 @@ export function ReportsTab({ user }: ReportsTabProps) {
     const returned = new Date(returnedAt);
     const diffMs = returned.getTime() - issued.getTime();
     const diffMinutes = Math.round(diffMs / (1000 * 60));
-    // Return actual duration, but ensure it's at least 1 minute only if less than 1
-    return diffMinutes < 1 ? 1 : diffMinutes;
+    // Return actual duration - don't force minimum of 1 minute
+    return Math.max(0, diffMinutes);
   };
 
   const { data: passes = [], refetch } = useQuery<any[]>({
@@ -212,7 +212,7 @@ export function ReportsTab({ user }: ReportsTabProps) {
         id: pass.id,
         studentName: `${pass.student?.firstName} ${pass.student?.lastName}` || 'Unknown Student',
         action: pass.status === 'returned' 
-          ? `Returned after ${calculatedDuration !== null ? calculatedDuration : (pass.duration && pass.duration >= 1 ? pass.duration : 1)} minutes`
+          ? `Returned after ${calculatedDuration !== null ? calculatedDuration : (pass.duration || 0)} minutes`
           : `Checked out${pass.customDestination ? ` - ${pass.customDestination}` : (pass.destination ? ` to ${pass.destination}` : '')}`,
         time: new Date(pass.issuedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
         date: 'Today',
