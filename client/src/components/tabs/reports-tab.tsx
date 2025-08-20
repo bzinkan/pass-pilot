@@ -123,7 +123,9 @@ export function ReportsTab({ user }: ReportsTabProps) {
 
     const csvHeaders = ["Student Name", "Grade", "Teacher", "Pass Type", "Custom Reason", "Checkout Time", "Return Time", "Duration (min)"];
     const csvRows = passes.map((pass: any) => {
-      const calculatedDuration = pass.returnedAt ? calculateDuration(pass.issuedAt, pass.returnedAt) : null;
+      // Check both returnedAt and status to determine if pass is returned
+      const isReturned = pass.returnedAt || pass.status === 'returned';
+      const calculatedDuration = isReturned ? calculateDuration(pass.issuedAt, pass.returnedAt) : null;
       const displayDuration = calculatedDuration !== null ? calculatedDuration : (pass.duration && pass.duration >= 1 ? pass.duration : null);
       
       return [
@@ -134,7 +136,7 @@ export function ReportsTab({ user }: ReportsTabProps) {
         pass.passType === 'discipline' ? 'Discipline' : 'General Hall Pass',
         pass.customDestination || pass.customReason || "",
         new Date(pass.issuedAt).toLocaleString(),
-        pass.returnedAt ? new Date(pass.returnedAt).toLocaleString() : "Still Out",
+        isReturned ? new Date(pass.returnedAt || pass.issuedAt).toLocaleString() : "Still Out",
         displayDuration !== null ? displayDuration : "Still Out"
       ];
     });
@@ -457,7 +459,9 @@ export function ReportsTab({ user }: ReportsTabProps) {
                 </thead>
                 <tbody>
                   {passes.map((pass: any) => {
-                    const calculatedDuration = pass.returnedAt ? calculateDuration(pass.issuedAt, pass.returnedAt) : null;
+                    // Check both returnedAt and status to determine if pass is returned
+                    const isReturned = pass.returnedAt || pass.status === 'returned';
+                    const calculatedDuration = isReturned ? calculateDuration(pass.issuedAt, pass.returnedAt) : null;
                     const displayDuration = calculatedDuration !== null ? calculatedDuration : (pass.duration && pass.duration >= 1 ? pass.duration : null);
                     
                     return (
@@ -488,7 +492,7 @@ export function ReportsTab({ user }: ReportsTabProps) {
                           {new Date(pass.issuedAt).toLocaleString()}
                         </td>
                         <td className="p-3">
-                          {pass.returnedAt ? new Date(pass.returnedAt).toLocaleString() : (
+                          {isReturned ? new Date(pass.returnedAt || pass.issuedAt).toLocaleString() : (
                             <span className="text-orange-600 font-medium">Still Out</span>
                           )}
                         </td>
