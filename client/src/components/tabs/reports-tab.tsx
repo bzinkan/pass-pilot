@@ -423,6 +423,89 @@ export function ReportsTab({ user }: ReportsTabProps) {
         </CardContent>
       </Card>
 
+      {/* Pass Data Table */}
+      <Card className="mb-6">
+        <CardContent className="p-0">
+          <div className="p-4 border-b border-border">
+            <h3 className="font-medium text-foreground">Pass Records</h3>
+          </div>
+          {passes.length === 0 ? (
+            <div className="p-8 text-center">
+              <i className="fas fa-search text-muted-foreground text-2xl mb-2"></i>
+              <p className="text-sm text-muted-foreground">No pass data found</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Adjust your filters to see results
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="text-left p-3 font-medium">Student Name</th>
+                    <th className="text-left p-3 font-medium">Grade</th>
+                    <th className="text-left p-3 font-medium">Teacher</th>
+                    <th className="text-left p-3 font-medium">Pass Type</th>
+                    <th className="text-left p-3 font-medium">Custom Reason</th>
+                    <th className="text-left p-3 font-medium">Checkout Time</th>
+                    <th className="text-left p-3 font-medium">Return Time</th>
+                    <th className="text-left p-3 font-medium">Duration (min)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {passes.map((pass: any) => {
+                    const calculatedDuration = pass.returnedAt ? calculateDuration(pass.issuedAt, pass.returnedAt) : null;
+                    const displayDuration = calculatedDuration !== null ? calculatedDuration : (pass.duration && pass.duration >= 1 ? pass.duration : null);
+                    
+                    return (
+                      <tr key={pass.id} className="border-b border-border hover:bg-muted/30">
+                        <td className="p-3 font-medium">
+                          {`${pass.student?.firstName} ${pass.student?.lastName}` || "Unknown"}
+                        </td>
+                        <td className="p-3">
+                          {pass.student?.grade || "Unknown"}
+                        </td>
+                        <td className="p-3">
+                          {`${pass.teacher?.firstName} ${pass.teacher?.lastName}` || "Unknown"}
+                        </td>
+                        <td className="p-3">
+                          <span className={`px-2 py-1 text-xs rounded-full border ${
+                            pass.passType === 'nurse' ? 'bg-red-100 text-red-700 border-red-200' :
+                            pass.passType === 'discipline' ? 'bg-orange-100 text-orange-700 border-orange-200' :
+                            'bg-blue-100 text-blue-700 border-blue-200'
+                          }`}>
+                            {pass.passType === 'nurse' ? 'Nurse' : 
+                             pass.passType === 'discipline' ? 'Discipline' : 'General Hall Pass'}
+                          </span>
+                        </td>
+                        <td className="p-3 text-muted-foreground">
+                          {pass.customDestination || pass.customReason || "-"}
+                        </td>
+                        <td className="p-3">
+                          {new Date(pass.issuedAt).toLocaleString()}
+                        </td>
+                        <td className="p-3">
+                          {pass.returnedAt ? new Date(pass.returnedAt).toLocaleString() : (
+                            <span className="text-orange-600 font-medium">Still Out</span>
+                          )}
+                        </td>
+                        <td className="p-3">
+                          {displayDuration !== null ? (
+                            <span className="font-medium">{displayDuration}</span>
+                          ) : (
+                            <span className="text-orange-600 font-medium">Still Out</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Recent Activity */}
       <Card>
         <CardContent className="p-0">
