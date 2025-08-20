@@ -49,6 +49,7 @@ Preferred communication style: Simple, everyday language.
 - **Safer API Responses**: Consistent API response shapes for success and errors (`ApiOk`, `ApiErr`).
 - **Defensive React UI Patterns**: UI guard utilities for loading, error, and data existence checks, safe array/object access.
 - **V2 Registration System**: Webhook-first provisioning with idempotency, atomic school/admin creation, status tracking, demo mode fallback, unique slug generation.
+- **Student Alphabetical Sorting**: MyClass tab displays students in alphabetical order by last name for both available and checked-out students, improving teacher workflow and student location.
 
 ## External Dependencies
 

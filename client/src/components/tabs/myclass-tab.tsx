@@ -253,9 +253,30 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
     const student = students.find((s: any) => s.id === pass.studentId);
     return student && student.gradeId === currentActiveGrade.id;
   }) : [];
-  const availableStudents = gradeStudents.filter(student => 
-    !passes.some(pass => pass.studentId === student.id)
+  
+  // Sort students alphabetically by last name
+  const sortStudentsByLastName = (students: any[]) => {
+    return students.sort((a, b) => {
+      const lastNameA = (a.lastName || '').toLowerCase();
+      const lastNameB = (b.lastName || '').toLowerCase();
+      return lastNameA.localeCompare(lastNameB);
+    });
+  };
+  
+  const availableStudents = sortStudentsByLastName(
+    gradeStudents.filter(student => 
+      !passes.some(pass => pass.studentId === student.id)
+    )
   );
+  
+  // Sort passes by student last name
+  const sortedGradeOutPasses = gradeOutPasses.sort((a, b) => {
+    const studentA = students.find((s: any) => s.id === a.studentId);
+    const studentB = students.find((s: any) => s.id === b.studentId);
+    const lastNameA = (studentA?.lastName || '').toLowerCase();
+    const lastNameB = (studentB?.lastName || '').toLowerCase();
+    return lastNameA.localeCompare(lastNameB);
+  });
 
   return (
     <div className="p-4">
@@ -337,7 +358,7 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
                   <Timer className="h-5 w-5 text-red-600 mr-2" />
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Currently Out</p>
-                    <p className="text-lg font-bold text-red-600">{gradeOutPasses.length}</p>
+                    <p className="text-lg font-bold text-red-600">{sortedGradeOutPasses.length}</p>
                   </div>
                 </div>
               </CardContent>
@@ -364,13 +385,13 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {gradeOutPasses.length === 0 ? (
+              {sortedGradeOutPasses.length === 0 ? (
                 <p className="text-center text-muted-foreground py-4">
                   No students are currently out of class
                 </p>
               ) : (
                 <div className="space-y-3">
-                  {gradeOutPasses.map((pass: any) => {
+                  {sortedGradeOutPasses.map((pass: any) => {
                     const student = students.find((s: any) => s.id === pass.studentId);
                     if (!student) return null;
                     
