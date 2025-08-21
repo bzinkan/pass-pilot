@@ -87,7 +87,12 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
       queryClient.invalidateQueries({ queryKey: ['/api/students'] });
       queryClient.invalidateQueries({ queryKey: ['/api/passes'] });
       
-      const reasonText = customReason ? customReason : (passType === 'nurse' ? 'Nurse' : passType === 'discipline' ? 'Discipline' : 'General');
+      const reasonText = customReason ? customReason : (
+        passType === 'nurse' ? 'Nurse' : 
+        passType === 'office' ? 'Main Office' : 
+        passType === 'restroom' ? 'Restroom' : 
+        'General'
+      );
       toast({
         title: "Pass created",
         description: `${studentName} has been marked out for ${reasonText}.`,
@@ -103,7 +108,7 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
 
   const handleCustomReasonSubmit = () => {
     if (selectedStudentForCustom && customReason.trim()) {
-      handleMarkOut(selectedStudentForCustom.id, `${selectedStudentForCustom.firstName} ${selectedStudentForCustom.lastName}`, 'general', customReason.trim());
+      handleMarkOut(selectedStudentForCustom.id, `${selectedStudentForCustom.firstName} ${selectedStudentForCustom.lastName}`, 'custom', customReason.trim());
       setCustomReason('');
       setSelectedStudentForCustom(null);
       setIsCustomReasonDialogOpen(false);
