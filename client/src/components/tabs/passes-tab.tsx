@@ -14,12 +14,10 @@ interface PassesTabProps {
 
 export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) {
   const { data: passes, isLoading, error, refetch } = useQuery<any[]>({
-    queryKey: ['/api/passes/active', { teacherId: user?.id }],
+    queryKey: ['/api/passes/active'],
     queryFn: () => {
       const url = new URL('/api/passes/active', window.location.origin);
-      if (user?.id) {
-        url.searchParams.set('teacherId', user.id);
-      }
+      // Remove teacherId filter to show all school passes like MyClass tab
       return fetch(url.toString(), {
         credentials: 'include', // Include cookies for authentication
       }).then(res => {
