@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
-import { Users, Clock, UserCheck, Timer, Heart, AlertTriangle, ChevronDown, Edit3, X } from "lucide-react";
+import { Users, Clock, UserCheck, Timer, Heart, AlertTriangle, ChevronDown, Edit3, X, Search } from "lucide-react";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -36,6 +36,7 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
   const [customReason, setCustomReason] = useState('');
   const [selectedStudentForCustom, setSelectedStudentForCustom] = useState<any>(null);
   const [isCustomReasonDialogOpen, setIsCustomReasonDialogOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   
   // Update active grade when prop changes
   React.useEffect(() => {
@@ -263,6 +264,21 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
     return student && student.gradeId === currentActiveGrade.id;
   }) : [];
   
+  // Filter students based on search query
+  const filterStudentsBySearch = (students: any[], searchQuery: string) => {
+    if (!searchQuery.trim()) return students;
+    
+    const query = searchQuery.toLowerCase().trim();
+    return students.filter(student => {
+      const fullName = `${student.firstName} ${student.lastName}`.toLowerCase();
+      const lastFirst = `${student.lastName}, ${student.firstName}`.toLowerCase();
+      return fullName.includes(query) || 
+             lastFirst.includes(query) ||
+             student.firstName.toLowerCase().includes(query) ||
+             student.lastName.toLowerCase().includes(query);
+    });
+  };
+
   // Sort students alphabetically by last name (create new array to avoid mutations)
   const sortStudentsByLastName = (students: any[]) => {
     return [...students].sort((a, b) => {
@@ -272,20 +288,37 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
     });
   };
   
-  const availableStudents = sortStudentsByLastName(
-    gradeStudents.filter(student => 
-      !passes.some(pass => pass.studentId === student.id)
-    )
+  // Get available students with search filtering
+  const allAvailableStudents = gradeStudents.filter(student => 
+    !passes.some(pass => pass.studentId === student.id)
   );
+  const filteredAvailableStudents = filterStudentsBySearch(allAvailableStudents, searchQuery);
+  const availableStudents = sortStudentsByLastName(filteredAvailableStudents);
   
-  // Sort passes by student last name (create new array to avoid mutations)
-  const sortedGradeOutPasses = [...gradeOutPasses].sort((a, b) => {
-    const studentA = students.find((s: any) => s.id === a.studentId);
-    const studentB = students.find((s: any) => s.id === b.studentId);
-    const lastNameA = (studentA?.lastName || '').toLowerCase();
-    const lastNameB = (studentB?.lastName || '').toLowerCase();
-    return lastNameA.localeCompare(lastNameB);
-  });
+  // Get checked-out students with search filtering  
+  const allCheckedOutStudents = gradeOutPasses.map(pass => {
+    const student = students.find(s => s.id === pass.studentId);
+    return { ...pass, student };
+  }).filter(item => item.student);
+  const filteredCheckedOutStudents = filterStudentsBySearch(
+    allCheckedOutStudents.map(item => item.student), 
+    searchQuery
+  );
+  const checkedOutStudentIds = new Set(filteredCheckedOutStudents.map(s => s.id));
+  
+  // Sort passes by student last name (create new array to avoid mutations) and filter by search
+  const sortedGradeOutPasses = [...gradeOutPasses]
+    .filter(pass => {
+      const student = students.find(s => s.id === pass.studentId);
+      return student && checkedOutStudentIds.has(student.id);
+    })
+    .sort((a, b) => {
+      const studentA = students.find((s: any) => s.id === a.studentId);
+      const studentB = students.find((s: any) => s.id === b.studentId);
+      const lastNameA = (studentA?.lastName || '').toLowerCase();
+      const lastNameB = (studentB?.lastName || '').toLowerCase();
+      return lastNameA.localeCompare(lastNameB);
+    });
 
   return (
     <div className="p-4">
@@ -384,6 +417,36 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
               </CardContent>
             </Card>
           </div>
+
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+            <Input
+              placeholder="Search students by name..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+              data-testid="input-search-students"
+            />
+            {searchQuery && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-1 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0"
+                data-testid="button-clear-search"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+
+          {/* Search Results Summary */}
+          {searchQuery && (
+            <div className="text-sm text-muted-foreground">
+              Found {availableStudents.length} available and {sortedGradeOutPasses.length} checked-out students matching "{searchQuery}"
+            </div>
+          )}
 
           {/* Currently Out Students */}
           <Card>
