@@ -78,11 +78,19 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
 
   const handleMarkOut = async (studentId: string, studentName: string, passType: string = 'general', customReason: string = '') => {
     try {
-      await apiRequest('POST', '/api/passes', { 
+      // Debug logging
+      console.log('handleMarkOut called with:', { studentId, studentName, passType, customReason });
+      
+      const requestBody = { 
         studentId, 
         passType,
         customReason: customReason || undefined,
-      });
+      };
+      console.log('Sending request body:', requestBody);
+      
+      const response = await apiRequest('POST', '/api/passes', requestBody);
+      console.log('Server response:', response);
+      
       queryClient.invalidateQueries({ queryKey: ['/api/passes/active'] });
       queryClient.invalidateQueries({ queryKey: ['/api/students'] });
       queryClient.invalidateQueries({ queryKey: ['/api/passes'] });
@@ -98,6 +106,7 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
         description: `${studentName} has been marked out for ${reasonText}.`,
       });
     } catch (error: any) {
+      console.error('handleMarkOut error:', error);
       toast({
         title: "Error",
         description: error.message,
