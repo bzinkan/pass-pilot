@@ -263,9 +263,9 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
     return student && student.gradeId === currentActiveGrade.id;
   }) : [];
   
-  // Sort students alphabetically by last name
+  // Sort students alphabetically by last name (create new array to avoid mutations)
   const sortStudentsByLastName = (students: any[]) => {
-    return students.sort((a, b) => {
+    return [...students].sort((a, b) => {
       const lastNameA = (a.lastName || '').toLowerCase();
       const lastNameB = (b.lastName || '').toLowerCase();
       return lastNameA.localeCompare(lastNameB);
@@ -278,8 +278,8 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
     )
   );
   
-  // Sort passes by student last name
-  const sortedGradeOutPasses = gradeOutPasses.sort((a, b) => {
+  // Sort passes by student last name (create new array to avoid mutations)
+  const sortedGradeOutPasses = [...gradeOutPasses].sort((a, b) => {
     const studentA = students.find((s: any) => s.id === a.studentId);
     const studentB = students.find((s: any) => s.id === b.studentId);
     const lastNameA = (studentA?.lastName || '').toLowerCase();
