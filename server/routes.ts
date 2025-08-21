@@ -578,10 +578,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const authReq = req as AuthenticatedRequest;
       const { schoolId } = authReq.user;
       
-      // Debug logging
-      console.log('POST /api/passes - Raw body:', req.body);
-      console.log('POST /api/passes - Validated body:', req.valid?.body);
-      
       // Convert passType to destination if not provided
       let destination = req.valid.body.destination;
       if (!destination) {
@@ -602,8 +598,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           case 'office':
             destination = 'Main Office';
             break;
+          case 'custom':
+            destination = req.valid.body.customReason || 'Custom Reason';
+            break;
+          case 'general':
           default:
-            destination = req.valid.body.customReason || 'General Hall Pass';
+            destination = 'General Hall Pass';
         }
       }
       

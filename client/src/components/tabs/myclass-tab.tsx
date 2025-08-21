@@ -78,18 +78,13 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
 
   const handleMarkOut = async (studentId: string, studentName: string, passType: string = 'general', customReason: string = '') => {
     try {
-      // Debug logging
-      console.log('handleMarkOut called with:', { studentId, studentName, passType, customReason });
-      
       const requestBody = { 
         studentId, 
         passType,
         customReason: customReason || undefined,
       };
-      console.log('Sending request body:', requestBody);
       
       const response = await apiRequest('POST', '/api/passes', requestBody);
-      console.log('Server response:', response);
       
       queryClient.invalidateQueries({ queryKey: ['/api/passes/active'] });
       queryClient.invalidateQueries({ queryKey: ['/api/students'] });
