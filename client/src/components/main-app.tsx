@@ -81,10 +81,10 @@ export function MainApp({ user, onLogout }: MainAppProps) {
 
   // Base tabs available to all teachers
   const baseTabs = [
+    { id: 'organizer', label: 'Organizer', icon: 'fas fa-folder-open' },
     { id: 'passes', label: 'Passes', icon: 'fas fa-clipboard-list' },
     { id: 'myclass', label: 'My Class', icon: 'fas fa-chalkboard-teacher' },
     { id: 'roster', label: 'Roster', icon: 'fas fa-users' },
-    { id: 'organizer', label: 'Organizer', icon: 'fas fa-folder-open' },
     { id: 'upload', label: 'Upload', icon: 'fas fa-cloud-upload-alt' },
     { id: 'reports', label: 'Reports', icon: 'fas fa-chart-bar' },
     { id: 'profile', label: 'Profile', icon: 'fas fa-user' },
