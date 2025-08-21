@@ -17,9 +17,11 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
     queryKey: ['/api/passes/active'],
     queryFn: () => {
       const url = new URL('/api/passes/active', window.location.origin);
-      // Remove teacherId filter to show all school passes like MyClass tab
+      // Add cache buster to prevent browser caching issues
+      url.searchParams.set('t', Date.now().toString());
       return fetch(url.toString(), {
         credentials: 'include', // Include cookies for authentication
+        cache: 'no-cache', // Force fresh data
       }).then(res => {
         if (res.status === 401) {
           // Trigger session expired event for consistent handling
@@ -35,6 +37,7 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
       });
     },
     refetchInterval: 5000, // Poll every 5 seconds for real-time updates
+    gcTime: 0, // Don't cache results in React Query
   });
   const [filterType, setFilterType] = useState<string>("all");
 
