@@ -11,7 +11,7 @@ import { UploadTab } from "./tabs/upload-tab";
 import { ReportsTab } from "./tabs/reports-tab";
 import { ProfileTab } from "./tabs/profile-tab";
 import { AdminTab } from "./tabs/admin-tab";
-import OrganizerTab from "./tabs/organizer-tab";
+
 import TrialStatusBanner from "./trial-status-banner";
 
 import { useToast } from "@/hooks/use-toast";
@@ -81,7 +81,6 @@ export function MainApp({ user, onLogout }: MainAppProps) {
 
   // Base tabs available to all teachers
   const baseTabs = [
-    { id: 'organizer', label: 'Organizer', icon: 'fas fa-folder-open' },
     { id: 'passes', label: 'Passes', icon: 'fas fa-clipboard-list' },
     { id: 'myclass', label: 'My Class', icon: 'fas fa-chalkboard-teacher' },
     { id: 'roster', label: 'Roster', icon: 'fas fa-users' },
@@ -134,8 +133,7 @@ export function MainApp({ user, onLogout }: MainAppProps) {
             setSelectedGrades(newSelectedGrades);
           }} 
         />;
-      case 'organizer':
-        return <OrganizerTab />;
+
       case 'upload':
         return <UploadTab user={user} />;
       case 'reports':
@@ -195,7 +193,7 @@ export function MainApp({ user, onLogout }: MainAppProps) {
 
       {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-40">
-        <div className={`grid h-16 ${tabs.length === 8 ? 'grid-cols-8' : tabs.length === 7 ? 'grid-cols-7' : 'grid-cols-6'}`}>
+        <div className={`grid h-16 ${tabs.length === 6 ? 'grid-cols-6' : 'grid-cols-7'}`}>
           {tabs.map((tab) => (
             <Button
               key={tab.id}

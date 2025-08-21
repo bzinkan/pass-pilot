@@ -60,8 +60,7 @@ const requireAuth = (req: Request, res: Response, next: NextFunction): void => {
   next();
 };
 
-// Import organizer routes
-import { registerOrganizerRoutes } from "./organizer/routes";
+
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health check endpoints
@@ -1148,9 +1147,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: 'Failed to promote user' });
     }
   });
-
-  // Register organizer routes
-  registerOrganizerRoutes(app, requireAuth);
 
   const server = createServer(app);
   return server;
