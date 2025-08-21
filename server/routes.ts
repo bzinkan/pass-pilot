@@ -229,7 +229,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Verify password against first account (prevents email enumeration)
-      const isValid = candidates.length > 0 && await auth.comparePassword(password, candidates[0].password);
+      const isValid = candidates.length > 0 && candidates[0] && await auth.comparePassword(password, candidates[0].password);
       if (!isValid) {
         return res.status(401).json({ error: 'Invalid credentials' });
       }
@@ -237,6 +237,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Single school - auto login
       if (candidates.length === 1) {
         const user = candidates[0];
+        if (!user) {
+          return res.status(401).json({ error: 'Invalid credentials' });
+        }
         
         // Check if this user should be promoted to admin (first login to school)
         await storage.checkAndPromoteFirstAdmin(user.schoolId, user.id);
