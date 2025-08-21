@@ -564,8 +564,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Alternative endpoint for query parameter (used by kiosk)
   app.get('/api/passes/active', requireAuth, async (req, res) => {
     try {
+      const authReq = req as AuthenticatedRequest;
       const { teacherId } = req.query;
-      const { schoolId } = (req as AuthenticatedRequest).user;
+      
+      // Get the user to access schoolId
+      const user = await storage.getUser(authReq.user.id);
+      if (!user) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+      const schoolId = user.schoolId;
       
       if (teacherId) {
         // Filter by teacher
@@ -586,7 +593,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/passes', requireAuth, validate({ body: insertPassSchema }), async (req: any, res) => {
     try {
       const authReq = req as AuthenticatedRequest;
-      const { schoolId } = authReq.user;
+      
+      // Get the user to access schoolId
+      const user = await storage.getUser(authReq.user.id);
+      if (!user) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+      const schoolId = user.schoolId;
       
       // Convert passType to destination if not provided
       let destination = req.valid.body.destination;

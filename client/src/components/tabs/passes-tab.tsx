@@ -119,12 +119,12 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
     }
   };
 
-  // Safe filtering - filter passes based on selected type and teacher's selected grades
+  // Safe filtering - filter passes based on selected type and optionally by selected grades
   const filteredPasses = safeMap(passes, (pass: any) => pass).filter((pass: any) => {
     // First filter by pass type
     const typeMatch = filterType === "all" || pass.passType === filterType;
     
-    // Then filter by selected grades - only show students from grades the teacher has selected
+    // If no grades are selected, show all passes. If grades are selected, filter by them.
     const gradeMatch = selectedGrades.size === 0 || selectedGrades.has(pass.student?.grade);
     
     return typeMatch && gradeMatch;
@@ -154,8 +154,8 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
               </div>
             )}
             {selectedGrades.size === 0 && (
-              <div className="text-xs text-orange-600 font-medium">
-                No grades selected - select grades in Roster tab to view passes
+              <div className="text-xs text-blue-600 font-medium">
+                Showing all school passes
               </div>
             )}
           </div>
