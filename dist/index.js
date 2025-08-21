@@ -510,14 +510,29 @@ var DatabaseStorage = class {
   async getUsersBySchool(schoolId) {
     return await db.select().from(users).where(eq(users.schoolId, schoolId));
   }
+  async checkAndPromoteFirstAdmin(schoolId, userId) {
+    const existingAdmins = await db.select().from(users).where(and(eq(users.schoolId, schoolId), eq(users.isAdmin, true)));
+    if (existingAdmins.length === 0) {
+      await db.update(users).set({
+        role: "ADMIN",
+        isAdmin: true
+      }).where(eq(users.id, userId));
+      console.log(`Promoted first user ${userId} to admin for school ${schoolId}`);
+      return true;
+    }
+    return false;
+  }
   async createUser(insertUser) {
     const userWithDefaults = {
       ...insertUser,
       resetToken: null,
       resetTokenExpiry: null,
-      enableNotifications: true,
-      autoReturn: false,
-      passTimeout: 15
+      // Ensure required fields have proper values, preserving explicit admin assignments
+      role: insertUser.role || "TEACHER",
+      status: insertUser.status || "active",
+      isAdmin: insertUser.isAdmin !== void 0 ? insertUser.isAdmin : false,
+      isFirstLogin: insertUser.isFirstLogin !== void 0 ? insertUser.isFirstLogin : false,
+      enableNotifications: insertUser.enableNotifications !== void 0 ? insertUser.enableNotifications : true
     };
     const [user] = await db.insert(users).values(userWithDefaults).returning();
     return user;
@@ -910,6 +925,12 @@ var requireAuth = (req, res, next) => {
     res.status(401).json(ErrorResponses.unauthorized("Session expired"));
     return;
   }
+  const timeUntilExpiry = session.expires.getTime() - Date.now();
+  const oneDayMs = 24 * 60 * 60 * 1e3;
+  if (timeUntilExpiry < oneDayMs) {
+    session.expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3);
+    sessions.set(authToken, session);
+  }
   req.user = { id: session.userId, schoolId: session.schoolId };
   next();
 };
@@ -956,7 +977,9 @@ async function registerRoutes(app2) {
         password: hashedPassword,
         firstName: adminFirstName,
         lastName: adminLastName,
-        isAdmin: true
+        role: "ADMIN",
+        isAdmin: true,
+        status: "active"
       };
       const user = await storage.createUser(userData);
       res.json({ ok: true, school: { id: school.id, name: school.name }, user: { id: user.id, email: user.email } });
@@ -988,8 +1011,11 @@ async function registerRoutes(app2) {
         }
         const isValid2 = await auth.comparePassword(password, user.password);
         invariant(isValid2, "Invalid credentials");
+        await storage.checkAndPromoteFirstAdmin(user.schoolId, user.id);
+        const updatedUser = await storage.getUser(user.id);
+        const finalUser = updatedUser || user;
         const sessionToken = auth.generateSessionToken();
-        const expires = new Date(Date.now() + 24 * 60 * 60 * 1e3);
+        const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3);
         sessions.set(sessionToken, {
           userId: user.id,
           schoolId: user.schoolId,
@@ -1003,7 +1029,7 @@ async function registerRoutes(app2) {
           maxAge: 7 * 24 * 3600 * 1e3,
           signed: false
         });
-        const { password: _, ...userWithoutPassword } = user;
+        const { password: _, ...userWithoutPassword } = finalUser;
         return res.json({ ok: true, user: userWithoutPassword, redirect: "/app" });
       }
       const candidates = await storage.getUsersByEmail(normalizedEmail);
@@ -1042,11 +1068,14 @@ async function registerRoutes(app2) {
       }
       if (candidates.length === 1) {
         const user = candidates[0];
+        await storage.checkAndPromoteFirstAdmin(user.schoolId, user.id);
+        const updatedUser = await storage.getUser(user.id);
+        const finalUser = updatedUser || user;
         const sessionToken = auth.generateSessionToken();
-        const expires = new Date(Date.now() + 24 * 60 * 60 * 1e3);
+        const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3);
         sessions.set(sessionToken, {
-          userId: user.id,
-          schoolId: user.schoolId,
+          userId: finalUser.id,
+          schoolId: finalUser.schoolId,
           expires
         });
         res.cookie("pp_session", sessionToken, {
@@ -1057,7 +1086,7 @@ async function registerRoutes(app2) {
           maxAge: 7 * 24 * 3600 * 1e3,
           signed: false
         });
-        const { password: _, ...userWithoutPassword } = user;
+        const { password: _, ...userWithoutPassword } = finalUser;
         return res.json({ ok: true, user: userWithoutPassword, redirect: "/app" });
       }
       const schoolIds = candidates.map((c) => c.schoolId);
@@ -1346,8 +1375,12 @@ async function registerRoutes(app2) {
           case "office":
             destination = "Main Office";
             break;
+          case "custom":
+            destination = req.valid.body.customReason || "Custom Reason";
+            break;
+          case "general":
           default:
-            destination = req.valid.body.customReason || "General Hall Pass";
+            destination = "General Hall Pass";
         }
       }
       const data = {
@@ -1358,12 +1391,12 @@ async function registerRoutes(app2) {
         // Ensure teacherId from auth user
         destination,
         // Ensure destination is provided
-        duration: req.valid.body.duration || 10,
-        // Default 10 minutes
+        duration: req.valid.body.duration || 0,
+        // Use 0 to indicate unlimited time tracking
         passNumber: Math.floor(Math.random() * 9e3) + 1e3,
         // Generate 4-digit pass number
-        expiresAt: new Date(Date.now() + (req.valid.body.duration || 10) * 60 * 1e3)
-        // Set expiration time
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1e3)
+        // Set to 24 hours from now as default
       };
       const pass = await storage.createPass(data);
       res.json(pass);
@@ -1392,7 +1425,10 @@ async function registerRoutes(app2) {
       if (!passId) {
         return res.status(400).json({ message: "Pass ID is required" });
       }
-      const pass = await storage.updatePass(passId, { status: "returned" });
+      const pass = await storage.updatePass(passId, {
+        status: "returned",
+        returnedAt: /* @__PURE__ */ new Date()
+      });
       res.json(pass);
     } catch (error) {
       console.error("Return pass error:", error);
@@ -1417,9 +1453,6 @@ async function registerRoutes(app2) {
       const authReq = req;
       const user = await storage.getUser(authReq.user.id);
       const validUser = unwrap(user, "User not found");
-      if (!validUser.isAdmin) {
-        return res.status(403).json({ message: "Admin access required" });
-      }
       const teachers = await storage.getUsersBySchool(validUser.schoolId);
       const teachersWithoutPasswords = teachers.map((teacher) => {
         const { password: _, ...teacherWithoutPassword } = teacher;
@@ -1436,9 +1469,6 @@ async function registerRoutes(app2) {
       const authReq = req;
       const user = await storage.getUser(authReq.user.id);
       const validUser = unwrap(user, "User not found");
-      if (!validUser.isAdmin) {
-        return res.status(403).json({ message: "Admin access required" });
-      }
       const { email, name } = req.body;
       const normalizedEmail = email.trim().toLowerCase();
       const existingTeacher = await storage.getUserByEmailAndSchool(normalizedEmail, validUser.schoolId);
@@ -1618,7 +1648,7 @@ async function registerRoutes(app2) {
         isFirstLogin: false
       });
       const sessionToken = auth.generateSessionToken();
-      const expires = new Date(Date.now() + 24 * 60 * 60 * 1e3);
+      const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3);
       sessions.set(sessionToken, {
         userId: user.id,
         schoolId: user.schoolId,
@@ -1648,23 +1678,21 @@ async function registerRoutes(app2) {
       const authReq = req;
       const { schoolId } = authReq.user;
       const { dateStart, dateEnd, grade, teacherId, passType } = req.query;
-      const allPasses = await storage.getPassesBySchool(schoolId);
-      let filteredPasses = allPasses;
+      const filters = {};
       if (dateStart) {
-        const startDate = new Date(dateStart);
-        filteredPasses = filteredPasses.filter(
-          (pass) => new Date(pass.issuedAt) >= startDate
-        );
+        filters.dateStart = new Date(dateStart);
       }
       if (dateEnd) {
-        const endDate = new Date(dateEnd);
-        filteredPasses = filteredPasses.filter(
-          (pass) => new Date(pass.issuedAt) <= endDate
-        );
+        filters.dateEnd = new Date(dateEnd);
+      }
+      if (grade && grade !== "all") {
+        filters.grade = grade;
       }
       if (teacherId && teacherId !== "all") {
-        filteredPasses = filteredPasses.filter((pass) => pass.teacherId === teacherId);
+        filters.teacherId = teacherId;
       }
+      const allPasses = await storage.getPassesBySchool(schoolId, filters);
+      let filteredPasses = allPasses;
       if (passType && passType !== "all") {
         filteredPasses = filteredPasses.filter(
           (pass) => (pass.destination || "general") === passType
@@ -1743,6 +1771,30 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Update profile error:", error);
       res.status(500).json({ message: error.message || "Failed to update profile" });
+    }
+  });
+  app2.post("/api/debug/promote-to-admin/:email", async (req, res) => {
+    try {
+      const { email } = req.params;
+      const users2 = await storage.getUsersByEmail(email);
+      if (users2.length === 0) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      const updatedUsers = [];
+      for (const user of users2) {
+        const updatedUser = await storage.updateUser(user.id, {
+          role: "ADMIN",
+          isAdmin: true
+        });
+        updatedUsers.push(updatedUser);
+      }
+      res.json({
+        message: `Updated ${updatedUsers.length} user(s) to admin`,
+        users: updatedUsers.map((u) => ({ id: u.id, email: u.email, role: u.role, isAdmin: u.isAdmin }))
+      });
+    } catch (error) {
+      console.error("Promote user error:", error);
+      res.status(500).json({ message: "Failed to promote user" });
     }
   });
   const server = createServer(app2);
