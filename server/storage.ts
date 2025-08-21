@@ -33,6 +33,10 @@ export interface IStorage {
   upgradeSchoolPlan(schoolId: string, newPlan: string, newMaxTeachers: number, newMaxStudents: number): Promise<School>;
   deleteSchool(id: string): Promise<void>; // Delete expired/cancelled schools
   getTrialAccountByDomain(emailDomain: string): Promise<School | undefined>;
+  getSchoolsByEmailDomain(domain: string): Promise<School[]>;
+  setSchoolVerificationToken(schoolId: string, token: string, expiry: Date): Promise<void>;
+  verifySchoolEmail(token: string): Promise<School | undefined>;
+  checkAndPromoteFirstAdmin(schoolId: string, userId: string): Promise<void>;
   
   // Grades
   getGradesBySchool(schoolId: string): Promise<Grade[]>;
@@ -112,6 +116,10 @@ export class MemStorage implements IStorage {
   async createPayment(payment: InsertPayment): Promise<Payment> { throw new Error("MemStorage not implemented"); }
   async getPaymentsBySchool(schoolId: string): Promise<Payment[]> { throw new Error("MemStorage not implemented"); }
   async getAllPayments(): Promise<Payment[]> { throw new Error("MemStorage not implemented"); }
+  async getSchoolsByEmailDomain(domain: string): Promise<School[]> { throw new Error("MemStorage not implemented"); }
+  async setSchoolVerificationToken(schoolId: string, token: string, expiry: Date): Promise<void> { throw new Error("MemStorage not implemented"); }
+  async verifySchoolEmail(token: string): Promise<School | undefined> { throw new Error("MemStorage not implemented"); }
+  async checkAndPromoteFirstAdmin(schoolId: string, userId: string): Promise<void> { throw new Error("MemStorage not implemented"); }
 }
 
 // Real storage implementation using Drizzle ORM
@@ -255,6 +263,33 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
+  async getSchoolsByEmailDomain(domain: string): Promise<School[]> {
+    return await db.select().from(schools).where(eq(schools.emailDomain, domain));
+  }
+
+  async setSchoolVerificationToken(schoolId: string, token: string, expiry: Date): Promise<void> {
+    await db.update(schools)
+      .set({ emailVerificationToken: token })
+      .where(eq(schools.id, schoolId));
+  }
+
+  async verifySchoolEmail(token: string): Promise<School | undefined> {
+    const result = await db.select().from(schools).where(eq(schools.emailVerificationToken, token)).limit(1);
+    return result[0];
+  }
+
+  async checkAndPromoteFirstAdmin(schoolId: string, userId: string): Promise<void> {
+    // Get all users in the school
+    const schoolUsers = await db.select().from(users).where(eq(users.schoolId, schoolId));
+    
+    // If this is the first user in the school, promote them to admin
+    if (schoolUsers.length === 1) {
+      await db.update(users)
+        .set({ isAdmin: true, role: 'admin' })
+        .where(eq(users.id, userId));
+    }
+  }
+
   // Grade methods
   async getGradesBySchool(schoolId: string): Promise<Grade[]> {
     return await db.select().from(grades).where(eq(grades.schoolId, schoolId));
@@ -298,7 +333,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createStudent(student: InsertStudent): Promise<Student> {
-    const [newStudent] = await db.insert(students).values(student).returning();
+    const studentData = {
+      id: randomUUID(),
+      ...student,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      status: student.status || 'active',
+      schoolId: student.schoolId || '',
+      email: student.email || null,
+      gradeId: student.gradeId || null,
+      studentId: student.studentId || null
+    };
+    const [newStudent] = await db.insert(students).values(studentData).returning();
     return unwrap(newStudent);
   }
 
@@ -351,7 +397,14 @@ export class DatabaseStorage implements IStorage {
     grade?: string;
     teacherId?: string;
   }): Promise<(Pass & { student: Student; teacher: User })[]> {
-    let query = db.select({
+    let whereConditions = eq(passes.schoolId, schoolId);
+
+    // Apply filters
+    if (filters?.teacherId) {
+      whereConditions = and(whereConditions, eq(passes.teacherId, filters.teacherId)) as any;
+    }
+
+    const result = await db.select({
       pass: passes,
       student: students,
       teacher: users
@@ -359,18 +412,8 @@ export class DatabaseStorage implements IStorage {
     .from(passes)
     .leftJoin(students, eq(passes.studentId, students.id))
     .leftJoin(users, eq(passes.teacherId, users.id))
-    .where(eq(passes.schoolId, schoolId));
+    .where(whereConditions);
 
-    // Apply filters
-    if (filters?.teacherId) {
-      query = query.where(and(eq(passes.schoolId, schoolId), eq(passes.teacherId, filters.teacherId)));
-    }
-    if (filters?.dateStart) {
-      query = query.where(and(eq(passes.schoolId, schoolId), eq(passes.createdAt, filters.dateStart)));
-    }
-    // Add more filter conditions as needed
-
-    const result = await query;
     return result.map(row => ({
       ...row.pass,
       student: unwrap(row.student),
@@ -379,13 +422,43 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createPass(pass: InsertPass): Promise<Pass> {
-    const [newPass] = await db.insert(passes).values(pass).returning();
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + (15 * 60 * 1000)); // 15 minutes from now
+    
+    const passData = {
+      id: randomUUID(),
+      schoolId: pass.schoolId || '',
+      studentId: pass.studentId,
+      teacherId: pass.teacherId || '',
+      destination: pass.destination || 'General',
+      customDestination: pass.customReason || null,
+      duration: 15,
+      notes: null,
+      status: 'active',
+      issuedAt: now,
+      expiresAt: expiresAt,
+      returnedAt: null,
+      passNumber: Math.floor(Math.random() * 10000),
+      qrCode: null,
+      createdAt: now,
+      updatedAt: now
+    };
+    const [newPass] = await db.insert(passes).values(passData).returning();
     return unwrap(newPass);
   }
 
   async updatePass(id: string, updates: Partial<Pass>): Promise<Pass> {
+    // Only allow updates to specific fields to match schema
+    const allowedUpdates: Partial<typeof passes.$inferInsert> = {};
+    
+    if (updates.status) allowedUpdates.status = updates.status;
+    if (updates.notes) allowedUpdates.notes = updates.notes;
+    if (updates.returnedAt) allowedUpdates.returnedAt = updates.returnedAt;
+    
+    allowedUpdates.updatedAt = new Date();
+    
     const [updatedPass] = await db.update(passes)
-      .set({ ...updates, updatedAt: new Date() })
+      .set(allowedUpdates)
       .where(eq(passes.id, id))
       .returning();
     return unwrap(updatedPass);
@@ -397,7 +470,7 @@ export class DatabaseStorage implements IStorage {
     );
 
     const updatePromises = activePasses.map(pass =>
-      this.updatePass(pass.id, { status: "returned", returnTime: new Date() })
+      this.updatePass(pass.id, { status: "returned", returnedAt: new Date() })
     );
 
     await Promise.all(updatePromises);
