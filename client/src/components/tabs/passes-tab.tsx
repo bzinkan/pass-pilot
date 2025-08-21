@@ -124,8 +124,15 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
 
   // Safe filtering - filter passes based on selected type and optionally by selected grades
   const filteredPasses = safeMap(passes, (pass: any) => pass).filter((pass: any) => {
-    // First filter by pass type
-    const typeMatch = filterType === "all" || pass.passType === filterType;
+    // First filter by pass type - map destination to pass type
+    let passType = 'general'; // default
+    if (pass.destination?.toLowerCase().includes('nurse')) {
+      passType = 'nurse';
+    } else if (pass.destination?.toLowerCase().includes('discipline') || pass.destination?.toLowerCase().includes('office')) {
+      passType = 'discipline';
+    }
+    
+    const typeMatch = filterType === "all" || passType === filterType;
     
     // If no grades are selected, show all passes. If grades are selected, filter by them.
     const gradeMatch = selectedGrades.size === 0 || selectedGrades.has(pass.student?.grade);
@@ -209,7 +216,8 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
                         <h3 className="font-medium text-foreground" data-testid={`student-name-${pass.id}`}>
                           {pass.student?.firstName} {pass.student?.lastName}
                         </h3>
-                        {getPassTypeBadge(pass.passType)}
+                        {getPassTypeBadge(pass.destination?.toLowerCase().includes('nurse') ? 'nurse' : 
+                          pass.destination?.toLowerCase().includes('discipline') || pass.destination?.toLowerCase().includes('office') ? 'discipline' : 'general')}
                       </div>
                       <p className="text-sm text-muted-foreground">
                         Grade <span data-testid={`student-grade-${pass.id}`}>{pass.student?.grade}</span> • 
