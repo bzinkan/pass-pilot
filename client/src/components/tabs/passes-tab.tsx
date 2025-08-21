@@ -122,8 +122,15 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
     }
   };
 
+  // Debug logging to see what data we're getting
+  console.log('Passes data:', passes);
+  console.log('Filter type:', filterType);
+  console.log('Selected grades:', selectedGrades);
+
   // Safe filtering - filter passes based on selected type and optionally by selected grades
   const filteredPasses = safeMap(passes, (pass: any) => pass).filter((pass: any) => {
+    console.log('Processing pass:', pass);
+    
     // First filter by pass type - map destination to pass type
     let passType = 'general'; // default
     if (pass.destination?.toLowerCase().includes('nurse')) {
@@ -132,13 +139,17 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
       passType = 'discipline';
     }
     
-    const typeMatch = filterType === "all" || passType === filterType;
+    console.log('Pass destination:', pass.destination, 'mapped to type:', passType);
     
-    // If no grades are selected, show all passes. If grades are selected, filter by them.
+    const typeMatch = filterType === "all" || passType === filterType;
     const gradeMatch = selectedGrades.size === 0 || selectedGrades.has(pass.student?.grade);
+    
+    console.log('Type match:', typeMatch, 'Grade match:', gradeMatch);
     
     return typeMatch && gradeMatch;
   });
+
+  console.log('Filtered passes count:', filteredPasses.length);
 
   return (
     <div className="p-4">
