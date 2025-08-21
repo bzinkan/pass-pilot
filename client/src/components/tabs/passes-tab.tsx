@@ -142,8 +142,17 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
     console.log('Pass destination:', pass.destination, 'mapped to type:', passType);
     
     const typeMatch = filterType === "all" || passType === filterType;
-    const gradeMatch = selectedGrades.size === 0 || selectedGrades.has(pass.student?.grade);
     
+    // If no grades are selected, show all passes. If grades are selected, filter by them.
+    // Check both grade name and grade ID since the data structure might vary
+    const studentGradeId = pass.student?.gradeId;
+    const studentGradeName = pass.student?.grade;
+    const gradeMatch = selectedGrades.size === 0 || 
+                      selectedGrades.has(studentGradeId) || 
+                      selectedGrades.has(studentGradeName);
+    
+    console.log('Student grade ID:', studentGradeId, 'Student grade name:', studentGradeName);
+    console.log('Selected grades has gradeId?', selectedGrades.has(studentGradeId), 'has gradeName?', selectedGrades.has(studentGradeName));
     console.log('Type match:', typeMatch, 'Grade match:', gradeMatch);
     
     return typeMatch && gradeMatch;
