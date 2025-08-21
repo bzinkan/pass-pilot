@@ -202,6 +202,10 @@ export const insertRegistrationSchema = createInsertSchema(registrations);
 export type Registration = typeof registrations.$inferSelect;
 export type InsertRegistration = z.infer<typeof insertRegistrationSchema>;
 
+
+
+
+
 // Admin users table (for platform administration)
 export const adminUsers = pgTable("admin_users", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -222,6 +226,46 @@ export const subscriptionEvents = pgTable("subscription_events", {
   data: text("data"), // JSON string of event data
   processed: boolean("processed").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Organizer feature tables - isolated from core pass system
+export const organizerCategories = pgTable("organizer_categories", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  schoolId: uuid("school_id").notNull().references(() => schools.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  color: text("color").notNull().default("#3b82f6"),
+  createdBy: uuid("created_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const organizerEntries = pgTable("organizer_entries", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  schoolId: uuid("school_id").notNull().references(() => schools.id, { onDelete: "cascade" }),
+  categoryId: uuid("category_id").notNull().references(() => organizerCategories.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  content: text("content"),
+  tags: text("tags").array(), // Array of tags
+  priority: text("priority").notNull().default("medium"), // low, medium, high
+  dueDate: timestamp("due_date"),
+  completed: boolean("completed").notNull().default(false),
+  createdBy: uuid("created_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const organizerEvents = pgTable("organizer_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  schoolId: uuid("school_id").notNull().references(() => schools.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date"),
+  allDay: boolean("all_day").notNull().default(false),
+  createdBy: uuid("created_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 // Types for new tables
@@ -253,3 +297,33 @@ export const updatePasswordSchema = z.object({
   token: z.string(),
   newPassword: z.string().min(8),
 });
+
+// Organizer schemas - must be after table definitions
+export const insertOrganizerCategorySchema = createInsertSchema(organizerCategories).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertOrganizerEntrySchema = createInsertSchema(organizerEntries).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  completed: true,
+});
+
+export const insertOrganizerEventSchema = createInsertSchema(organizerEvents).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Organizer types
+export type OrganizerCategory = typeof organizerCategories.$inferSelect;
+export type InsertOrganizerCategory = z.infer<typeof insertOrganizerCategorySchema>;
+
+export type OrganizerEntry = typeof organizerEntries.$inferSelect;
+export type InsertOrganizerEntry = z.infer<typeof insertOrganizerEntrySchema>;
+
+export type OrganizerEvent = typeof organizerEvents.$inferSelect;
+export type InsertOrganizerEvent = z.infer<typeof insertOrganizerEventSchema>;

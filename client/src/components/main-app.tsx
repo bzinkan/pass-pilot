@@ -11,6 +11,7 @@ import { UploadTab } from "./tabs/upload-tab";
 import { ReportsTab } from "./tabs/reports-tab";
 import { ProfileTab } from "./tabs/profile-tab";
 import { AdminTab } from "./tabs/admin-tab";
+import OrganizerTab from "./tabs/organizer-tab";
 import TrialStatusBanner from "./trial-status-banner";
 
 import { useToast } from "@/hooks/use-toast";
@@ -83,6 +84,7 @@ export function MainApp({ user, onLogout }: MainAppProps) {
     { id: 'passes', label: 'Passes', icon: 'fas fa-clipboard-list' },
     { id: 'myclass', label: 'My Class', icon: 'fas fa-chalkboard-teacher' },
     { id: 'roster', label: 'Roster', icon: 'fas fa-users' },
+    { id: 'organizer', label: 'Organizer', icon: 'fas fa-folder-open' },
     { id: 'upload', label: 'Upload', icon: 'fas fa-cloud-upload-alt' },
     { id: 'reports', label: 'Reports', icon: 'fas fa-chart-bar' },
     { id: 'profile', label: 'Profile', icon: 'fas fa-user' },
@@ -132,6 +134,8 @@ export function MainApp({ user, onLogout }: MainAppProps) {
             setSelectedGrades(newSelectedGrades);
           }} 
         />;
+      case 'organizer':
+        return <OrganizerTab />;
       case 'upload':
         return <UploadTab user={user} />;
       case 'reports':

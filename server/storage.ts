@@ -1,7 +1,7 @@
-import { type User, type InsertUser, type School, type InsertSchool, type Grade, type InsertGrade, type Student, type InsertStudent, type Pass, type InsertPass, type Payment, type InsertPayment } from "@shared/schema";
+import { type User, type InsertUser, type School, type InsertSchool, type Grade, type InsertGrade, type Student, type InsertStudent, type Pass, type InsertPass, type Payment, type InsertPayment, type OrganizerCategory, type InsertOrganizerCategory, type OrganizerEntry, type InsertOrganizerEntry, type OrganizerEvent, type InsertOrganizerEvent } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { users, schools, grades, students, passes, payments } from "@shared/schema";
+import { users, schools, grades, students, passes, payments, organizerCategories, organizerEntries, organizerEvents } from "@shared/schema";
 import { eq, and, lt } from "drizzle-orm";
 import { unwrap } from "./safe";
 
@@ -69,6 +69,22 @@ export interface IStorage {
   createPayment(payment: InsertPayment): Promise<Payment>;
   getPaymentsBySchool(schoolId: string): Promise<Payment[]>;
   getAllPayments(): Promise<Payment[]>;
+  
+  // Organizer - Categories
+  getOrganizerCategories(schoolId: string): Promise<OrganizerCategory[]>;
+  createOrganizerCategory(category: InsertOrganizerCategory): Promise<OrganizerCategory>;
+  deleteOrganizerCategory(id: string, schoolId: string): Promise<void>;
+  
+  // Organizer - Entries
+  getOrganizerEntries(schoolId: string, categoryId?: string): Promise<OrganizerEntry[]>;
+  createOrganizerEntry(entry: InsertOrganizerEntry): Promise<OrganizerEntry>;
+  updateOrganizerEntry(id: string, updates: Partial<OrganizerEntry>, schoolId: string): Promise<OrganizerEntry>;
+  deleteOrganizerEntry(id: string, schoolId: string): Promise<void>;
+  
+  // Organizer - Events
+  getOrganizerEvents(schoolId: string): Promise<OrganizerEvent[]>;
+  createOrganizerEvent(event: InsertOrganizerEvent): Promise<OrganizerEvent>;
+  deleteOrganizerEvent(id: string, schoolId: string): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -78,6 +94,9 @@ export class MemStorage implements IStorage {
   private students = new Map<string, Student>();
   private passes = new Map<string, Pass>();
   private payments = new Map<string, Payment>();
+  private organizerCategories = new Map<string, OrganizerCategory>();
+  private organizerEntries = new Map<string, OrganizerEntry>();
+  private organizerEvents = new Map<string, OrganizerEvent>();
 
   constructor() {
     // Initialize with demo data
@@ -721,6 +740,103 @@ export class MemStorage implements IStorage {
   async getAllPayments(): Promise<Payment[]> {
     return Array.from(this.payments.values());
   }
+
+  // Organizer - Categories
+  async getOrganizerCategories(schoolId: string): Promise<OrganizerCategory[]> {
+    return Array.from(this.organizerCategories.values())
+      .filter(category => category.schoolId === schoolId);
+  }
+
+  async createOrganizerCategory(category: InsertOrganizerCategory): Promise<OrganizerCategory> {
+    const id = randomUUID();
+    const newCategory: OrganizerCategory = {
+      ...category,
+      id,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    this.organizerCategories.set(id, newCategory);
+    return newCategory;
+  }
+
+  async deleteOrganizerCategory(id: string, schoolId: string): Promise<void> {
+    const category = this.organizerCategories.get(id);
+    if (category && category.schoolId === schoolId) {
+      this.organizerCategories.delete(id);
+    }
+  }
+
+  // Organizer - Entries
+  async getOrganizerEntries(schoolId: string, categoryId?: string): Promise<OrganizerEntry[]> {
+    let entries = Array.from(this.organizerEntries.values())
+      .filter(entry => entry.schoolId === schoolId);
+    
+    if (categoryId) {
+      entries = entries.filter(entry => entry.categoryId === categoryId);
+    }
+    
+    return entries;
+  }
+
+  async createOrganizerEntry(entry: InsertOrganizerEntry): Promise<OrganizerEntry> {
+    const id = randomUUID();
+    const newEntry: OrganizerEntry = {
+      ...entry,
+      id,
+      completed: false,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    this.organizerEntries.set(id, newEntry);
+    return newEntry;
+  }
+
+  async updateOrganizerEntry(id: string, updates: Partial<OrganizerEntry>, schoolId: string): Promise<OrganizerEntry> {
+    const entry = this.organizerEntries.get(id);
+    if (!entry || entry.schoolId !== schoolId) {
+      throw new Error("Entry not found");
+    }
+    
+    const updatedEntry = {
+      ...entry,
+      ...updates,
+      updatedAt: new Date()
+    };
+    this.organizerEntries.set(id, updatedEntry);
+    return updatedEntry;
+  }
+
+  async deleteOrganizerEntry(id: string, schoolId: string): Promise<void> {
+    const entry = this.organizerEntries.get(id);
+    if (entry && entry.schoolId === schoolId) {
+      this.organizerEntries.delete(id);
+    }
+  }
+
+  // Organizer - Events
+  async getOrganizerEvents(schoolId: string): Promise<OrganizerEvent[]> {
+    return Array.from(this.organizerEvents.values())
+      .filter(event => event.schoolId === schoolId);
+  }
+
+  async createOrganizerEvent(event: InsertOrganizerEvent): Promise<OrganizerEvent> {
+    const id = randomUUID();
+    const newEvent: OrganizerEvent = {
+      ...event,
+      id,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    this.organizerEvents.set(id, newEvent);
+    return newEvent;
+  }
+
+  async deleteOrganizerEvent(id: string, schoolId: string): Promise<void> {
+    const event = this.organizerEvents.get(id);
+    if (event && event.schoolId === schoolId) {
+      this.organizerEvents.delete(id);
+    }
+  }
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1198,6 +1314,68 @@ export class DatabaseStorage implements IStorage {
 
   async getAllPayments(): Promise<Payment[]> {
     return await db.select().from(payments);
+  }
+
+  // Organizer - Categories
+  async getOrganizerCategories(schoolId: string): Promise<OrganizerCategory[]> {
+    return await db.select().from(organizerCategories).where(eq(organizerCategories.schoolId, schoolId));
+  }
+
+  async createOrganizerCategory(category: InsertOrganizerCategory): Promise<OrganizerCategory> {
+    const [newCategory] = await db.insert(organizerCategories).values(category).returning();
+    return newCategory;
+  }
+
+  async deleteOrganizerCategory(id: string, schoolId: string): Promise<void> {
+    await db.delete(organizerCategories).where(
+      and(eq(organizerCategories.id, id), eq(organizerCategories.schoolId, schoolId))
+    );
+  }
+
+  // Organizer - Entries
+  async getOrganizerEntries(schoolId: string, categoryId?: string): Promise<OrganizerEntry[]> {
+    if (categoryId) {
+      return await db.select().from(organizerEntries).where(
+        and(eq(organizerEntries.schoolId, schoolId), eq(organizerEntries.categoryId, categoryId))
+      );
+    } else {
+      return await db.select().from(organizerEntries).where(eq(organizerEntries.schoolId, schoolId));
+    }
+  }
+
+  async createOrganizerEntry(entry: InsertOrganizerEntry): Promise<OrganizerEntry> {
+    const [newEntry] = await db.insert(organizerEntries).values(entry).returning();
+    return newEntry;
+  }
+
+  async updateOrganizerEntry(id: string, updates: Partial<OrganizerEntry>, schoolId: string): Promise<OrganizerEntry> {
+    const [updatedEntry] = await db.update(organizerEntries)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(organizerEntries.id, id), eq(organizerEntries.schoolId, schoolId)))
+      .returning();
+    return updatedEntry;
+  }
+
+  async deleteOrganizerEntry(id: string, schoolId: string): Promise<void> {
+    await db.delete(organizerEntries).where(
+      and(eq(organizerEntries.id, id), eq(organizerEntries.schoolId, schoolId))
+    );
+  }
+
+  // Organizer - Events
+  async getOrganizerEvents(schoolId: string): Promise<OrganizerEvent[]> {
+    return await db.select().from(organizerEvents).where(eq(organizerEvents.schoolId, schoolId));
+  }
+
+  async createOrganizerEvent(event: InsertOrganizerEvent): Promise<OrganizerEvent> {
+    const [newEvent] = await db.insert(organizerEvents).values(event).returning();
+    return newEvent;
+  }
+
+  async deleteOrganizerEvent(id: string, schoolId: string): Promise<void> {
+    await db.delete(organizerEvents).where(
+      and(eq(organizerEvents.id, id), eq(organizerEvents.schoolId, schoolId))
+    );
   }
 }
 
