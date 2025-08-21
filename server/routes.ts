@@ -48,6 +48,14 @@ const requireAuth = (req: Request, res: Response, next: NextFunction): void => {
     return;
   }
   
+  // Extend session if it expires within 24 hours (refresh on activity)
+  const timeUntilExpiry = session.expires.getTime() - Date.now();
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  if (timeUntilExpiry < oneDayMs) {
+    session.expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    sessions.set(authToken, session);
+  }
+  
   (req as AuthenticatedRequest).user = { id: session.userId, schoolId: session.schoolId };
   next();
 };
@@ -162,7 +170,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Create session
         const sessionToken = auth.generateSessionToken();
-        const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+        const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days to match cookie
         sessions.set(sessionToken, {
           userId: user.id,
           schoolId: user.schoolId,
@@ -236,7 +244,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const finalUser = updatedUser || user;
         
         const sessionToken = auth.generateSessionToken();
-        const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days to match cookie
         sessions.set(sessionToken, {
           userId: finalUser.id,
           schoolId: finalUser.schoolId,
@@ -948,7 +956,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Create session
       const sessionToken = auth.generateSessionToken();
-      const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days to match cookie
       sessions.set(sessionToken, {
         userId: user.id,
         schoolId: user.schoolId,

@@ -50,6 +50,7 @@ Preferred communication style: Simple, everyday language.
 - **Defensive React UI Patterns**: UI guard utilities for loading, error, and data existence checks, safe array/object access.
 - **V2 Registration System**: Webhook-first provisioning with idempotency, atomic school/admin creation, status tracking, demo mode fallback, unique slug generation.
 - **Student Alphabetical Sorting**: MyClass tab displays students in alphabetical order by last name for both available and checked-out students, improving teacher workflow and student location.
+- **Session Management Fix**: Fixed critical session timeout mismatch that caused random logouts. Server-side sessions now properly expire after 7 days to match cookie expiration, with automatic session renewal on activity.
 
 ## External Dependencies
 
