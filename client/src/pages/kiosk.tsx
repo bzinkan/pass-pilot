@@ -336,15 +336,26 @@ export default function Kiosk() {
     }
   };
 
+  // Sort students alphabetically by last name (same as MyClass logic)
+  const sortStudentsByLastName = (students: Student[]) => {
+    return students.sort((a, b) => {
+      const lastNameA = (a.lastName || '').toLowerCase();
+      const lastNameB = (b.lastName || '').toLowerCase();
+      return lastNameA.localeCompare(lastNameB);
+    });
+  };
+
   // Filter students by current grade using gradeId lookup (same as MyClass logic)
-  const filteredStudents = students.filter(student => {
-    if (!currentGrade) return true;
-    // Find the grade object for the current grade name
-    const gradeObj = grades.find(g => g.name === currentGrade);
-    if (!gradeObj) return false;
-    // Match student's gradeId to the grade object's id
-    return student.gradeId === gradeObj.id;
-  });
+  const filteredStudents = sortStudentsByLastName(
+    students.filter(student => {
+      if (!currentGrade) return true;
+      // Find the grade object for the current grade name
+      const gradeObj = grades.find(g => g.name === currentGrade);
+      if (!gradeObj) return false;
+      // Match student's gradeId to the grade object's id
+      return student.gradeId === gradeObj.id;
+    })
+  );
 
   // Set initial grade if none selected and grades available
   useEffect(() => {
