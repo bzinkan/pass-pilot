@@ -235,14 +235,14 @@ export default function OrganizerTab() {
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-4">
               <h3 className="text-lg font-semibold">Tasks & Notes</h3>
-              <Select value={selectedCategoryId} onValueChange={setSelectedCategoryId}>
+              <Select value={selectedCategoryId || ""} onValueChange={setSelectedCategoryId}>
                 <SelectTrigger className="w-48">
                   <SelectValue placeholder="All categories" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">All categories</SelectItem>
                   {categories.map((category: OrganizerCategory) => (
-                    <SelectItem key={category.id} value={category.id}>
+                    <SelectItem key={category.id} value={category.id || ""}>
                       {category.name}
                     </SelectItem>
                   ))}
@@ -498,13 +498,13 @@ function CreateEntryDialog({ categories, onSubmit }: { categories: OrganizerCate
           </div>
           <div>
             <Label htmlFor="categoryId">Category</Label>
-            <Select value={formData.categoryId} onValueChange={(value) => setFormData({ ...formData, categoryId: value })}>
+            <Select value={formData.categoryId || ""} onValueChange={(value) => setFormData({ ...formData, categoryId: value })}>
               <SelectTrigger data-testid="select-entry-category">
                 <SelectValue placeholder="Select category" />
               </SelectTrigger>
               <SelectContent>
                 {categories.map((category) => (
-                  <SelectItem key={category.id} value={category.id}>
+                  <SelectItem key={category.id} value={category.id || ""}>
                     {category.name}
                   </SelectItem>
                 ))}
