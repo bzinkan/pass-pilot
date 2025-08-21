@@ -578,6 +578,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const authReq = req as AuthenticatedRequest;
       const { schoolId } = authReq.user;
       
+      // Debug logging
+      console.log('POST /api/passes - Raw body:', req.body);
+      console.log('POST /api/passes - Validated body:', req.valid?.body);
+      
       // Convert passType to destination if not provided
       let destination = req.valid.body.destination;
       if (!destination) {
