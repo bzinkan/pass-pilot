@@ -414,345 +414,291 @@ import { createServer } from "http";
 // server/storage.ts
 init_db();
 init_schema();
-import { eq, and, lt } from "drizzle-orm";
+import { randomUUID } from "crypto";
+import { eq, and } from "drizzle-orm";
+
+// server/safe.ts
+function invariant(condition, msg) {
+  if (!condition) {
+    console.error(`\u274C Invariant failed: ${msg}`);
+    throw new Error(msg);
+  }
+}
+function unwrap(v, msg = "Unexpected null") {
+  if (v == null) {
+    console.error(`\u274C Unwrap failed: ${msg} (received: ${v})`);
+    throw new Error(msg);
+  }
+  return v;
+}
+function assertValidUuid(id, msg = "Invalid UUID") {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!id || !uuidRegex.test(id)) {
+    console.error(`\u274C UUID validation failed: ${msg} (received: ${id})`);
+    throw new Error(msg);
+  }
+  return id;
+}
+
+// server/storage.ts
 var DatabaseStorage = class {
-  // Add missing methods from interface
-  async getActiveSchools() {
-    const activeSchools = await db.select().from(schools);
-    return activeSchools.filter((school) => {
-      const now = /* @__PURE__ */ new Date();
-      return school.plan !== "TRIAL" || school.trialEndDate && school.trialEndDate > now && !school.isTrialExpired;
-    });
-  }
-  async deleteSchool(id) {
-    await db.delete(schools).where(eq(schools.id, id));
-  }
-  async cleanupExpiredTrials() {
-    const now = /* @__PURE__ */ new Date();
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1e3);
-    const expiredTrials = await db.select().from(schools).where(
-      and(
-        eq(schools.plan, "TRIAL"),
-        // Trial ended more than 7 days ago
-        lt(schools.trialEndDate, sevenDaysAgo)
-      )
-    );
-    for (const school of expiredTrials) {
-      await this.deleteSchool(school.id);
-    }
-    return expiredTrials.length;
-  }
-  async getSchoolsByEmailDomain(emailDomain) {
-    return await db.select().from(schools).where(eq(schools.emailDomain, emailDomain.toLowerCase()));
-  }
-  async getTrialAccountByDomain(emailDomain) {
-    const [school] = await db.select().from(schools).where(
-      and(
-        eq(schools.plan, "TRIAL"),
-        eq(schools.emailDomain, emailDomain.toLowerCase())
-      )
-    );
-    return school || void 0;
-  }
-  async getTrialAccountBySchoolName(schoolName) {
-    const [school] = await db.select().from(schools).where(
-      and(
-        eq(schools.plan, "TRIAL"),
-        eq(schools.name, schoolName)
-      )
-    );
-    return school || void 0;
-  }
-  async getSchoolByVerificationToken(token) {
-    const [school] = await db.select().from(schools).where(eq(schools.verificationToken, token));
-    return school || void 0;
-  }
-  async verifySchoolEmail(schoolId) {
-    const [school] = await db.update(schools).set({
-      verified: true,
-      verificationToken: null,
-      verificationTokenExpiry: null
-    }).where(eq(schools.id, schoolId)).returning();
-    if (!school) throw new Error("School not found");
-    return school;
-  }
-  // Users
+  // User methods
   async getUser(id) {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user || void 0;
+    const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    return result[0];
   }
   async getUserByEmail(email) {
-    const [user] = await db.select().from(users).where(eq(users.email, email));
-    return user || void 0;
+    const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    return result[0];
   }
   async getUsersByEmail(email) {
-    const userList = await db.select().from(users).where(eq(users.email, email));
-    return userList;
+    return await db.select().from(users).where(eq(users.email, email));
   }
   async getUserByEmailAndSchool(email, schoolId) {
-    console.log("getUserByEmailAndSchool called with:", { email, schoolId });
-    const [user] = await db.select().from(users).where(
+    const result = await db.select().from(users).where(
       and(eq(users.email, email), eq(users.schoolId, schoolId))
-    );
-    console.log("Found user:", user ? "YES" : "NO");
-    return user || void 0;
-  }
-  async authenticateUser(email, password) {
-    const user = await this.getUserByEmail(email);
-    if (!user || user.status !== "active") {
-      return null;
-    }
-    if (user.password === password) {
-      return user;
-    }
-    return null;
+    ).limit(1);
+    return result[0];
   }
   async getUsersBySchool(schoolId) {
     return await db.select().from(users).where(eq(users.schoolId, schoolId));
   }
-  async checkAndPromoteFirstAdmin(schoolId, userId) {
-    const existingAdmins = await db.select().from(users).where(and(eq(users.schoolId, schoolId), eq(users.isAdmin, true)));
-    if (existingAdmins.length === 0) {
-      await db.update(users).set({
-        role: "ADMIN",
-        isAdmin: true
-      }).where(eq(users.id, userId));
-      console.log(`Promoted first user ${userId} to admin for school ${schoolId}`);
-      return true;
-    }
-    return false;
+  async getTeachersBySchool(schoolId) {
+    return await db.select().from(users).where(eq(users.schoolId, schoolId));
   }
-  async createUser(insertUser) {
-    const userWithDefaults = {
-      ...insertUser,
-      resetToken: null,
-      resetTokenExpiry: null,
-      // Ensure required fields have proper values, preserving explicit admin assignments
-      role: insertUser.role || "TEACHER",
-      status: insertUser.status || "active",
-      isAdmin: insertUser.isAdmin !== void 0 ? insertUser.isAdmin : false,
-      isFirstLogin: insertUser.isFirstLogin !== void 0 ? insertUser.isFirstLogin : false,
-      enableNotifications: insertUser.enableNotifications !== void 0 ? insertUser.enableNotifications : true
-    };
-    const [user] = await db.insert(users).values(userWithDefaults).returning();
-    return user;
+  async authenticateUser(email, password) {
+    const user = await this.getUserByEmail(email);
+    if (!user) return null;
+    const bcrypt2 = await import("bcryptjs");
+    const isValid = await bcrypt2.compare(password, user.password);
+    return isValid ? user : null;
+  }
+  async createUser(user) {
+    const [newUser] = await db.insert(users).values(user).returning();
+    return unwrap(newUser);
   }
   async updateUser(id, updates) {
-    const [user] = await db.update(users).set(updates).where(eq(users.id, id)).returning();
-    if (!user) throw new Error("User not found");
-    return user;
+    const [updatedUser] = await db.update(users).set({ ...updates, updatedAt: /* @__PURE__ */ new Date() }).where(eq(users.id, id)).returning();
+    return unwrap(updatedUser);
   }
   async deleteUser(id) {
     await db.delete(users).where(eq(users.id, id));
   }
-  // Schools
+  async getUserByResetToken(token) {
+    const result = await db.select().from(users).where(eq(users.resetToken, token)).limit(1);
+    return result[0];
+  }
+  async setPasswordResetToken(userId, token, expiry) {
+    await db.update(users).set({ resetToken: token, resetTokenExpiry: expiry }).where(eq(users.id, userId));
+  }
+  async clearPasswordResetToken(userId) {
+    await db.update(users).set({ resetToken: null, resetTokenExpiry: null }).where(eq(users.id, userId));
+  }
+  // School methods
   async getSchool(id) {
-    const [school] = await db.select().from(schools).where(eq(schools.id, id));
-    return school || void 0;
+    const result = await db.select().from(schools).where(eq(schools.id, id)).limit(1);
+    return result[0];
   }
   async getSchoolById(id) {
     return this.getSchool(id);
   }
   async getSchoolBySlug(slug) {
-    const [school] = await db.select().from(schools).where(eq(schools.slug, slug));
-    return school || void 0;
+    const result = await db.select().from(schools).where(eq(schools.slug, slug)).limit(1);
+    return result[0];
   }
   async getSchoolsByIds(ids) {
     if (ids.length === 0) return [];
-    const schoolList = await db.select().from(schools).where(
-      ids.length === 1 ? eq(schools.id, ids[0]) : eq(schools.id, ids[0])
-      // Simple implementation for now
-    );
-    return schoolList.filter((school) => ids.includes(school.id));
-  }
-  async createSchool(insertSchool) {
-    const [school] = await db.insert(schools).values(insertSchool).returning();
-    return school;
-  }
-  async updateSchool(id, updates) {
-    const [school] = await db.update(schools).set(updates).where(eq(schools.id, id)).returning();
-    if (!school) {
-      throw new Error("School not found");
-    }
-    return school;
-  }
-  async upgradeSchoolPlan(schoolId, newPlan, newMaxTeachers, newMaxStudents) {
-    console.log(`Upgrading school ${schoolId} to ${newPlan} plan`);
-    console.log(`New limits - Teachers: ${newMaxTeachers}, Students: ${newMaxStudents}`);
-    const updates = {
-      plan: newPlan,
-      maxTeachers: newMaxTeachers,
-      maxStudents: newMaxStudents,
-      // Remove trial-specific fields for paid plans
-      trialStartDate: newPlan === "free_trial" ? void 0 : null,
-      trialEndDate: newPlan === "free_trial" ? void 0 : null,
-      isTrialExpired: newPlan === "free_trial" ? void 0 : false
-    };
-    const [school] = await db.update(schools).set(updates).where(eq(schools.id, schoolId)).returning();
-    if (!school) throw new Error("School not found");
-    console.log(`School upgrade completed: ${school.name} is now on ${newPlan} plan`);
-    return school;
+    const results = await Promise.all(ids.map((id) => this.getSchool(id)));
+    return results.filter((school) => school !== void 0);
   }
   async getAllSchools() {
     return await db.select().from(schools);
   }
-  // Grades
+  async getActiveSchools() {
+    const now = /* @__PURE__ */ new Date();
+    return await db.select().from(schools).where(
+      and(
+        eq(schools.status, "active")
+        // Add subscription status checks here if needed
+      )
+    );
+  }
+  async createSchool(school) {
+    const [newSchool] = await db.insert(schools).values(school).returning();
+    return unwrap(newSchool);
+  }
+  async updateSchool(id, updates) {
+    const [updatedSchool] = await db.update(schools).set({ ...updates, updatedAt: /* @__PURE__ */ new Date() }).where(eq(schools.id, id)).returning();
+    return unwrap(updatedSchool);
+  }
+  async upgradeSchoolPlan(schoolId, newPlan, newMaxTeachers, newMaxStudents) {
+    return this.updateSchool(schoolId, {
+      plan: newPlan,
+      maxTeachers: newMaxTeachers,
+      maxStudents: newMaxStudents
+    });
+  }
+  async deleteSchool(id) {
+    await db.delete(schools).where(eq(schools.id, id));
+  }
+  async getTrialAccountByDomain(emailDomain) {
+    const result = await db.select().from(schools).where(eq(schools.emailDomain, emailDomain)).limit(1);
+    return result[0];
+  }
+  async getSchoolsByEmailDomain(domain) {
+    return await db.select().from(schools).where(eq(schools.emailDomain, domain));
+  }
+  async setSchoolVerificationToken(schoolId, token, expiry) {
+    await db.update(schools).set({ emailVerificationToken: token }).where(eq(schools.id, schoolId));
+  }
+  async verifySchoolEmail(token) {
+    const result = await db.select().from(schools).where(eq(schools.emailVerificationToken, token)).limit(1);
+    return result[0];
+  }
+  async checkAndPromoteFirstAdmin(schoolId, userId) {
+    const schoolUsers = await db.select().from(users).where(eq(users.schoolId, schoolId));
+    if (schoolUsers.length === 1) {
+      await db.update(users).set({ isAdmin: true, role: "admin" }).where(eq(users.id, userId));
+    }
+  }
+  // Grade methods
   async getGradesBySchool(schoolId) {
     return await db.select().from(grades).where(eq(grades.schoolId, schoolId));
   }
-  async createGrade(insertGrade) {
-    const [grade] = await db.insert(grades).values(insertGrade).returning();
-    return grade;
+  async getGrade(id) {
+    const result = await db.select().from(grades).where(eq(grades.id, id)).limit(1);
+    return result[0];
+  }
+  async createGrade(grade) {
+    const [newGrade] = await db.insert(grades).values(grade).returning();
+    return unwrap(newGrade);
   }
   async updateGrade(id, updates) {
-    const [grade] = await db.update(grades).set(updates).where(eq(grades.id, id)).returning();
-    if (!grade) throw new Error("Grade not found");
-    return grade;
+    const [updatedGrade] = await db.update(grades).set(updates).where(eq(grades.id, id)).returning();
+    return unwrap(updatedGrade);
   }
   async deleteGrade(id) {
     await db.delete(grades).where(eq(grades.id, id));
   }
-  // Students
+  // Student methods
   async getStudentsBySchool(schoolId, grade) {
     if (grade) {
-      return await db.select().from(students).where(and(eq(students.schoolId, schoolId), eq(students.grade, grade)));
+      return await db.select().from(students).where(
+        and(eq(students.schoolId, schoolId), eq(students.gradeId, grade))
+      );
     }
     return await db.select().from(students).where(eq(students.schoolId, schoolId));
   }
   async getStudent(id) {
-    const [student] = await db.select().from(students).where(eq(students.id, id));
-    return student || void 0;
+    const result = await db.select().from(students).where(eq(students.id, id)).limit(1);
+    return result[0];
   }
-  async createStudent(insertStudent) {
-    const [student] = await db.insert(students).values(insertStudent).returning();
-    return student;
+  async createStudent(student) {
+    const studentData = {
+      id: randomUUID(),
+      ...student,
+      createdAt: /* @__PURE__ */ new Date(),
+      updatedAt: /* @__PURE__ */ new Date(),
+      status: student.status || "active",
+      schoolId: student.schoolId || "",
+      email: student.email || null,
+      gradeId: student.gradeId || null,
+      studentId: student.studentId || null
+    };
+    const [newStudent] = await db.insert(students).values(studentData).returning();
+    return unwrap(newStudent);
   }
   async updateStudent(id, updates) {
-    const [student] = await db.update(students).set(updates).where(eq(students.id, id)).returning();
-    if (!student) throw new Error("Student not found");
-    return student;
+    const [updatedStudent] = await db.update(students).set({ ...updates, updatedAt: /* @__PURE__ */ new Date() }).where(eq(students.id, id)).returning();
+    return unwrap(updatedStudent);
   }
   async deleteStudent(id) {
     await db.delete(students).where(eq(students.id, id));
   }
-  // Passes
+  // Pass methods
   async getActivePassesBySchool(schoolId) {
     const result = await db.select({
       pass: passes,
-      student: students,
-      teacher: users,
-      grade: grades
-    }).from(passes).innerJoin(students, eq(passes.studentId, students.id)).innerJoin(users, eq(passes.teacherId, users.id)).leftJoin(grades, eq(students.gradeId, grades.id)).where(and(eq(passes.schoolId, schoolId), eq(passes.status, "active")));
+      student: students
+    }).from(passes).leftJoin(students, eq(passes.studentId, students.id)).where(and(eq(passes.schoolId, schoolId), eq(passes.status, "active")));
     return result.map((row) => ({
       ...row.pass,
-      student: {
-        ...row.student,
-        grade: row.grade?.name || void 0
-      },
-      teacher: row.teacher
+      student: unwrap(row.student)
     }));
   }
   async getActivePassesByTeacher(teacherId) {
     const result = await db.select({
       pass: passes,
       student: students
-    }).from(passes).innerJoin(students, eq(passes.studentId, students.id)).where(and(eq(passes.teacherId, teacherId), eq(passes.status, "active")));
+    }).from(passes).leftJoin(students, eq(passes.studentId, students.id)).where(and(eq(passes.teacherId, teacherId), eq(passes.status, "active")));
     return result.map((row) => ({
       ...row.pass,
-      studentName: `${row.student.firstName} ${row.student.lastName}`
+      studentName: `${row.student?.firstName} ${row.student?.lastName}` || "Unknown Student"
     }));
   }
   async getPassesBySchool(schoolId, filters) {
-    let query = db.select({
+    let whereConditions = eq(passes.schoolId, schoolId);
+    if (filters?.teacherId) {
+      whereConditions = and(whereConditions, eq(passes.teacherId, filters.teacherId));
+    }
+    const result = await db.select({
       pass: passes,
       student: students,
-      teacher: users,
-      grade: grades
-    }).from(passes).innerJoin(students, eq(passes.studentId, students.id)).innerJoin(users, eq(passes.teacherId, users.id)).leftJoin(grades, eq(students.gradeId, grades.id)).where(eq(passes.schoolId, schoolId));
-    const result = await query;
-    let filteredResult = result;
-    if (filters?.dateStart) {
-      filteredResult = filteredResult.filter(
-        (row) => row.pass.issuedAt && row.pass.issuedAt >= filters.dateStart
-      );
-    }
-    if (filters?.dateEnd) {
-      filteredResult = filteredResult.filter(
-        (row) => row.pass.issuedAt && row.pass.issuedAt <= filters.dateEnd
-      );
-    }
-    if (filters?.grade) {
-      filteredResult = filteredResult.filter((row) => row.grade?.name === filters.grade);
-    }
-    if (filters?.teacherId) {
-      filteredResult = filteredResult.filter((row) => row.pass.teacherId === filters.teacherId);
-    }
-    return filteredResult.map((row) => ({
+      teacher: users
+    }).from(passes).leftJoin(students, eq(passes.studentId, students.id)).leftJoin(users, eq(passes.teacherId, users.id)).where(whereConditions);
+    return result.map((row) => ({
       ...row.pass,
-      student: {
-        ...row.student,
-        grade: row.grade?.name || void 0
-      },
-      teacher: row.teacher
+      student: unwrap(row.student),
+      teacher: unwrap(row.teacher)
     }));
   }
-  async createPass(insertPass) {
-    const [pass] = await db.insert(passes).values(insertPass).returning();
-    return pass;
+  async createPass(pass) {
+    const now = /* @__PURE__ */ new Date();
+    const expiresAt = new Date(now.getTime() + 15 * 60 * 1e3);
+    const passData = {
+      id: randomUUID(),
+      schoolId: pass.schoolId || "",
+      studentId: pass.studentId,
+      teacherId: pass.teacherId || "",
+      destination: pass.destination || "General",
+      customDestination: pass.customReason || null,
+      duration: 15,
+      notes: null,
+      status: "active",
+      issuedAt: now,
+      expiresAt,
+      returnedAt: null,
+      passNumber: Math.floor(Math.random() * 1e4),
+      qrCode: null,
+      createdAt: now,
+      updatedAt: now
+    };
+    const [newPass] = await db.insert(passes).values(passData).returning();
+    return unwrap(newPass);
   }
   async updatePass(id, updates) {
-    if (updates.status === "returned") {
-      const [currentPass] = await db.select().from(passes).where(eq(passes.id, id));
-      if (!currentPass) throw new Error("Pass not found");
-      if (!currentPass.returnTime && currentPass.checkoutTime) {
-        updates.returnTime = /* @__PURE__ */ new Date();
-        updates.duration = Math.floor(
-          (updates.returnTime.getTime() - currentPass.checkoutTime.getTime()) / (1e3 * 60)
-        );
-      }
-    }
-    const [pass] = await db.update(passes).set(updates).where(eq(passes.id, id)).returning();
-    if (!pass) throw new Error("Pass not found");
-    return pass;
+    const allowedUpdates = {};
+    if (updates.status) allowedUpdates.status = updates.status;
+    if (updates.notes) allowedUpdates.notes = updates.notes;
+    if (updates.returnedAt) allowedUpdates.returnedAt = updates.returnedAt;
+    allowedUpdates.updatedAt = /* @__PURE__ */ new Date();
+    const [updatedPass] = await db.update(passes).set(allowedUpdates).where(eq(passes.id, id)).returning();
+    return unwrap(updatedPass);
   }
   async returnAllActivePasses(schoolId) {
-    const returnTime = /* @__PURE__ */ new Date();
-    const activePasses = await db.select().from(passes).where(and(eq(passes.schoolId, schoolId), eq(passes.status, "active")));
-    if (activePasses.length === 0) {
-      return 0;
-    }
-    const updatePromises = activePasses.map(async (pass) => {
-      const duration = pass.checkoutTime ? Math.floor((returnTime.getTime() - pass.checkoutTime.getTime()) / (1e3 * 60)) : null;
-      return db.update(passes).set({
-        status: "returned",
-        returnTime,
-        duration
-      }).where(eq(passes.id, pass.id));
-    });
+    const activePasses = await db.select().from(passes).where(
+      and(eq(passes.schoolId, schoolId), eq(passes.status, "active"))
+    );
+    const updatePromises = activePasses.map(
+      (pass) => this.updatePass(pass.id, { status: "returned", returnedAt: /* @__PURE__ */ new Date() })
+    );
     await Promise.all(updatePromises);
     return activePasses.length;
   }
-  // Password reset methods
-  async getUserByResetToken(token) {
-    const [user] = await db.select().from(users).where(eq(users.resetToken, token));
-    return user || void 0;
-  }
-  async setPasswordResetToken(userId, token, expiry) {
-    await db.update(users).set({
-      resetToken: token,
-      resetTokenExpiry: expiry
-    }).where(eq(users.id, userId));
-  }
-  async clearPasswordResetToken(userId) {
-    await db.update(users).set({
-      resetToken: null,
-      resetTokenExpiry: null
-    }).where(eq(users.id, userId));
-  }
   // Payment methods
-  async createPayment(insertPayment) {
-    const [payment] = await db.insert(payments).values(insertPayment).returning();
-    return payment;
+  async createPayment(payment) {
+    const [newPayment] = await db.insert(payments).values(payment).returning();
+    return unwrap(newPayment);
   }
   async getPaymentsBySchool(schoolId) {
     return await db.select().from(payments).where(eq(payments.schoolId, schoolId));
@@ -767,7 +713,7 @@ var storage = new DatabaseStorage();
 init_schema();
 init_env();
 import { z as z4 } from "zod";
-import { randomUUID } from "crypto";
+import { randomUUID as randomUUID2 } from "crypto";
 import bcrypt from "bcryptjs";
 
 // server/validate.ts
@@ -829,29 +775,6 @@ var validatePagination = validate({
   })
 });
 
-// server/safe.ts
-function invariant(condition, msg) {
-  if (!condition) {
-    console.error(`\u274C Invariant failed: ${msg}`);
-    throw new Error(msg);
-  }
-}
-function unwrap(v, msg = "Unexpected null") {
-  if (v == null) {
-    console.error(`\u274C Unwrap failed: ${msg} (received: ${v})`);
-    throw new Error(msg);
-  }
-  return v;
-}
-function assertValidUuid(id, msg = "Invalid UUID") {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  if (!id || !uuidRegex.test(id)) {
-    console.error(`\u274C UUID validation failed: ${msg} (received: ${id})`);
-    throw new Error(msg);
-  }
-  return id;
-}
-
 // server/api-response.ts
 function ok(data) {
   return {
@@ -909,7 +832,7 @@ var auth = {
     return bcrypt.compare(password, hash);
   },
   generateSessionToken() {
-    return randomUUID();
+    return randomUUID2();
   }
 };
 var sessions = /* @__PURE__ */ new Map();
@@ -1062,12 +985,15 @@ async function registerRoutes(app2) {
           });
         }
       }
-      const isValid = candidates.length > 0 && await auth.comparePassword(password, candidates[0].password);
+      const isValid = candidates.length > 0 && candidates[0] && await auth.comparePassword(password, candidates[0].password);
       if (!isValid) {
         return res.status(401).json({ error: "Invalid credentials" });
       }
       if (candidates.length === 1) {
         const user = candidates[0];
+        if (!user) {
+          return res.status(401).json({ error: "Invalid credentials" });
+        }
         await storage.checkAndPromoteFirstAdmin(user.schoolId, user.id);
         const updatedUser = await storage.getUser(user.id);
         const finalUser = updatedUser || user;
@@ -1337,8 +1263,13 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/passes/active", requireAuth, async (req, res) => {
     try {
+      const authReq = req;
       const { teacherId } = req.query;
-      const { schoolId } = req.user;
+      const user = await storage.getUser(authReq.user.id);
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      const schoolId = user.schoolId;
       if (teacherId) {
         const allPasses = await storage.getActivePassesBySchool(schoolId);
         const teacherPasses = allPasses.filter((pass) => pass.teacherId === teacherId);
@@ -1355,7 +1286,11 @@ async function registerRoutes(app2) {
   app2.post("/api/passes", requireAuth, validate({ body: insertPassSchema }), async (req, res) => {
     try {
       const authReq = req;
-      const { schoolId } = authReq.user;
+      const user = await storage.getUser(authReq.user.id);
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      const schoolId = user.schoolId;
       let destination = req.valid.body.destination;
       if (!destination) {
         const passType = req.valid.body.passType || "general";
