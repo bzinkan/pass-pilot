@@ -549,6 +549,14 @@ export default function Kiosk() {
               <div className="space-y-3">
                 {activePasses
                   .filter(pass => pass.status === 'active' && filteredStudents.some(s => s.id === pass.studentId))
+                  .sort((a, b) => {
+                    // Sort passes by student last name (same logic as MyClass)
+                    const studentA = filteredStudents.find(s => s.id === a.studentId);
+                    const studentB = filteredStudents.find(s => s.id === b.studentId);
+                    const lastNameA = (studentA?.lastName || '').toLowerCase();
+                    const lastNameB = (studentB?.lastName || '').toLowerCase();
+                    return lastNameA.localeCompare(lastNameB);
+                  })
                   .map((pass) => {
                     const student = filteredStudents.find(s => s.id === pass.studentId) || pass.student;
                     if (!student) return null;
