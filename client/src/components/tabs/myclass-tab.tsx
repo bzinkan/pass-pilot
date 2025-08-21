@@ -415,7 +415,7 @@ export function MyClassTab({ user, selectedGrades = new Set(), currentGrade, onR
                               <p className="font-medium">{student.firstName} {student.lastName}</p>
                               <span className={`px-2 py-1 text-xs rounded-full border flex items-center gap-1 ${getPassTypeBadgeColor(pass.passType || 'general')}`}>
                                 {getPassTypeIcon(pass.passType || 'general')}
-                                {getPassTypeLabel(pass.passType || 'general')}
+                                {pass.destination || getPassTypeLabel(pass.passType || 'general')}
                               </span>
                             </div>
                             <p className="text-sm text-muted-foreground">
