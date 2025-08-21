@@ -56,7 +56,7 @@ export default function Kiosk() {
   const [session, setSession] = useState<KioskSession | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [activePasses, setActivePasses] = useState<Pass[]>([]);
-  const [passType, setPassType] = useState<"general" | "nurse" | "discipline">("general");
+  const [passType, setPassType] = useState<"general" | "nurse" | "office" | "custom">("general");
   const [customReason, setCustomReason] = useState("");
   const [exitPin, setExitPin] = useState("");
   const [showExitForm, setShowExitForm] = useState(false);
@@ -216,8 +216,10 @@ export default function Kiosk() {
         reason = "Bathroom";
       } else if (passType === "nurse" && !customReason) {
         reason = "Nurse visit";
-      } else if (passType === "discipline" && !customReason) {
-        reason = "Discipline";
+      } else if (passType === "office" && !customReason) {
+        reason = "Main Office";
+      } else if (passType === "custom") {
+        reason = customReason || "Other";
       }
       
       // Use the same apiRequest method as MyClass tab for consistency
@@ -665,20 +667,23 @@ export default function Kiosk() {
             
             <div className="space-y-2">
               <Label htmlFor="pass-type">Pass Type</Label>
-              <Select value={passType} onValueChange={(value: "general" | "nurse" | "discipline") => setPassType(value)}>
+              <Select value={passType} onValueChange={(value: "general" | "nurse" | "office" | "custom") => setPassType(value)}>
                 <SelectTrigger id="pass-type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="general">General (Bathroom, Water, etc.)</SelectItem>
                   <SelectItem value="nurse">Nurse</SelectItem>
-                  <SelectItem value="discipline">Discipline</SelectItem>
+                  <SelectItem value="office">Main Office</SelectItem>
+                  <SelectItem value="custom">Custom Reason</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="custom-reason">Custom Reason (Optional)</Label>
+              <Label htmlFor="custom-reason">
+                {passType === "custom" ? "Custom Reason (Required)" : "Custom Reason (Optional)"}
+              </Label>
               <Input
                 id="custom-reason"
                 value={customReason}
@@ -686,7 +691,8 @@ export default function Kiosk() {
                 placeholder={
                   passType === "general" ? "Bathroom, Water fountain, etc." :
                   passType === "nurse" ? "Nurse visit" :
-                  "Discipline office"
+                  passType === "office" ? "Main Office visit" :
+                  "Enter custom reason"
                 }
                 data-testid="input-custom-reason"
               />
@@ -695,6 +701,7 @@ export default function Kiosk() {
             <div className="flex gap-2">
               <Button
                 onClick={createPassForStudent}
+                disabled={!selectedStudent || (passType === "custom" && !customReason.trim())}
                 className="flex-1"
                 data-testid="button-create-pass"
               >
