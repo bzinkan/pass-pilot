@@ -209,8 +209,15 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
                         <h3 className="font-medium text-foreground" data-testid={`student-name-${pass.id}`}>
                           {pass.student?.firstName} {pass.student?.lastName}
                         </h3>
-                        {getPassTypeBadge(pass.destination?.toLowerCase().includes('nurse') ? 'nurse' : 
-                          pass.destination?.toLowerCase().includes('discipline') || pass.destination?.toLowerCase().includes('office') ? 'discipline' : 'general')}
+                        {/* Show custom destination or default badge */}
+                        {pass.customDestination ? (
+                          <Badge variant="outline" className="bg-purple-50 text-purple-600 border-purple-200">
+                            {pass.customDestination}
+                          </Badge>
+                        ) : (
+                          getPassTypeBadge(pass.destination?.toLowerCase().includes('nurse') ? 'nurse' : 
+                            pass.destination?.toLowerCase().includes('discipline') || pass.destination?.toLowerCase().includes('office') ? 'discipline' : 'general')
+                        )}
                       </div>
                       <p className="text-sm text-muted-foreground">
                         Grade <span data-testid={`student-grade-${pass.id}`}>{pass.student?.grade}</span> • 

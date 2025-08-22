@@ -361,18 +361,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Pass methods
-  async getActivePassesBySchool(schoolId: string): Promise<(Pass & { student: Student })[]> {
+  async getActivePassesBySchool(schoolId: string): Promise<(Pass & { student: Student; teacher: User })[]> {
     const result = await db.select({
       pass: passes,
-      student: students
+      student: students,
+      teacher: users
     })
     .from(passes)
     .leftJoin(students, eq(passes.studentId, students.id))
+    .leftJoin(users, eq(passes.teacherId, users.id))
     .where(and(eq(passes.schoolId, schoolId), eq(passes.status, "active")));
 
     return result.map(row => ({
       ...row.pass,
-      student: unwrap(row.student)
+      student: unwrap(row.student),
+      teacher: unwrap(row.teacher)
     }));
   }
 
