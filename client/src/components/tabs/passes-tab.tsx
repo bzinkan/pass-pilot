@@ -110,16 +110,24 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
     return colors[index];
   };
 
-  const getPassTypeBadge = (passType: string) => {
-    switch (passType) {
-      case 'nurse':
-        return <Badge variant="outline" className="bg-red-50 text-red-600 border-red-200">Nurse</Badge>;
-      case 'discipline':
-        return <Badge variant="outline" className="bg-orange-50 text-orange-600 border-orange-200">Discipline</Badge>;
-      case 'general':
-      default:
-        return <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-200">General</Badge>;
+  const getDestinationBadge = (pass: any) => {
+    // Check for custom destination first
+    if (pass.customDestination) {
+      return <Badge variant="outline" className="bg-purple-50 text-purple-600 border-purple-200">{pass.customDestination}</Badge>;
     }
+    
+    // Check destination string for specific locations
+    const destination = (pass.destination || '').toLowerCase();
+    if (destination.includes('nurse')) {
+      return <Badge variant="outline" className="bg-red-50 text-red-600 border-red-200">Nurse</Badge>;
+    } else if (destination.includes('main office') || destination.includes('office')) {
+      return <Badge variant="outline" className="bg-yellow-50 text-yellow-600 border-yellow-200">Main Office</Badge>;
+    } else if (destination.includes('discipline')) {
+      return <Badge variant="outline" className="bg-orange-50 text-orange-600 border-orange-200">Discipline</Badge>;
+    }
+    
+    // Default fallback
+    return <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-200">General</Badge>;
   };
 
   // Safe filtering - filter passes based on selected type (grade filtering disabled for simplicity)
@@ -209,15 +217,7 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
                         <h3 className="font-medium text-foreground" data-testid={`student-name-${pass.id}`}>
                           {pass.student?.firstName} {pass.student?.lastName}
                         </h3>
-                        {/* Show custom destination or default badge */}
-                        {pass.customDestination ? (
-                          <Badge variant="outline" className="bg-purple-50 text-purple-600 border-purple-200">
-                            {pass.customDestination}
-                          </Badge>
-                        ) : (
-                          getPassTypeBadge(pass.destination?.toLowerCase().includes('nurse') ? 'nurse' : 
-                            pass.destination?.toLowerCase().includes('discipline') || pass.destination?.toLowerCase().includes('office') ? 'discipline' : 'general')
-                        )}
+                        {getDestinationBadge(pass)}
                       </div>
                       <p className="text-sm text-muted-foreground">
                         Grade <span data-testid={`student-grade-${pass.id}`}>{pass.student?.grade}</span> • 

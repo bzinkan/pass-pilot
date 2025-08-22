@@ -214,6 +214,7 @@ export function ReportsTab({ user }: ReportsTabProps) {
         action: pass.status === 'returned' 
           ? `Returned after ${calculatedDuration !== null ? calculatedDuration : (pass.duration || 0)} minutes`
           : `Checked out${pass.customDestination ? ` - ${pass.customDestination}` : (pass.destination ? ` to ${pass.destination}` : '')}`,
+        destination: pass.destination,
         time: new Date(pass.issuedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
         date: 'Today',
         passType: pass.passType || 'general',
@@ -462,21 +463,36 @@ export function ReportsTab({ user }: ReportsTabProps) {
                       <div className="flex-1">
                         <div className="flex items-center space-x-2">
                           <p className="text-sm font-medium text-foreground">{activity.studentName}</p>
-                          {/* Show custom destination or pass type badge */}
-                          {activity.customDestination ? (
-                            <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-700">
-                              {activity.customDestination}
-                            </span>
-                          ) : (
-                            <span className={`px-2 py-1 text-xs rounded-full ${
-                              activity.passType === 'nurse' ? 'bg-red-100 text-red-700' :
-                              activity.passType === 'discipline' ? 'bg-orange-100 text-orange-700' :
-                              'bg-blue-100 text-blue-700'
-                            }`}>
-                              {activity.passType === 'nurse' ? 'Nurse' : 
-                               activity.passType === 'discipline' ? 'Discipline' : 'General'}
-                            </span>
-                          )}
+                          {/* Show destination badge with proper colors */}
+                          {(() => {
+                            // Get the destination to display
+                            const destination = activity.customDestination || activity.destination || '';
+                            const lowerDest = destination.toLowerCase();
+                            
+                            // Determine badge color and text based on destination
+                            let badgeClass = 'bg-blue-100 text-blue-700'; // default
+                            let displayText = 'General';
+                            
+                            if (activity.customDestination) {
+                              badgeClass = 'bg-purple-100 text-purple-700';
+                              displayText = activity.customDestination;
+                            } else if (lowerDest.includes('nurse')) {
+                              badgeClass = 'bg-red-100 text-red-700';
+                              displayText = 'Nurse';
+                            } else if (lowerDest.includes('main office') || lowerDest.includes('office')) {
+                              badgeClass = 'bg-yellow-100 text-yellow-700';
+                              displayText = 'Main Office';
+                            } else if (lowerDest.includes('discipline')) {
+                              badgeClass = 'bg-orange-100 text-orange-700';
+                              displayText = 'Discipline';
+                            }
+                            
+                            return (
+                              <span className={`px-2 py-1 text-xs rounded-full ${badgeClass}`}>
+                                {displayText}
+                              </span>
+                            );
+                          })()}
                         </div>
                         <p className="text-xs text-muted-foreground">{activity.action}</p>
                       </div>
