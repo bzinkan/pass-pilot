@@ -2,7 +2,7 @@ import { type User, type InsertUser, type School, type InsertSchool, type Grade,
 import { randomUUID } from "crypto";
 import { db } from "./db";
 import { users, schools, grades, students, passes, payments } from "@shared/schema";
-import { eq, and, lt } from "drizzle-orm";
+import { eq, and, lt, gte, lte } from "drizzle-orm";
 import { unwrap } from "./safe";
 
 export interface IStorage {
@@ -406,16 +406,34 @@ export class DatabaseStorage implements IStorage {
     if (filters?.teacherId) {
       whereConditions = and(whereConditions, eq(passes.teacherId, filters.teacherId)) as any;
     }
+    
+    // Apply date filters
+    if (filters?.dateStart) {
+      whereConditions = and(whereConditions, gte(passes.issuedAt, filters.dateStart)) as any;
+    }
+    
+    if (filters?.dateEnd) {
+      whereConditions = and(whereConditions, lte(passes.issuedAt, filters.dateEnd)) as any;
+    }
 
-    const result = await db.select({
+    // Join with grades table if grade filter is needed
+    let query = db.select({
       pass: passes,
       student: students,
-      teacher: users
+      teacher: users,
+      grade: grades
     })
     .from(passes)
     .leftJoin(students, eq(passes.studentId, students.id))
     .leftJoin(users, eq(passes.teacherId, users.id))
-    .where(whereConditions);
+    .leftJoin(grades, eq(students.gradeId, grades.id));
+
+    // Apply grade filter
+    if (filters?.grade) {
+      whereConditions = and(whereConditions, eq(grades.name, filters.grade)) as any;
+    }
+
+    const result = await query.where(whereConditions);
 
     return result.map(row => ({
       ...row.pass,
