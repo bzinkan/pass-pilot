@@ -37,11 +37,15 @@ export function ReportsTab({ user }: ReportsTabProps) {
     return Math.max(0, diffMinutes);
   };
 
-  const { data: passes = [], refetch } = useQuery<any[]>({
-    queryKey: ['/api/passes', filters],
+  const { data: passes = [], refetch, isLoading } = useQuery<any[]>({
+    queryKey: ['/api/passes', filters, customDateRange],
     refetchInterval: 3000, // Refresh every 3 seconds
     queryFn: async () => {
       const params = new URLSearchParams();
+      
+      // Add cache buster to prevent mobile caching issues
+      params.append('t', Date.now().toString());
+      
       if (filters.dateRange && filters.dateRange !== 'all') {
         const now = new Date();
         let dateStart = new Date();
@@ -85,8 +89,10 @@ export function ReportsTab({ user }: ReportsTabProps) {
       const url = `/api/passes${params.toString() ? '?' + params.toString() : ''}`;
       const response = await apiRequest('GET', url);
       const data = await response.json();
+      console.log('Reports filter applied:', { filters, customDateRange, resultCount: data?.length });
       return Array.isArray(data) ? data : [];
     },
+    gcTime: 0, // Don't cache results to ensure fresh data on mobile
   });
 
   const { data: grades = [] } = useQuery<any[]>({
@@ -104,10 +110,12 @@ export function ReportsTab({ user }: ReportsTabProps) {
     : grades.filter(grade => teacherAssignedGrades.includes(grade.name));
 
   const handleApplyFilters = () => {
+    // Force a fresh fetch by manually calling refetch
     refetch();
+    console.log('Applying filters:', filters);
     toast({
       title: "Filters Applied",
-      description: "Report data has been updated based on your filters.",
+      description: `Report data updated. Showing results for: ${filters.dateRange}${filters.passType !== 'all' ? `, ${filters.passType} passes` : ''}`,
     });
   };
 
@@ -233,12 +241,15 @@ export function ReportsTab({ user }: ReportsTabProps) {
       <Card className="mb-6">
         <CardContent className="p-4">
           <h3 className="font-medium text-foreground mb-4">Filters</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             <div>
               <Label htmlFor="dateRange">Date Range</Label>
               <Select 
                 value={filters.dateRange} 
-                onValueChange={(value) => setFilters({ ...filters, dateRange: value })}
+                onValueChange={(value) => {
+                  console.log('Date range changed:', value);
+                  setFilters({ ...filters, dateRange: value });
+                }}
               >
                 <SelectTrigger data-testid="select-date-range">
                   <SelectValue placeholder="Select date range" />
@@ -318,7 +329,10 @@ export function ReportsTab({ user }: ReportsTabProps) {
               <Label htmlFor="passTypeFilter">Pass Type</Label>
               <Select 
                 value={filters.passType} 
-                onValueChange={(value) => setFilters({ ...filters, passType: value })}
+                onValueChange={(value) => {
+                  console.log('Pass type changed:', value);
+                  setFilters({ ...filters, passType: value });
+                }}
               >
                 <SelectTrigger data-testid="select-pass-type-filter">
                   <SelectValue placeholder="All Types" />
@@ -336,8 +350,9 @@ export function ReportsTab({ user }: ReportsTabProps) {
                 onClick={handleApplyFilters}
                 className="w-full"
                 data-testid="button-apply-filters"
+                disabled={isLoading}
               >
-                Apply Filters
+                {isLoading ? 'Loading...' : 'Apply Filters'}
               </Button>
             </div>
           </div>
