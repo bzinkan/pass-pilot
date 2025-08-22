@@ -4,9 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { Trash2, AlertTriangle } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 interface ReportsTabProps {
   user: any;
@@ -14,6 +16,7 @@ interface ReportsTabProps {
 
 export function ReportsTab({ user }: ReportsTabProps) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [filters, setFilters] = useState({
     dateRange: 'today',
     grade: 'all',
@@ -100,6 +103,32 @@ export function ReportsTab({ user }: ReportsTabProps) {
     console.log('Filters changed, triggering refetch:', filters);
     refetch();
   }, [filters, customDateRange, refetch]);
+
+  // Delete pass mutation
+  const deletePassMutation = useMutation({
+    mutationFn: async (passId: string) => {
+      const response = await apiRequest('DELETE', `/api/passes/${passId}`);
+      if (!response.ok) {
+        throw new Error('Failed to delete pass');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/passes'] });
+      toast({
+        title: "Pass Deleted",
+        description: "The pass record has been removed from the system and reports.",
+      });
+    },
+    onError: (error) => {
+      console.error('Delete pass error:', error);
+      toast({
+        title: "Delete Failed",
+        description: "Failed to delete the pass record. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
 
   const { data: grades = [] } = useQuery<any[]>({
     queryKey: ['/api/grades'],
@@ -524,9 +553,48 @@ export function ReportsTab({ user }: ReportsTabProps) {
                         <p className="text-xs text-muted-foreground">{activity.action}</p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-xs text-muted-foreground">{activity.time}</p>
-                      <p className="text-xs text-muted-foreground">{activity.date}</p>
+                    <div className="flex items-center space-x-2">
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground">{activity.time}</p>
+                        <p className="text-xs text-muted-foreground">{activity.date}</p>
+                      </div>
+                      {/* Delete button with confirmation */}
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                            data-testid={`button-delete-pass-${activity.id}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center space-x-2">
+                              <AlertTriangle className="h-5 w-5 text-destructive" />
+                              <span>Delete Pass Record</span>
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to delete this pass record for <strong>{activity.studentName}</strong>? 
+                              This will permanently remove it from all reports and cannot be undone.
+                              <br /><br />
+                              <em>This is useful for correcting mistakes when the wrong student was accidentally marked out.</em>
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => deletePassMutation.mutate(activity.id)}
+                              className="bg-destructive hover:bg-destructive/90"
+                              disabled={deletePassMutation.isPending}
+                            >
+                              {deletePassMutation.isPending ? 'Deleting...' : 'Delete Pass'}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   </div>
                 </div>

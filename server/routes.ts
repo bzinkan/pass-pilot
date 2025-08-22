@@ -685,6 +685,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete pass endpoint (for correcting mistakes)
+  app.delete('/api/passes/:id', requireAuth, async (req, res) => {
+    try {
+      const authReq = req as AuthenticatedRequest;
+      const passId = req.params.id;
+      
+      if (!passId) {
+        return res.status(400).json({ message: 'Pass ID is required' });
+      }
+
+      // Verify the pass exists and belongs to the user's school
+      const pass = await storage.getPassById(passId);
+      if (!pass) {
+        return res.status(404).json({ message: 'Pass not found' });
+      }
+
+      // Verify school ownership for security
+      if (pass.schoolId !== authReq.user.schoolId) {
+        return res.status(403).json({ message: 'Unauthorized to delete this pass' });
+      }
+
+      // Delete the pass
+      await storage.deletePass(passId);
+      
+      res.json({ 
+        message: 'Pass deleted successfully',
+        passId: passId 
+      });
+    } catch (error) {
+      console.error('Delete pass error:', error);
+      res.status(500).json({ message: 'Failed to delete pass' });
+    }
+  });
+
   // Payments endpoints
   app.get('/api/payments/:schoolId', requireAuth, async (req, res) => {
     try {

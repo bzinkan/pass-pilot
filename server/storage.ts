@@ -61,8 +61,10 @@ export interface IStorage {
     grade?: string; 
     teacherId?: string; 
   }): Promise<(Pass & { student: Student; teacher: User })[]>;
+  getPassById(id: string): Promise<Pass | undefined>;
   createPass(pass: InsertPass): Promise<Pass>;
   updatePass(id: string, updates: Partial<Pass>): Promise<Pass>;
+  deletePass(id: string): Promise<void>;
   returnAllActivePasses(schoolId: string): Promise<number>;
   
   // Payments
@@ -483,6 +485,19 @@ export class DatabaseStorage implements IStorage {
       .where(eq(passes.id, id))
       .returning();
     return unwrap(updatedPass);
+  }
+
+  async getPassById(id: string): Promise<Pass | undefined> {
+    const [pass] = await db.select()
+      .from(passes)
+      .where(eq(passes.id, id))
+      .limit(1);
+    
+    return pass || undefined;
+  }
+
+  async deletePass(id: string): Promise<void> {
+    await db.delete(passes).where(eq(passes.id, id));
   }
 
   async returnAllActivePasses(schoolId: string): Promise<number> {
