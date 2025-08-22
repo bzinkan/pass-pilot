@@ -122,17 +122,9 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
     }
   };
 
-  // Debug logging to see what data we're getting
-  console.log('Passes data:', passes);
-  console.log('Filter type:', filterType);
-  console.log('Selected grades:', selectedGrades);
-  console.log('Selected grades contents:', Array.from(selectedGrades));
-
-  // Safe filtering - filter passes based on selected type and optionally by selected grades
+  // Safe filtering - filter passes based on selected type (grade filtering disabled for simplicity)
   const filteredPasses = safeMap(passes, (pass: any) => pass).filter((pass: any) => {
-    console.log('Processing pass:', pass);
-    
-    // First filter by pass type - map destination to pass type
+    // Filter by pass type - map destination to pass type
     let passType = 'general'; // default
     if (pass.destination?.toLowerCase().includes('nurse')) {
       passType = 'nurse';
@@ -140,27 +132,13 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
       passType = 'discipline';
     }
     
-    console.log('Pass destination:', pass.destination, 'mapped to type:', passType);
-    
     const typeMatch = filterType === "all" || passType === filterType;
     
-    // TEMPORARY: Show all passes regardless of grade to debug the issue
-    // If no grades are selected, show all passes. If grades are selected, filter by them.
-    // Check both grade name and grade ID since the data structure might vary
-    const studentGradeId = pass.student?.gradeId;
-    const studentGradeName = pass.student?.grade;
-    const gradeMatch = true; // selectedGrades.size === 0 || 
-                      // selectedGrades.has(studentGradeId) || 
-                      // selectedGrades.has(studentGradeName);
-    
-    console.log('Student grade ID:', studentGradeId, 'Student grade name:', studentGradeName);
-    console.log('Selected grades has gradeId?', selectedGrades.has(studentGradeId), 'has gradeName?', selectedGrades.has(studentGradeName));
-    console.log('Type match:', typeMatch, 'Grade match:', gradeMatch);
+    // Show all passes regardless of grade selection for simplicity
+    const gradeMatch = true;
     
     return typeMatch && gradeMatch;
   });
-
-  console.log('Filtered passes count:', filteredPasses.length);
 
   return (
     <div className="p-4">
@@ -180,16 +158,9 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
             <div className="text-sm text-muted-foreground">
               Showing {filteredPasses.length} of {passes.length} passes
             </div>
-            {selectedGrades.size > 0 && (
-              <div className="text-xs text-blue-600 font-medium">
-                Viewing grades: {Array.from(selectedGrades).sort().join(', ')}
-              </div>
-            )}
-            {selectedGrades.size === 0 && (
-              <div className="text-xs text-blue-600 font-medium">
-                Showing all school passes
-              </div>
-            )}
+            <div className="text-xs text-blue-600 font-medium">
+              Showing all school passes
+            </div>
           </div>
         </div>
         

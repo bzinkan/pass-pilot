@@ -52,6 +52,7 @@ Preferred communication style: Simple, everyday language.
 - **Student Alphabetical Sorting**: MyClass tab displays students in alphabetical order by last name for both available and checked-out students, improving teacher workflow and student location.
 - **Session Management Fix**: Fixed critical session timeout mismatch that caused random logouts. Server-side sessions now properly expire after 7 days to match cookie expiration, with automatic session renewal on activity.
 - **Smart Search Feature**: Added intelligent search bar to MyClass tab for quick student lookup in large classrooms. Filters both available and checked-out students by first name, last name, or full name with real-time results.
+- **Passes Tab Functionality Restored**: Fixed critical issue where Passes tab wasn't displaying active students due to data structure mismatch between destination field and pass type filtering. Simplified grade filtering for better reliability while maintaining pass type filtering functionality.
 
 ## External Dependencies
 
