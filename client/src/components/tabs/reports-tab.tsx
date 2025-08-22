@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -38,7 +38,7 @@ export function ReportsTab({ user }: ReportsTabProps) {
   };
 
   const { data: passes = [], refetch, isLoading } = useQuery<any[]>({
-    queryKey: ['/api/passes', filters, customDateRange],
+    queryKey: ['/api/passes', JSON.stringify(filters), JSON.stringify(customDateRange)], // Ensure deep comparison
     refetchInterval: 3000, // Refresh every 3 seconds
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -89,11 +89,17 @@ export function ReportsTab({ user }: ReportsTabProps) {
       const url = `/api/passes${params.toString() ? '?' + params.toString() : ''}`;
       const response = await apiRequest('GET', url);
       const data = await response.json();
-      console.log('Reports filter applied:', { filters, customDateRange, resultCount: data?.length });
+      console.log('Reports filter applied:', { filters, customDateRange, resultCount: data?.length, url });
       return Array.isArray(data) ? data : [];
     },
     gcTime: 0, // Don't cache results to ensure fresh data on mobile
   });
+
+  // Auto-refetch when filters change (especially important for mobile PWA)
+  useEffect(() => {
+    console.log('Filters changed, triggering refetch:', filters);
+    refetch();
+  }, [filters, customDateRange, refetch]);
 
   const { data: grades = [] } = useQuery<any[]>({
     queryKey: ['/api/grades'],
@@ -112,7 +118,7 @@ export function ReportsTab({ user }: ReportsTabProps) {
   const handleApplyFilters = () => {
     // Force a fresh fetch by manually calling refetch
     refetch();
-    console.log('Applying filters:', filters);
+    console.log('Manual filter apply clicked:', filters);
     toast({
       title: "Filters Applied",
       description: `Report data updated. Showing results for: ${filters.dateRange}${filters.passType !== 'all' ? `, ${filters.passType} passes` : ''}`,
@@ -293,7 +299,10 @@ export function ReportsTab({ user }: ReportsTabProps) {
               <Label htmlFor="gradeFilter">Grade</Label>
               <Select 
                 value={filters.grade} 
-                onValueChange={(value) => setFilters({ ...filters, grade: value })}
+                onValueChange={(value) => {
+                  console.log('Grade changed:', value);
+                  setFilters({ ...filters, grade: value });
+                }}
               >
                 <SelectTrigger data-testid="select-grade-filter">
                   <SelectValue placeholder="All Grades" />
@@ -310,7 +319,10 @@ export function ReportsTab({ user }: ReportsTabProps) {
               <Label htmlFor="teacherFilter">Teacher</Label>
               <Select 
                 value={filters.teacher} 
-                onValueChange={(value) => setFilters({ ...filters, teacher: value })}
+                onValueChange={(value) => {
+                  console.log('Teacher changed:', value);
+                  setFilters({ ...filters, teacher: value });
+                }}
               >
                 <SelectTrigger data-testid="select-teacher-filter">
                   <SelectValue placeholder="All Teachers" />
