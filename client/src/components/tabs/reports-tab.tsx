@@ -184,11 +184,16 @@ export function ReportsTab({ user }: ReportsTabProps) {
       ];
     });
 
-    const csvContent = [csvHeaders, ...csvRows]
-      .map(row => row.map(field => `"${field}"`).join(","))
-      .join("\n");
+    // Add BOM for proper Excel UTF-8 handling and use Excel-compatible format
+    const BOM = '\uFEFF';
+    const csvContent = BOM + [csvHeaders, ...csvRows]
+      .map(row => row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(","))
+      .join("\r\n");
 
-    const blob = new Blob([csvContent], { type: "text/csv" });
+    // Use Excel-compatible MIME type for better direct opening
+    const blob = new Blob([csvContent], { 
+      type: "application/vnd.ms-excel;charset=utf-8;" 
+    });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -200,15 +205,109 @@ export function ReportsTab({ user }: ReportsTabProps) {
 
     toast({
       title: "Export Complete",
-      description: "Pass report has been downloaded as CSV.",
+      description: "Pass report has been downloaded and should open directly in Excel.",
     });
   };
 
-  const handleExportPDF = () => {
-    toast({
-      title: "Exporting PDF",
-      description: "Your report is being exported as PDF...",
-    });
+  const handleExportPDF = async () => {
+    if (!passes || passes.length === 0) {
+      toast({
+        title: "No Data",
+        description: "No pass data available to export. Apply filters first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Dynamic import to avoid bundling issues
+      const jsPDF = (await import('jspdf')).default;
+      const autoTable = (await import('jspdf-autotable')).default;
+
+      const doc = new jsPDF();
+      
+      // Add title
+      doc.setFontSize(18);
+      doc.text('Hall Pass Report', 14, 22);
+      
+      // Add date range and filters info
+      doc.setFontSize(12);
+      const today = new Date().toLocaleDateString();
+      doc.text(`Generated: ${today}`, 14, 35);
+      doc.text(`Filter: ${filters.dateRange} | Grade: ${filters.grade} | Teacher: ${filters.teacher}`, 14, 45);
+      
+      // Prepare table data
+      const tableHeaders = ['Student Name', 'Grade', 'Teacher', 'Pass Type', 'Destination', 'Checkout Time', 'Return Time', 'Duration'];
+      const tableRows = passes.map((pass: any) => {
+        const isReturned = pass.returnedAt || pass.status === 'returned';
+        const calculatedDuration = isReturned ? calculateDuration(pass.issuedAt, pass.returnedAt) : null;
+        const displayDuration = calculatedDuration !== null ? `${calculatedDuration} min` : "Still Out";
+        
+        return [
+          `${pass.student?.firstName} ${pass.student?.lastName}` || "Unknown",
+          pass.student?.grade || "Unknown",
+          `${pass.teacher?.firstName} ${pass.teacher?.lastName}` || "Unknown",
+          pass.passType === 'nurse' ? 'Nurse' : 
+          pass.passType === 'discipline' ? 'Discipline' : 'General',
+          pass.customDestination || pass.destination || 'General',
+          new Date(pass.issuedAt).toLocaleString([], { 
+            month: 'short', day: 'numeric', 
+            hour: '2-digit', minute: '2-digit' 
+          }),
+          isReturned ? new Date(pass.returnedAt || pass.issuedAt).toLocaleString([], { 
+            month: 'short', day: 'numeric', 
+            hour: '2-digit', minute: '2-digit' 
+          }) : "Still Out",
+          displayDuration
+        ];
+      });
+
+      // Add table using autoTable plugin
+      (doc as any).autoTable({
+        head: [tableHeaders],
+        body: tableRows,
+        startY: 55,
+        theme: 'striped',
+        headStyles: { fillColor: [66, 139, 202] },
+        styles: { fontSize: 8, cellPadding: 2 },
+        columnStyles: {
+          0: { cellWidth: 25 }, // Student Name
+          1: { cellWidth: 15 }, // Grade  
+          2: { cellWidth: 25 }, // Teacher
+          3: { cellWidth: 20 }, // Pass Type
+          4: { cellWidth: 20 }, // Destination
+          5: { cellWidth: 25 }, // Checkout Time
+          6: { cellWidth: 25 }, // Return Time
+          7: { cellWidth: 15 }, // Duration
+        },
+      });
+
+      // Add summary stats at the bottom
+      const finalY = (doc as any).lastAutoTable.finalY + 20;
+      doc.setFontSize(12);
+      doc.text('Summary Statistics:', 14, finalY);
+      doc.setFontSize(10);
+      doc.text(`Total Passes: ${stats.totalPasses}`, 14, finalY + 10);
+      doc.text(`Average Duration: ${stats.avgDuration} minutes`, 14, finalY + 20);
+      doc.text(`Peak Hour: ${stats.peakHour}`, 14, finalY + 30);
+      doc.text(`Unique Students: ${stats.uniqueStudents}`, 14, finalY + 40);
+
+      // Save the PDF
+      const fileName = `pass-report-${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(fileName);
+
+      toast({
+        title: "PDF Export Complete",
+        description: "Pass report has been downloaded as PDF.",
+      });
+    } catch (error) {
+      console.error('PDF Export Error:', error);
+      toast({
+        title: "Export Failed",
+        description: "Failed to generate PDF report. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   // Calculate real statistics from pass data
