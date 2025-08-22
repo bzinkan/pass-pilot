@@ -54,6 +54,7 @@ Preferred communication style: Simple, everyday language.
 - **Smart Search Feature**: Added intelligent search bar to MyClass tab for quick student lookup in large classrooms. Filters both available and checked-out students by first name, last name, or full name with real-time results.
 - **Passes Tab Functionality Restored**: Fixed critical issue where Passes tab wasn't displaying active students due to data structure mismatch between destination field and pass type filtering. Simplified grade filtering for better reliability while maintaining pass type filtering functionality.
 - **Enhanced Destination Display**: Implemented color-coded destination badges across Passes and Reports tabs. Custom destinations (purple), Nurse destinations (red), Main Office (yellow), Discipline (orange), with fallback to General (blue). Teacher information now displays correctly showing who issued each pass.
+- **Fixed Reports Tab Filtering**: Resolved critical filtering issues in Reports tab, especially for PWA mobile mode. Enhanced grade filtering by adding proper database joins between passes → students → grades tables. Added automatic filter refresh using useEffect to ensure filters apply immediately without manual button clicks. Implemented cache busting for mobile PWA reliability and improved query key management for proper refetching.
 
 ## External Dependencies
 
