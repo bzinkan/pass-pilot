@@ -51,9 +51,19 @@ app.use((req, res, next) => {
   next();
 });
 
+// Enhanced error monitoring and request tracking
+import { globalErrorHandler, requestTrackingMiddleware, healthCheckHandler } from './monitoring';
+
 (async () => {
   const server = await registerRoutes(app);
   registerV2Routes(app);
+
+  // Add request tracking to all routes
+  app.use(requestTrackingMiddleware);
+
+  // Health check endpoint MUST be registered BEFORE server starts
+  app.get('/api/health', healthCheckHandler);
+  log('✅ Health check endpoint registered at /api/health');
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -87,28 +97,20 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
+  // Global error handler - must be at the very end
+  app.use(globalErrorHandler);
+
   // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
+  // Other ports are firewalled. Default to Railway's port if not specified.
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
-  const port = ENV.PORT;
+  const port = Number(process.env.PORT || ENV.PORT);
   server.listen({
     port,
     host: "0.0.0.0",
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+    log(`✅ Health check available at http://0.0.0.0:${port}/api/health`);
   });
 })();
-
-  // Enhanced error monitoring and request tracking
-  import { globalErrorHandler, requestTrackingMiddleware, healthCheckHandler } from './monitoring';
-
-  // Add request tracking to all routes
-  app.use(requestTrackingMiddleware);
-
-  // Health check endpoint for monitoring services
-  app.get('/api/health', healthCheckHandler);
-
-  // Global error handler - must be at the very end
-  app.use(globalErrorHandler);
