@@ -62,7 +62,7 @@ import { globalErrorHandler, requestTrackingMiddleware, healthCheckHandler } fro
   app.use(requestTrackingMiddleware);
 
   // Health check endpoint MUST be registered BEFORE server starts
-  app.get('/api/health', healthCheckHandler);
+  app.get("/api/health", (_req, res) => res.status(200).json({status:"ok"}));
   log('✅ Health check endpoint registered at /api/health');
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -104,13 +104,6 @@ import { globalErrorHandler, requestTrackingMiddleware, healthCheckHandler } fro
   // Other ports are firewalled. Default to Railway's port if not specified.
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
-  const port = Number(process.env.PORT || ENV.PORT);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
-    log(`serving on port ${port}`);
-    log(`✅ Health check available at http://0.0.0.0:${port}/api/health`);
-  });
+  const port = Number(process.env.PORT || 8080);
+  server.listen({ port, host: "0.0.0.0", reusePort: true }, () => log(`serving on port ${port}`));
 })();
