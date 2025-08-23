@@ -7,11 +7,12 @@ export interface AuthenticatedRequest extends Request {
   user: SessionPayload;
 }
 
-export function requireUser(req: Request, res: Response, next: NextFunction) {
+export function requireUser(req: Request, res: Response, next: NextFunction): void {
   const token = req.cookies?.pp_session;
   
   if (!token) {
-    return res.status(401).json({ error: 'unauthorized' });
+    res.status(401).json({ error: 'unauthorized' });
+    return;
   }
 
   try {
@@ -23,15 +24,18 @@ export function requireUser(req: Request, res: Response, next: NextFunction) {
     (req as AuthenticatedRequest).user = payload;
     next();
   } catch (error) {
-    return res.status(401).json({ error: 'unauthorized' });
+    console.error('JWT verification failed:', error);
+    res.status(401).json({ error: 'unauthorized' });
+    return;
   }
 }
 
-export function requireAdmin(req: Request, res: Response, next: NextFunction) {
+export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
   requireUser(req, res, () => {
     const authReq = req as AuthenticatedRequest;
     if (authReq.user.role !== 'ADMIN') {
-      return res.status(403).json({ error: 'admin_required' });
+      res.status(403).json({ error: 'admin_required' });
+      return;
     }
     next();
   });

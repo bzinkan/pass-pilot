@@ -1,11 +1,61 @@
 import type { Express } from 'express';
-import { requireUser, requireAdmin, type AuthenticatedRequest } from './auth/requireUser';
-import { setUserSession } from './auth/session';
 import { storage } from './storage';
+import type { Request, Response, NextFunction } from 'express';
+
+// Use the same auth system as main routes
+interface AuthenticatedRequest extends Request {
+  user: { id: string; schoolId: string };
+}
+
+// Import the shared session store
+import { sessions } from './shared-sessions';
+
+const requireAuth = (req: Request, res: Response, next: NextFunction): void => {
+  const authToken = req.headers.authorization?.replace('Bearer ', '') || req.cookies.pp_session;
+  
+  if (!authToken) {
+    res.status(401).json({ error: 'unauthorized' });
+    return;
+  }
+  
+  const session = sessions.get(authToken);
+  if (!session || session.expires < new Date()) {
+    sessions.delete(authToken);
+    res.status(401).json({ error: 'Session expired' });
+    return;
+  }
+  
+  // Extend session if it expires within 24 hours (refresh on activity)
+  const timeUntilExpiry = session.expires.getTime() - Date.now();
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  if (timeUntilExpiry < oneDayMs) {
+    session.expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    sessions.set(authToken, session);
+  }
+  
+  (req as AuthenticatedRequest).user = { id: session.userId, schoolId: session.schoolId };
+  next();
+};
+
+const requireAdmin = (req: Request, res: Response, next: NextFunction): void => {
+  requireAuth(req, res, async () => {
+    try {
+      const authReq = req as AuthenticatedRequest;
+      const user = await storage.getUser(authReq.user.id);
+      if (!user || !user.isAdmin) {
+        res.status(403).json({ error: 'admin_required' });
+        return;
+      }
+      next();
+    } catch (error) {
+      res.status(403).json({ error: 'admin_required' });
+    }
+  });
+};
 
 export function registerBillingRoutes(app: Express) {
   // Create Stripe checkout session for school subscription
-  app.post('/api/billing/checkout', requireAdmin, async (req, res) => {
+  app.post('/api/billing/checkout', requireAuth, async (req, res) => {
     try {
       const authReq = req as AuthenticatedRequest;
       const { plan, successUrl, cancelUrl } = req.body;

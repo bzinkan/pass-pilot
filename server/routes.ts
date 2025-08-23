@@ -25,8 +25,8 @@ const auth = {
   }
 };
 
-// In-memory session store
-const sessions = new Map<string, { userId: string; schoolId: string; expires: Date }>();
+// Use shared session store for consistency across all routes
+import { sessions } from './shared-sessions';
 
 // Auth middleware
 interface AuthenticatedRequest extends Request {
@@ -37,12 +37,20 @@ const requireAuth = (req: Request, res: Response, next: NextFunction): void => {
   const authToken = req.headers.authorization?.replace('Bearer ', '') || req.cookies.pp_session;
   
   if (!authToken) {
+    console.log('❌ No auth token found in request');
     res.status(401).json(ErrorResponses.unauthorized());
     return;
   }
   
   const session = sessions.get(authToken);
-  if (!session || session.expires < new Date()) {
+  if (!session) {
+    console.log(`❌ No session found for token: ${authToken.substring(0, 8)}..., active sessions: ${sessions.size}`);
+    res.status(401).json(ErrorResponses.unauthorized('Session not found'));
+    return;
+  }
+  
+  if (session.expires < new Date()) {
+    console.log(`❌ Session expired for token: ${authToken.substring(0, 8)}..., expired: ${session.expires.toISOString()}, now: ${new Date().toISOString()}`);
     sessions.delete(authToken);
     res.status(401).json(ErrorResponses.unauthorized('Session expired'));
     return;
@@ -52,8 +60,10 @@ const requireAuth = (req: Request, res: Response, next: NextFunction): void => {
   const timeUntilExpiry = session.expires.getTime() - Date.now();
   const oneDayMs = 24 * 60 * 60 * 1000;
   if (timeUntilExpiry < oneDayMs) {
+    const oldExpiry = session.expires;
     session.expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     sessions.set(authToken, session);
+    console.log(`🔄 Session renewed for token: ${authToken.substring(0, 8)}..., old expiry: ${oldExpiry.toISOString()}, new expiry: ${session.expires.toISOString()}`);
   }
   
   (req as AuthenticatedRequest).user = { id: session.userId, schoolId: session.schoolId };

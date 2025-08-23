@@ -8,7 +8,7 @@ interface UseSessionHeartbeatOptions {
 
 export function useSessionHeartbeat({ 
   enabled, 
-  interval = 30 * 60 * 1000, // 30 minutes default
+  interval = 5 * 60 * 1000, // 5 minutes default - more frequent to detect issues earlier
   onSessionExpired 
 }: UseSessionHeartbeatOptions) {
   const heartbeatRef = useRef<number | null>(null);
@@ -31,8 +31,8 @@ export function useSessionHeartbeat({
     const checkSession = async () => {
       const timeSinceActivity = Date.now() - lastActivityRef.current;
       
-      // Only check if user has been active recently (within 2 hours)
-      if (timeSinceActivity > 2 * 60 * 60 * 1000) {
+      // Only check if user has been active recently (within 4 hours)
+      if (timeSinceActivity > 4 * 60 * 60 * 1000) {
         return;
       }
 
