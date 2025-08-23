@@ -8,6 +8,7 @@ import type {
 const TOAST_LIMIT = 1
 const TOAST_REMOVE_DELAY = 1000000 // Keep very long for manual removal
 const SUCCESS_TOAST_DURATION = 4000 // 4 seconds for success messages
+const ERROR_TOAST_DURATION = 3000 // 3 seconds for error messages
 
 type ToasterToast = ToastProps & {
   id: string
@@ -151,7 +152,7 @@ function toast({ ...props }: Toast) {
   const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id })
 
   const finalDuration = props.variant === "destructive" 
-    ? Infinity 
+    ? ERROR_TOAST_DURATION 
     : (props.duration !== undefined ? props.duration : SUCCESS_TOAST_DURATION)
 
   dispatch({
@@ -167,9 +168,9 @@ function toast({ ...props }: Toast) {
     },
   })
 
-  // Auto-dismiss non-destructive toasts after specified duration
-  // Destructive toasts (red/error) persist until manually dismissed
-  if (props.variant !== "destructive" && finalDuration !== Infinity) {
+  // Auto-dismiss all toasts after specified duration
+  // Destructive toasts (red/error) auto-dismiss after 3 seconds
+  if (finalDuration !== Infinity) {
     setTimeout(() => {
       dismiss()
     }, finalDuration)
