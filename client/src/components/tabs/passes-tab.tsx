@@ -196,13 +196,13 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
           </div>
           
           <div className="flex items-center space-x-2">
-            <span className="text-sm text-muted-foreground">Filter by grade:</span>
+            <span className="text-sm text-muted-foreground">Filter by class:</span>
             <Select value={filterGrade} onValueChange={setFilterGrade}>
               <SelectTrigger className="w-32">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Grades</SelectItem>
+                <SelectItem value="all">All Classes</SelectItem>
                 {grades.map((grade: any) => (
                   <SelectItem key={grade.id} value={grade.name}>
                     Grade {grade.name}
