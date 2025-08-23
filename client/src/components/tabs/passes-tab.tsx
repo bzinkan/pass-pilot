@@ -40,6 +40,7 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
     gcTime: 0, // Don't cache results in React Query
   });
   const [filterType, setFilterType] = useState<string>("all");
+  const [filterGrade, setFilterGrade] = useState<string>("all");
 
   // Gate on loading states - stop rendering until data exists
   if (isLoading) {
@@ -130,7 +131,7 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
     return <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-200">General</Badge>;
   };
 
-  // Safe filtering - filter passes based on selected type (grade filtering disabled for simplicity)
+  // Safe filtering - filter passes based on selected type and grade
   const filteredPasses = safeMap(passes, (pass: any) => pass).filter((pass: any) => {
     // Filter by pass type - map destination to pass type
     let passType = 'general'; // default
@@ -142,8 +143,8 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
     
     const typeMatch = filterType === "all" || passType === filterType;
     
-    // Show all passes regardless of grade selection for simplicity
-    const gradeMatch = true;
+    // Filter by grade
+    const gradeMatch = filterGrade === "all" || pass.student?.grade === filterGrade;
     
     return typeMatch && gradeMatch;
   });
@@ -172,19 +173,46 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
           </div>
         </div>
         
-        <div className="flex items-center space-x-2">
-          <span className="text-sm text-muted-foreground">Filter by type:</span>
-          <Select value={filterType} onValueChange={setFilterType}>
-            <SelectTrigger className="w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="general">General</SelectItem>
-              <SelectItem value="nurse">Nurse</SelectItem>
-              <SelectItem value="discipline">Discipline</SelectItem>
-            </SelectContent>
-          </Select>
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-muted-foreground">Filter by type:</span>
+            <Select value={filterType} onValueChange={setFilterType}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="general">General</SelectItem>
+                <SelectItem value="nurse">Nurse</SelectItem>
+                <SelectItem value="discipline">Discipline</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-muted-foreground">Filter by grade:</span>
+            <Select value={filterGrade} onValueChange={setFilterGrade}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Grades</SelectItem>
+                <SelectItem value="K">Kindergarten</SelectItem>
+                <SelectItem value="1">1st Grade</SelectItem>
+                <SelectItem value="2">2nd Grade</SelectItem>
+                <SelectItem value="3">3rd Grade</SelectItem>
+                <SelectItem value="4">4th Grade</SelectItem>
+                <SelectItem value="5">5th Grade</SelectItem>
+                <SelectItem value="6">6th Grade</SelectItem>
+                <SelectItem value="7">7th Grade</SelectItem>
+                <SelectItem value="8">8th Grade</SelectItem>
+                <SelectItem value="9">9th Grade</SelectItem>
+                <SelectItem value="10">10th Grade</SelectItem>
+                <SelectItem value="11">11th Grade</SelectItem>
+                <SelectItem value="12">12th Grade</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
@@ -196,7 +224,7 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
               <p className="text-sm text-muted-foreground">
                 {passes.length === 0 
                   ? "All students are in class" 
-                  : `No ${filterType === 'all' ? '' : filterType + ' '}passes currently active`
+                  : `No ${filterType === 'all' ? '' : filterType + ' '}${filterGrade === 'all' ? '' : 'grade ' + filterGrade + ' '}passes currently active`
                 }
               </p>
             </CardContent>
