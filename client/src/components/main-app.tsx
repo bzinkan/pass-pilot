@@ -7,7 +7,6 @@ import { ChevronDown, Smartphone } from "lucide-react";
 import { PassesTab } from "./tabs/passes-tab";
 import { MyClassTab } from "./tabs/myclass-tab";
 import { RosterTab } from "./tabs/roster-tab";
-import { UploadTab } from "./tabs/upload-tab";
 import { ReportsTab } from "./tabs/reports-tab";
 import { AdminTab } from "./tabs/admin-tab";
 
@@ -83,7 +82,6 @@ export function MainApp({ user, onLogout }: MainAppProps) {
     { id: 'passes', label: 'Passes', icon: 'fas fa-clipboard-list' },
     { id: 'myclass', label: 'My Class', icon: 'fas fa-chalkboard-teacher' },
     { id: 'roster', label: 'Roster', icon: 'fas fa-users' },
-    { id: 'upload', label: 'Upload', icon: 'fas fa-cloud-upload-alt' },
     { id: 'reports', label: 'Reports', icon: 'fas fa-chart-bar' },
   ];
 
@@ -132,8 +130,6 @@ export function MainApp({ user, onLogout }: MainAppProps) {
           }} 
         />;
 
-      case 'upload':
-        return <UploadTab user={user} />;
       case 'reports':
         return <ReportsTab user={user} />;
       case 'admin':
