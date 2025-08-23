@@ -9,7 +9,6 @@ import { MyClassTab } from "./tabs/myclass-tab";
 import { RosterTab } from "./tabs/roster-tab";
 import { UploadTab } from "./tabs/upload-tab";
 import { ReportsTab } from "./tabs/reports-tab";
-import { ProfileTab } from "./tabs/profile-tab";
 import { AdminTab } from "./tabs/admin-tab";
 
 import TrialStatusBanner from "./trial-status-banner";
@@ -86,7 +85,6 @@ export function MainApp({ user, onLogout }: MainAppProps) {
     { id: 'roster', label: 'Roster', icon: 'fas fa-users' },
     { id: 'upload', label: 'Upload', icon: 'fas fa-cloud-upload-alt' },
     { id: 'reports', label: 'Reports', icon: 'fas fa-chart-bar' },
-    { id: 'profile', label: 'Profile', icon: 'fas fa-user' },
   ];
 
   // Add setup tab for all users to configure their school
@@ -140,8 +138,6 @@ export function MainApp({ user, onLogout }: MainAppProps) {
         return <ReportsTab user={user} />;
       case 'admin':
         return <AdminTab user={user} />;
-      case 'profile':
-        return <ProfileTab user={user} />;
       default:
         return <PassesTab user={user} />;
     }
