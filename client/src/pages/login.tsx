@@ -430,27 +430,23 @@ export default function Login() {
               </div>
             </form>
           ) : mode === 'forgot-password' ? (
-            <form onSubmit={handleForgotPassword} className="space-y-4">
-              <div>
-                <Label htmlFor="forgot-email">Email Address</Label>
-                <Input
-                  type="email"
-                  id="forgot-email"
-                  placeholder="teacher@school.edu"
-                  value={forgotPasswordForm.email}
-                  onChange={(e) => setForgotPasswordForm({ ...forgotPasswordForm, email: e.target.value })}
-                  required
-                  data-testid="input-forgot-email"
-                />
+            <div className="space-y-4">
+              <div className="text-center space-y-4">
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <h3 className="font-semibold text-blue-900 mb-2">Password Reset Instructions</h3>
+                  <div className="text-sm text-blue-800 space-y-2 text-left">
+                    <p><strong>Step 1:</strong> Ask your school admin or any admin teacher to reset your password using the "Reset Password" button in the Admin tab.</p>
+                    <p><strong>Step 2:</strong> Once your password has been reset, return to this login page and click the blue <strong>"🔑 New Teacher? Set Your Password Here"</strong> link below.</p>
+                    <p><strong>Step 3:</strong> Enter your email and choose a new password to complete the process.</p>
+                  </div>
+                </div>
+                
+                <div className="p-3 bg-yellow-50 rounded border border-yellow-200">
+                  <p className="text-sm text-yellow-800">
+                    <strong>Note:</strong> Only admins can reset passwords. If you're an admin and forgot your password, contact another admin for assistance.
+                  </p>
+                </div>
               </div>
-              <Button 
-                type="submit" 
-                className="w-full" 
-                disabled={isLoading}
-                data-testid="button-send-reset"
-              >
-                {isLoading ? "Sending Reset Email..." : "Send Reset Email"}
-              </Button>
               
               <div className="flex justify-center">
                 <Button 
@@ -463,7 +459,7 @@ export default function Login() {
                   Back to Sign In
                 </Button>
               </div>
-            </form>
+            </div>
           ) : (
             <form onSubmit={handleRegister} className="space-y-4">
               <div>
