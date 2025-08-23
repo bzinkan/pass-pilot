@@ -393,7 +393,7 @@ export function RosterTab({ user, selectedGrades = new Set(), onGradeClick }: Ro
               <DialogTrigger asChild>
                 <Button size="sm" data-testid="button-add-grade">
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Grade
+                  Add Grade/Class
                 </Button>
               </DialogTrigger>
               <DialogContent>
@@ -415,7 +415,7 @@ export function RosterTab({ user, selectedGrades = new Set(), onGradeClick }: Ro
                     <Button type="button" variant="outline" onClick={() => setShowAddGradeModal(false)}>
                       Cancel
                     </Button>
-                    <Button type="submit" data-testid="button-submit-grade">Add Grade</Button>
+                    <Button type="submit" data-testid="button-submit-grade">Add Grade/Class</Button>
                   </div>
                 </form>
               </DialogContent>
