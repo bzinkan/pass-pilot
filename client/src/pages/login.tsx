@@ -8,7 +8,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import { SchoolPicker } from "@/components/school-picker";
 
 export default function Login() {
   const { login } = useAuth();
@@ -22,10 +21,7 @@ export default function Login() {
     password: ''
   });
 
-  // Multi-school login state
-  const [requiresSchool, setRequiresSchool] = useState(false);
-  const [availableSchools, setAvailableSchools] = useState<Array<{id: string, name: string}>>([]);
-  const [selectedSchoolId, setSelectedSchoolId] = useState('');
+  // Multi-school login state removed - users go directly to their school
 
   const [registerForm, setRegisterForm] = useState({
     schoolName: '',
@@ -92,18 +88,7 @@ export default function Login() {
         throw new Error(data.error || 'Login failed');
       }
       
-      if (data.requiresSchool) {
-        // User has multiple schools - show school selector
-        setRequiresSchool(true);
-        setAvailableSchools(data.schools || []);
-        if (data.schools && data.schools.length > 0) {
-          setSelectedSchoolId(data.schools[0].id);
-        }
-        toast({
-          title: "Multiple Schools Found",
-          description: "Please select which school you want to access.",
-        });
-      } else if (data.success) {
+      if (data.success) {
         // Single school login success - redirect to app
         setLocation('/');
         toast({
@@ -123,44 +108,7 @@ export default function Login() {
     }
   };
 
-  const handleSchoolLogin = async (schoolId: string) => {
-    if (!schoolId) return;
-    
-    setIsLoading(true);
-    try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ 
-          email: loginForm.email, 
-          password: loginForm.password, 
-          schoolId: schoolId 
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Login failed');
-      }
-      
-      setLocation('/');
-      toast({
-        title: "Welcome!",
-        description: `Successfully logged in!`,
-      });
-      
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // handleSchoolLogin function removed - no longer needed
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -332,23 +280,7 @@ export default function Login() {
     }
   };
 
-  // Show school picker if multi-school flow
-  if (requiresSchool) {
-    return (
-      <SchoolPicker
-        schools={availableSchools}
-        email={loginForm.email}
-        password={loginForm.password}
-        onLogin={handleSchoolLogin}
-        onBack={() => {
-          setRequiresSchool(false);
-          setAvailableSchools([]);
-          setSelectedSchoolId('');
-        }}
-        isLoading={isLoading}
-      />
-    );
-  }
+  // School picker feature removed - users go directly to their school
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">

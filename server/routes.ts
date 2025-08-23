@@ -202,92 +202,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ ok: true, user: userWithoutPassword, redirect: '/app' });
       }
 
-      // Multi-school flow: get all accounts for this email
+      // Single-school flow: get all accounts for this email and use the first one
       const candidates = await storage.getUsersByEmail(normalizedEmail);
       
       if (candidates.length === 0) {
         return res.status(401).json({ error: 'Invalid credentials' });
       }
 
-      // Check if any candidate is a first-time login
-      const firstLoginUser = candidates.find(user => user.isFirstLogin);
-      if (firstLoginUser) {
-        // If single school with first login, return first-login response
-        if (candidates.length === 1) {
-          return res.json({ 
-            ok: false, 
-            isFirstLogin: true,
-            email: normalizedEmail,
-            schoolId: firstLoginUser.schoolId,
-            message: 'First time login - please set your password'
-          });
-        } else {
-          // Multiple schools with at least one first-time login - need school selection first
-          const schools = candidates.map(user => ({
-            id: user.schoolId,
-            name: user.schoolId, // This should ideally be school name
-            isFirstLogin: user.isFirstLogin
-          }));
-          return res.json({
-            ok: false,
-            requiresSchool: true,
-            schools: schools,
-            hasFirstLogin: true,
-            email: normalizedEmail
-          });
-        }
+      // Automatically use the first account found (no school selection)
+      const user = candidates[0];
+      if (!user) {
+        return res.status(401).json({ error: 'Invalid credentials' });
       }
 
-      // Verify password against first account (prevents email enumeration)
-      const isValid = candidates.length > 0 && candidates[0] && await auth.comparePassword(password, candidates[0].password);
+      // Check if this is a first-time login
+      if (user.isFirstLogin) {
+        return res.json({ 
+          ok: false, 
+          isFirstLogin: true,
+          email: normalizedEmail,
+          schoolId: user.schoolId,
+          message: 'First time login - please set your password'
+        });
+      }
+
+      // Verify password
+      const isValid = await auth.comparePassword(password, user.password);
       if (!isValid) {
         return res.status(401).json({ error: 'Invalid credentials' });
       }
 
-      // Single school - auto login
-      if (candidates.length === 1) {
-        const user = candidates[0];
-        if (!user) {
-          return res.status(401).json({ error: 'Invalid credentials' });
-        }
-        
-        // Check if this user should be promoted to admin (first login to school)
-        await storage.checkAndPromoteFirstAdmin(user.schoolId, user.id);
-        
-        // Get updated user data in case they were promoted
-        const updatedUser = await storage.getUser(user.id);
-        const finalUser = updatedUser || user;
-        
-        const sessionToken = auth.generateSessionToken();
-        const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days to match cookie
-        sessions.set(sessionToken, {
-          userId: finalUser.id,
-          schoolId: finalUser.schoolId,
-          expires
-        });
-        
-        res.cookie('pp_session', sessionToken, {
-          httpOnly: true,
-          secure: ENV.NODE_ENV === 'production',
-          sameSite: ENV.NODE_ENV === 'production' ? 'none' : 'lax',
-          path: '/',
-          maxAge: 7 * 24 * 3600 * 1000,
-          signed: false
-        });
-        
-        const { password: _, ...userWithoutPassword } = finalUser;
-        return res.json({ ok: true, user: userWithoutPassword, redirect: '/app' });
-      }
-
-      // Multiple schools - return school picker data
-      const schoolIds = candidates.map(c => c.schoolId);
-      const schools = await storage.getSchoolsByIds(schoolIds);
+      // Check if this user should be promoted to admin (first login to school)
+      await storage.checkAndPromoteFirstAdmin(user.schoolId, user.id);
       
-      return res.json({ 
-        success: false, 
-        requiresSchool: true, 
-        schools: schools.map(s => ({ id: s.id, name: s.name }))
+      // Get updated user data in case they were promoted
+      const updatedUser = await storage.getUser(user.id);
+      const finalUser = updatedUser || user;
+      
+      const sessionToken = auth.generateSessionToken();
+      const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days to match cookie
+      sessions.set(sessionToken, {
+        userId: finalUser.id,
+        schoolId: finalUser.schoolId,
+        expires
       });
+      
+      res.cookie('pp_session', sessionToken, {
+        httpOnly: true,
+        secure: ENV.NODE_ENV === 'production',
+        sameSite: ENV.NODE_ENV === 'production' ? 'none' : 'lax',
+        path: '/',
+        maxAge: 7 * 24 * 3600 * 1000,
+        signed: false
+      });
+      
+      const { password: _, ...userWithoutPassword } = finalUser;
+      return res.json({ ok: true, user: userWithoutPassword, redirect: '/app' });
 
     } catch (error: any) {
       console.error('Login error:', error);
