@@ -113,7 +113,6 @@ export default function Features() {
             <CardContent className="space-y-3">
               <ul className="space-y-2">
                 <li>• Secure login system.</li>
-                <li>• Admin controls for school-wide deployment.</li>
                 <li>• Data privacy compliant.</li>
               </ul>
             </CardContent>
@@ -151,7 +150,6 @@ export default function Features() {
                 <li>• Full web application access.</li>
                 <li>• Step-by-step setup guide + video tutorials.</li>
                 <li>• Student roster import template.</li>
-                <li>• Administrator training materials.</li>
                 <li>• Email support for setup assistance.</li>
               </ul>
             </CardContent>
