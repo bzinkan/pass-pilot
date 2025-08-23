@@ -74,7 +74,7 @@ const requireAuth = (req: Request, res: Response, next: NextFunction): void => {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health check endpoints
-  app.get('/api/health', (_req, res) => res.send('ok'));
+  // Health check moved to monitoring.ts to avoid duplication
   app.get('/api/health/db', async (_req, res) => {
     try { 
       await storage.getAllSchools();
