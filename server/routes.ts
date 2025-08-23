@@ -933,9 +933,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.getUser(authReq.user.id);
       const validUser = unwrap(user, 'User not found');
       
-      if (!validUser.isAdmin) {
-        return res.status(403).json({ message: 'Admin access required' });
-      }
+      // Allow any teacher to reset passwords for other teachers in their school
+      // School isolation provides security - teachers can only reset passwords within their school
       
       const { teacherId } = req.params;
       
