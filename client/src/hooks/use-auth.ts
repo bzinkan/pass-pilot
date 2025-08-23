@@ -15,36 +15,31 @@ interface AuthState {
 }
 
 export function useAuth(): AuthState {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Check for existing session on mount and handle session expiry
-  useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const response = await apiRequest('GET', '/api/auth/me');
-        const userData = await response.json();
-        if (response.ok && userData.data) {
-          setUser(userData.data.user);
-        } else {
-          // Clear any stale session data
-          setUser(null);
-        }
-      } catch (error) {
-        // No existing session - clear user state
-        setUser(null);
-      } finally {
-        setIsLoading(false);
+  // Use React Query to fetch user data so it responds to cache invalidation
+  const { data: user, isLoading, refetch } = useQuery({
+    queryKey: ['/api/users/me'],
+    queryFn: async () => {
+      const response = await apiRequest('GET', '/api/auth/me');
+      const userData = await response.json();
+      if (response.ok && userData.data) {
+        return userData.data.user;
+      } else {
+        return null;
       }
-    };
+    },
+    retry: false,
+    staleTime: 0, // Always consider data stale so it updates immediately
+  });
 
-    checkSession();
+  // Handle session expiry monitoring
+  useEffect(() => {
     
     // Listen for session expiry events from failed API calls
     const handleSessionExpired = (event: CustomEvent) => {
-      setUser(null);
+      queryClient.setQueryData(['/api/users/me'], null);
       queryClient.clear();
       toast({
         title: "Session expired",
@@ -65,7 +60,7 @@ export function useAuth(): AuthState {
     enabled: !!user, // Only when user is logged in
     interval: 15 * 60 * 1000, // Check every 15 minutes
     onSessionExpired: () => {
-      setUser(null);
+      queryClient.setQueryData(['/api/users/me'], null);
       queryClient.clear();
       toast({
         title: "Session expired",
@@ -85,7 +80,7 @@ export function useAuth(): AuthState {
       return response.json();
     },
     onSuccess: (userData) => {
-      setUser(userData);
+      queryClient.setQueryData(['/api/users/me'], userData);
       toast({
         title: "Welcome back!",
         description: "You have successfully logged in.",
@@ -134,7 +129,7 @@ export function useAuth(): AuthState {
     } catch (error) {
       // Continue with logout even if server request fails
     } finally {
-      setUser(null);
+      queryClient.setQueryData(['/api/users/me'], null);
       queryClient.clear();
       toast({
         title: "Logged out",
@@ -148,21 +143,7 @@ export function useAuth(): AuthState {
   };
 
   const refreshUser = async () => {
-    try {
-      const response = await fetch('/api/auth/me', {
-        method: 'GET',
-        credentials: 'include',
-      });
-      
-      if (response.ok) {
-        const userData = await response.json();
-        setUser(userData);
-      } else {
-        setUser(null);
-      }
-    } catch (error) {
-      setUser(null);
-    }
+    await refetch();
   };
 
   return {
