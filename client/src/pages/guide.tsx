@@ -39,7 +39,7 @@ export default function Guide() {
             <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-lg mt-4">
               <h4 className="font-semibold text-amber-800 dark:text-amber-200 mb-3">🔑 Forgot Your Password?</h4>
               <div className="space-y-2 text-sm text-amber-700 dark:text-amber-300">
-                <p><strong>Step 1:</strong> Ask any teacher at your school to reset your password using the "Set Up" tab in their PassPilot account.</p>
+                <p><strong>Step 1:</strong> Ask an admin at your school to reset your password using the "Set Up" tab in their PassPilot account.</p>
                 <p><strong>Step 2:</strong> They can find your name and click "Reset Password" - this marks your account for password setup.</p>
                 <p><strong>Step 3:</strong> Use the "New Teacher? Set Your Password Here" link on the login page to create your new password.</p>
                 <p className="mt-3 text-amber-600 dark:text-amber-400">
