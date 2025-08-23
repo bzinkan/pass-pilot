@@ -415,7 +415,7 @@ import { createServer } from "http";
 init_db();
 init_schema();
 import { randomUUID } from "crypto";
-import { eq, and } from "drizzle-orm";
+import { eq, and, gte, lte, asc } from "drizzle-orm";
 
 // server/safe.ts
 function invariant(condition, msg) {
@@ -585,9 +585,9 @@ var DatabaseStorage = class {
     if (grade) {
       return await db.select().from(students).where(
         and(eq(students.schoolId, schoolId), eq(students.gradeId, grade))
-      );
+      ).orderBy(asc(students.lastName), asc(students.firstName));
     }
-    return await db.select().from(students).where(eq(students.schoolId, schoolId));
+    return await db.select().from(students).where(eq(students.schoolId, schoolId)).orderBy(asc(students.lastName), asc(students.firstName));
   }
   async getStudent(id) {
     const result = await db.select().from(students).where(eq(students.id, id)).limit(1);
@@ -619,11 +619,17 @@ var DatabaseStorage = class {
   async getActivePassesBySchool(schoolId) {
     const result = await db.select({
       pass: passes,
-      student: students
-    }).from(passes).leftJoin(students, eq(passes.studentId, students.id)).where(and(eq(passes.schoolId, schoolId), eq(passes.status, "active")));
+      student: students,
+      teacher: users,
+      grade: grades
+    }).from(passes).leftJoin(students, eq(passes.studentId, students.id)).leftJoin(users, eq(passes.teacherId, users.id)).leftJoin(grades, eq(students.gradeId, grades.id)).where(and(eq(passes.schoolId, schoolId), eq(passes.status, "active")));
     return result.map((row) => ({
       ...row.pass,
-      student: unwrap(row.student)
+      student: row.student ? {
+        ...row.student,
+        grade: row.grade?.name || null
+      } : null,
+      teacher: unwrap(row.teacher)
     }));
   }
   async getActivePassesByTeacher(teacherId) {
@@ -641,14 +647,28 @@ var DatabaseStorage = class {
     if (filters?.teacherId) {
       whereConditions = and(whereConditions, eq(passes.teacherId, filters.teacherId));
     }
-    const result = await db.select({
+    if (filters?.dateStart) {
+      whereConditions = and(whereConditions, gte(passes.issuedAt, filters.dateStart));
+    }
+    if (filters?.dateEnd) {
+      whereConditions = and(whereConditions, lte(passes.issuedAt, filters.dateEnd));
+    }
+    let query = db.select({
       pass: passes,
       student: students,
-      teacher: users
-    }).from(passes).leftJoin(students, eq(passes.studentId, students.id)).leftJoin(users, eq(passes.teacherId, users.id)).where(whereConditions);
+      teacher: users,
+      grade: grades
+    }).from(passes).leftJoin(students, eq(passes.studentId, students.id)).leftJoin(users, eq(passes.teacherId, users.id)).leftJoin(grades, eq(students.gradeId, grades.id));
+    if (filters?.grade) {
+      whereConditions = and(whereConditions, eq(grades.name, filters.grade));
+    }
+    const result = await query.where(whereConditions);
     return result.map((row) => ({
       ...row.pass,
-      student: unwrap(row.student),
+      student: row.student ? {
+        ...row.student,
+        grade: row.grade?.name || null
+      } : null,
       teacher: unwrap(row.teacher)
     }));
   }
@@ -684,6 +704,13 @@ var DatabaseStorage = class {
     allowedUpdates.updatedAt = /* @__PURE__ */ new Date();
     const [updatedPass] = await db.update(passes).set(allowedUpdates).where(eq(passes.id, id)).returning();
     return unwrap(updatedPass);
+  }
+  async getPassById(id) {
+    const [pass] = await db.select().from(passes).where(eq(passes.id, id)).limit(1);
+    return pass || void 0;
+  }
+  async deletePass(id) {
+    await db.delete(passes).where(eq(passes.id, id));
   }
   async returnAllActivePasses(schoolId) {
     const activePasses = await db.select().from(passes).where(
@@ -823,6 +850,9 @@ var ErrorResponses = {
   internal: (message = "Internal server error") => err(message, "INTERNAL_ERROR")
 };
 
+// server/shared-sessions.ts
+var sessions = /* @__PURE__ */ new Map();
+
 // server/routes.ts
 var auth = {
   async hashPassword(password) {
@@ -835,15 +865,21 @@ var auth = {
     return randomUUID2();
   }
 };
-var sessions = /* @__PURE__ */ new Map();
 var requireAuth = (req, res, next) => {
   const authToken = req.headers.authorization?.replace("Bearer ", "") || req.cookies.pp_session;
   if (!authToken) {
+    console.log("\u274C No auth token found in request");
     res.status(401).json(ErrorResponses.unauthorized());
     return;
   }
   const session = sessions.get(authToken);
-  if (!session || session.expires < /* @__PURE__ */ new Date()) {
+  if (!session) {
+    console.log(`\u274C No session found for token: ${authToken.substring(0, 8)}..., active sessions: ${sessions.size}`);
+    res.status(401).json(ErrorResponses.unauthorized("Session not found"));
+    return;
+  }
+  if (session.expires < /* @__PURE__ */ new Date()) {
+    console.log(`\u274C Session expired for token: ${authToken.substring(0, 8)}..., expired: ${session.expires.toISOString()}, now: ${(/* @__PURE__ */ new Date()).toISOString()}`);
     sessions.delete(authToken);
     res.status(401).json(ErrorResponses.unauthorized("Session expired"));
     return;
@@ -851,8 +887,10 @@ var requireAuth = (req, res, next) => {
   const timeUntilExpiry = session.expires.getTime() - Date.now();
   const oneDayMs = 24 * 60 * 60 * 1e3;
   if (timeUntilExpiry < oneDayMs) {
+    const oldExpiry = session.expires;
     session.expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3);
     sessions.set(authToken, session);
+    console.log(`\u{1F504} Session renewed for token: ${authToken.substring(0, 8)}..., old expiry: ${oldExpiry.toISOString()}, new expiry: ${session.expires.toISOString()}`);
   }
   req.user = { id: session.userId, schoolId: session.schoolId };
   next();
@@ -921,9 +959,9 @@ async function registerRoutes(app2) {
       const { email, password, schoolId } = req.valid.body;
       const normalizedEmail = email.trim().toLowerCase();
       if (schoolId) {
-        const user = await storage.getUserByEmailAndSchool(normalizedEmail, schoolId);
-        invariant(user, "Invalid credentials");
-        if (user.isFirstLogin) {
+        const user2 = await storage.getUserByEmailAndSchool(normalizedEmail, schoolId);
+        invariant(user2, "Invalid credentials");
+        if (user2.isFirstLogin) {
           return res.json({
             ok: false,
             isFirstLogin: true,
@@ -932,19 +970,19 @@ async function registerRoutes(app2) {
             message: "First time login - please set your password"
           });
         }
-        const isValid2 = await auth.comparePassword(password, user.password);
+        const isValid2 = await auth.comparePassword(password, user2.password);
         invariant(isValid2, "Invalid credentials");
-        await storage.checkAndPromoteFirstAdmin(user.schoolId, user.id);
-        const updatedUser = await storage.getUser(user.id);
-        const finalUser = updatedUser || user;
-        const sessionToken = auth.generateSessionToken();
-        const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3);
-        sessions.set(sessionToken, {
-          userId: user.id,
-          schoolId: user.schoolId,
-          expires
+        await storage.checkAndPromoteFirstAdmin(user2.schoolId, user2.id);
+        const updatedUser2 = await storage.getUser(user2.id);
+        const finalUser2 = updatedUser2 || user2;
+        const sessionToken2 = auth.generateSessionToken();
+        const expires2 = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3);
+        sessions.set(sessionToken2, {
+          userId: user2.id,
+          schoolId: user2.schoolId,
+          expires: expires2
         });
-        res.cookie("pp_session", sessionToken, {
+        res.cookie("pp_session", sessionToken2, {
           httpOnly: true,
           secure: ENV.NODE_ENV === "production",
           sameSite: ENV.NODE_ENV === "production" ? "none" : "lax",
@@ -952,76 +990,50 @@ async function registerRoutes(app2) {
           maxAge: 7 * 24 * 3600 * 1e3,
           signed: false
         });
-        const { password: _, ...userWithoutPassword } = finalUser;
-        return res.json({ ok: true, user: userWithoutPassword, redirect: "/app" });
+        const { password: _2, ...userWithoutPassword2 } = finalUser2;
+        return res.json({ ok: true, user: userWithoutPassword2, redirect: "/app" });
       }
       const candidates = await storage.getUsersByEmail(normalizedEmail);
       if (candidates.length === 0) {
         return res.status(401).json({ error: "Invalid credentials" });
       }
-      const firstLoginUser = candidates.find((user) => user.isFirstLogin);
-      if (firstLoginUser) {
-        if (candidates.length === 1) {
-          return res.json({
-            ok: false,
-            isFirstLogin: true,
-            email: normalizedEmail,
-            schoolId: firstLoginUser.schoolId,
-            message: "First time login - please set your password"
-          });
-        } else {
-          const schools3 = candidates.map((user) => ({
-            id: user.schoolId,
-            name: user.schoolId,
-            // This should ideally be school name
-            isFirstLogin: user.isFirstLogin
-          }));
-          return res.json({
-            ok: false,
-            requiresSchool: true,
-            schools: schools3,
-            hasFirstLogin: true,
-            email: normalizedEmail
-          });
-        }
+      const user = candidates[0];
+      if (!user) {
+        return res.status(401).json({ error: "Invalid credentials" });
       }
-      const isValid = candidates.length > 0 && candidates[0] && await auth.comparePassword(password, candidates[0].password);
+      if (user.isFirstLogin) {
+        return res.json({
+          ok: false,
+          isFirstLogin: true,
+          email: normalizedEmail,
+          schoolId: user.schoolId,
+          message: "First time login - please set your password"
+        });
+      }
+      const isValid = await auth.comparePassword(password, user.password);
       if (!isValid) {
         return res.status(401).json({ error: "Invalid credentials" });
       }
-      if (candidates.length === 1) {
-        const user = candidates[0];
-        if (!user) {
-          return res.status(401).json({ error: "Invalid credentials" });
-        }
-        await storage.checkAndPromoteFirstAdmin(user.schoolId, user.id);
-        const updatedUser = await storage.getUser(user.id);
-        const finalUser = updatedUser || user;
-        const sessionToken = auth.generateSessionToken();
-        const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3);
-        sessions.set(sessionToken, {
-          userId: finalUser.id,
-          schoolId: finalUser.schoolId,
-          expires
-        });
-        res.cookie("pp_session", sessionToken, {
-          httpOnly: true,
-          secure: ENV.NODE_ENV === "production",
-          sameSite: ENV.NODE_ENV === "production" ? "none" : "lax",
-          path: "/",
-          maxAge: 7 * 24 * 3600 * 1e3,
-          signed: false
-        });
-        const { password: _, ...userWithoutPassword } = finalUser;
-        return res.json({ ok: true, user: userWithoutPassword, redirect: "/app" });
-      }
-      const schoolIds = candidates.map((c) => c.schoolId);
-      const schools2 = await storage.getSchoolsByIds(schoolIds);
-      return res.json({
-        success: false,
-        requiresSchool: true,
-        schools: schools2.map((s) => ({ id: s.id, name: s.name }))
+      await storage.checkAndPromoteFirstAdmin(user.schoolId, user.id);
+      const updatedUser = await storage.getUser(user.id);
+      const finalUser = updatedUser || user;
+      const sessionToken = auth.generateSessionToken();
+      const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3);
+      sessions.set(sessionToken, {
+        userId: finalUser.id,
+        schoolId: finalUser.schoolId,
+        expires
       });
+      res.cookie("pp_session", sessionToken, {
+        httpOnly: true,
+        secure: ENV.NODE_ENV === "production",
+        sameSite: ENV.NODE_ENV === "production" ? "none" : "lax",
+        path: "/",
+        maxAge: 7 * 24 * 3600 * 1e3,
+        signed: false
+      });
+      const { password: _, ...userWithoutPassword } = finalUser;
+      return res.json({ ok: true, user: userWithoutPassword, redirect: "/app" });
     } catch (error) {
       console.error("Login error:", error);
       res.status(500).json({ message: "Login failed" });
@@ -1370,6 +1382,30 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to return pass" });
     }
   });
+  app2.delete("/api/passes/:id", requireAuth, async (req, res) => {
+    try {
+      const authReq = req;
+      const passId = req.params.id;
+      if (!passId) {
+        return res.status(400).json({ message: "Pass ID is required" });
+      }
+      const pass = await storage.getPassById(passId);
+      if (!pass) {
+        return res.status(404).json({ message: "Pass not found" });
+      }
+      if (pass.schoolId !== authReq.user.schoolId) {
+        return res.status(403).json({ message: "Unauthorized to delete this pass" });
+      }
+      await storage.deletePass(passId);
+      res.json({
+        message: "Pass deleted successfully",
+        passId
+      });
+    } catch (error) {
+      console.error("Delete pass error:", error);
+      res.status(500).json({ message: "Failed to delete pass" });
+    }
+  });
   app2.get("/api/payments/:schoolId", requireAuth, async (req, res) => {
     try {
       const schoolId = req.params.schoolId;
@@ -1445,6 +1481,9 @@ async function registerRoutes(app2) {
         return res.status(403).json({ message: "Admin access required" });
       }
       const teacherId = req.params.teacherId;
+      if (!teacherId) {
+        return res.status(400).json({ message: "Teacher ID is required" });
+      }
       const teacher = await storage.getUser(teacherId);
       if (!teacher || teacher.schoolId !== validUser.schoolId) {
         return res.status(404).json({ message: "Teacher not found" });
@@ -1468,6 +1507,9 @@ async function registerRoutes(app2) {
         return res.status(403).json({ message: "Admin access required" });
       }
       const teacherId = req.params.teacherId;
+      if (!teacherId) {
+        return res.status(400).json({ message: "Teacher ID is required" });
+      }
       const teacher = await storage.getUser(teacherId);
       if (!teacher || teacher.schoolId !== validUser.schoolId) {
         return res.status(404).json({ message: "Teacher not found" });
@@ -1488,6 +1530,9 @@ async function registerRoutes(app2) {
         return res.status(403).json({ message: "Admin access required" });
       }
       const teacherId = req.params.teacherId;
+      if (!teacherId) {
+        return res.status(400).json({ message: "Teacher ID is required" });
+      }
       const teacher = await storage.getUser(teacherId);
       if (!teacher || teacher.schoolId !== validUser.schoolId) {
         return res.status(404).json({ message: "Teacher not found" });
@@ -1512,6 +1557,9 @@ async function registerRoutes(app2) {
       }
       const { teacherId } = req.params;
       const { firstName, lastName, email } = req.body;
+      if (!teacherId) {
+        return res.status(400).json({ message: "Teacher ID is required" });
+      }
       const teacher = await storage.getUser(teacherId);
       if (!teacher || teacher.schoolId !== validUser.schoolId) {
         return res.status(404).json({ message: "Teacher not found" });
