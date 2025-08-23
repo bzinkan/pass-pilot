@@ -387,7 +387,7 @@ export function RosterTab({ user, selectedGrades = new Set(), onGradeClick }: Ro
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Users className="w-5 h-5" />
-              Grade Levels
+              Classes
             </CardTitle>
             <Dialog open={showAddGradeModal} onOpenChange={setShowAddGradeModal}>
               <DialogTrigger asChild>
