@@ -14,47 +14,48 @@ console.log('🔧 Running post-build fix for Railway deployment...');
 console.log(`📁 Project root: ${projectRoot}`);
 console.log(`📁 Dist directory: ${distDir}`);
 
-// Method 1: Create server/public symlink to dist/public
+// Method 1: Create server/public directory structure  
 const serverDir = path.join(projectRoot, 'server');
 const publicDir = path.join(serverDir, 'public');
 const builtPublicDir = path.join(projectRoot, 'dist', 'public');
 
 if (fs.existsSync(builtPublicDir)) {
+  console.log(`📁 Found built public directory: ${builtPublicDir}`);
+  
   // Ensure server directory exists
   if (!fs.existsSync(serverDir)) {
     fs.mkdirSync(serverDir, { recursive: true });
     console.log('✅ Created server directory');
   }
 
-  // Remove existing public dir if it exists
+  // Remove existing public dir completely (handles both files and directories)
   if (fs.existsSync(publicDir)) {
-    fs.rmSync(publicDir, { recursive: true, force: true });
+    try {
+      const stat = fs.lstatSync(publicDir);
+      if (stat.isSymbolicLink()) {
+        fs.unlinkSync(publicDir);
+        console.log('🔗 Removed existing symlink');
+      } else {
+        fs.rmSync(publicDir, { recursive: true, force: true });
+        console.log('🗑️  Removed existing directory');
+      }
+    } catch (err) {
+      console.log('⚠️  Could not remove existing public dir:', err.message);
+    }
   }
 
-  // Create symlink or copy
+  // Simple copy approach (most reliable for Docker builds)
   try {
-    fs.symlinkSync(path.relative(serverDir, builtPublicDir), publicDir, 'dir');
-    console.log('✅ Created symlink from server/public to dist/public');
-  } catch (err) {
-    console.log('⚠️  Symlink failed, copying files instead:', err.message);
     fs.cpSync(builtPublicDir, publicDir, { recursive: true });
     console.log('✅ Copied dist/public to server/public');
+  } catch (err) {
+    console.log('❌ Failed to copy built files:', err.message);
   }
 } else {
   console.log('⚠️  Built public directory not found at:', builtPublicDir);
 }
 
-// Method 2: Also create public directory in root (fallback)
-const rootPublicDir = path.join(projectRoot, 'public');
-if (fs.existsSync(builtPublicDir) && !fs.existsSync(rootPublicDir)) {
-  try {
-    fs.symlinkSync('dist/public', rootPublicDir, 'dir');
-    console.log('✅ Created root public directory symlink');
-  } catch (err) {
-    fs.cpSync(builtPublicDir, rootPublicDir, { recursive: true });
-    console.log('✅ Created root public directory copy');
-  }
-}
+// Skip root public directory creation to avoid conflicts
 
 // List the final directory structure for debugging
 console.log('📋 Final directory structure:');
