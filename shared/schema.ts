@@ -57,8 +57,8 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => ({
-  // Unique constraint on email + schoolId combination
-  unq: unique().on(table.email, table.schoolId),
+  // Global unique constraint on email - one email per system, not per school
+  unq: unique().on(table.email),
 }));
 
 // Grades table - grade levels within schools
