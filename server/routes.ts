@@ -801,6 +801,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const teacherId = req.params.teacherId;
+      if (!teacherId) {
+        return res.status(400).json({ message: 'Teacher ID is required' });
+      }
+      
       const teacher = await storage.getUser(teacherId);
       
       if (!teacher || teacher.schoolId !== validUser.schoolId) {
@@ -831,6 +835,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const teacherId = req.params.teacherId;
+      if (!teacherId) {
+        return res.status(400).json({ message: 'Teacher ID is required' });
+      }
+      
       const teacher = await storage.getUser(teacherId);
       
       if (!teacher || teacher.schoolId !== validUser.schoolId) {
@@ -857,6 +865,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const teacherId = req.params.teacherId;
+      if (!teacherId) {
+        return res.status(400).json({ message: 'Teacher ID is required' });
+      }
+      
       const teacher = await storage.getUser(teacherId);
       
       if (!teacher || teacher.schoolId !== validUser.schoolId) {
@@ -889,6 +901,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const { teacherId } = req.params;
       const { firstName, lastName, email } = req.body;
+      
+      if (!teacherId) {
+        return res.status(400).json({ message: 'Teacher ID is required' });
+      }
       
       // Get teacher to verify they belong to same school
       const teacher = await storage.getUser(teacherId);
