@@ -13,7 +13,13 @@ export default function Login() {
   const { login } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  const [mode, setMode] = useState<'login' | 'register' | 'forgot-password' | 'first-login'>('login');
+  
+  // Check URL for mode parameter and set initial mode
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlMode = urlParams.get('mode');
+  const initialMode = urlMode === 'forgot-password' ? 'forgot-password' : 'login';
+  
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot-password' | 'first-login'>(initialMode);
   const [isLoading, setIsLoading] = useState(false);
 
   const [loginForm, setLoginForm] = useState({

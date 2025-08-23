@@ -52,7 +52,7 @@ export function LandingPage() {
             
             <div className="flex flex-col items-center gap-2 mb-12">
               <Button 
-                onClick={() => setLocation('/login')}
+                onClick={() => setLocation('/login?mode=forgot-password')}
                 variant="link"
                 className="text-white hover:text-gray-200 underline text-lg"
                 data-testid="button-forgot-password-landing"
