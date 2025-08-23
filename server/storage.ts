@@ -2,7 +2,7 @@ import { type User, type InsertUser, type School, type InsertSchool, type Grade,
 import { randomUUID } from "crypto";
 import { db } from "./db";
 import { users, schools, grades, students, passes, payments } from "@shared/schema";
-import { eq, and, lt, gte, lte } from "drizzle-orm";
+import { eq, and, lt, gte, lte, asc } from "drizzle-orm";
 import { unwrap } from "./safe";
 
 export interface IStorage {
@@ -324,9 +324,10 @@ export class DatabaseStorage implements IStorage {
     if (grade) {
       return await db.select().from(students).where(
         and(eq(students.schoolId, schoolId), eq(students.gradeId, grade))
-      );
+      ).orderBy(asc(students.lastName), asc(students.firstName));
     }
-    return await db.select().from(students).where(eq(students.schoolId, schoolId));
+    return await db.select().from(students).where(eq(students.schoolId, schoolId))
+      .orderBy(asc(students.lastName), asc(students.firstName));
   }
 
   async getStudent(id: string): Promise<Student | undefined> {
