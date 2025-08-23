@@ -367,16 +367,21 @@ export class DatabaseStorage implements IStorage {
     const result = await db.select({
       pass: passes,
       student: students,
-      teacher: users
+      teacher: users,
+      grade: grades
     })
     .from(passes)
     .leftJoin(students, eq(passes.studentId, students.id))
     .leftJoin(users, eq(passes.teacherId, users.id))
+    .leftJoin(grades, eq(students.gradeId, grades.id))
     .where(and(eq(passes.schoolId, schoolId), eq(passes.status, "active")));
 
     return result.map(row => ({
       ...row.pass,
-      student: unwrap(row.student),
+      student: row.student ? {
+        ...row.student,
+        grade: row.grade?.name || null
+      } : null,
       teacher: unwrap(row.teacher)
     }));
   }
