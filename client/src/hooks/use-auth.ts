@@ -43,19 +43,6 @@ export function useAuth(): AuthState {
     checkSession();
   }, []);
 
-  // Listen for profile updates from React Query cache
-  useEffect(() => {
-    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
-      if (event?.query?.queryKey?.[0] === '/api/users/me' && 
-          event?.type === 'updated' && 
-          event?.query?.state?.data) {
-        // Update user state when profile data changes
-        setUser(event.query.state.data);
-      }
-    });
-
-    return unsubscribe;
-  }, [queryClient]);
 
   // Handle session expiry monitoring
   useEffect(() => {
