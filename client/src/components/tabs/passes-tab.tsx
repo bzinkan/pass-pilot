@@ -39,6 +39,12 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
     refetchInterval: 5000, // Poll every 5 seconds for real-time updates
     gcTime: 0, // Don't cache results in React Query
   });
+
+  // Fetch actual grades created in the Roster tab
+  const { data: grades = [] } = useQuery<any[]>({
+    queryKey: ['/api/grades'],
+  });
+
   const [filterType, setFilterType] = useState<string>("all");
   const [filterGrade, setFilterGrade] = useState<string>("all");
 
@@ -197,19 +203,11 @@ export function PassesTab({ user, selectedGrades = new Set() }: PassesTabProps) 
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Grades</SelectItem>
-                <SelectItem value="K">Kindergarten</SelectItem>
-                <SelectItem value="1">1st Grade</SelectItem>
-                <SelectItem value="2">2nd Grade</SelectItem>
-                <SelectItem value="3">3rd Grade</SelectItem>
-                <SelectItem value="4">4th Grade</SelectItem>
-                <SelectItem value="5">5th Grade</SelectItem>
-                <SelectItem value="6">6th Grade</SelectItem>
-                <SelectItem value="7">7th Grade</SelectItem>
-                <SelectItem value="8">8th Grade</SelectItem>
-                <SelectItem value="9">9th Grade</SelectItem>
-                <SelectItem value="10">10th Grade</SelectItem>
-                <SelectItem value="11">11th Grade</SelectItem>
-                <SelectItem value="12">12th Grade</SelectItem>
+                {grades.map((grade: any) => (
+                  <SelectItem key={grade.id} value={grade.name}>
+                    Grade {grade.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
