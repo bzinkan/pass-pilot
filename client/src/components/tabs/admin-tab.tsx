@@ -354,14 +354,16 @@ export function AdminTab({ user }: AdminTabProps) {
                     >
                       <Edit className="h-3 w-3" />
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => resetPasswordMutation.mutate(teacher.id)}
-                      data-testid={`button-reset-password-${teacher.id}`}
-                    >
-                      Reset Password
-                    </Button>
+                    {teacher.id !== user.id && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => resetPasswordMutation.mutate(teacher.id)}
+                        data-testid={`button-reset-password-${teacher.id}`}
+                      >
+                        Reset Password
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
