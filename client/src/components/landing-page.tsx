@@ -52,14 +52,6 @@ export function LandingPage() {
             
             <div className="flex flex-col items-center gap-2 mb-12">
               <Button 
-                onClick={() => setLocation('/login?mode=forgot-password')}
-                variant="link"
-                className="text-white hover:text-gray-200 underline text-lg"
-                data-testid="button-forgot-password-landing"
-              >
-                Forgot your password?
-              </Button>
-              <Button 
                 onClick={() => setLocation('/guide')}
                 variant="link"
                 className="text-white hover:text-gray-200 underline text-lg"
@@ -67,7 +59,6 @@ export function LandingPage() {
               >
                 Quick Start Guide
               </Button>
-
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
