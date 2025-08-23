@@ -164,7 +164,7 @@ export function ReportsTab({ user }: ReportsTabProps) {
       return;
     }
 
-    const csvHeaders = ["Student Name", "Grade", "Teacher", "Pass Type", "Custom Reason", "Checkout Time", "Return Time", "Duration (min)"];
+    const csvHeaders = ["Student Name", "Grade/Class", "Teacher", "Pass Type", "Custom Reason", "Checkout Time", "Return Time", "Duration (min)"];
     const csvRows = passes.map((pass: any) => {
       // Check both returnedAt and status to determine if pass is returned
       const isReturned = pass.returnedAt || pass.status === 'returned';
@@ -234,10 +234,10 @@ export function ReportsTab({ user }: ReportsTabProps) {
       doc.setFontSize(12);
       const today = new Date().toLocaleDateString();
       doc.text(`Generated: ${today}`, 14, 35);
-      doc.text(`Filter: ${filters.dateRange} | Grade: ${filters.grade} | Teacher: ${filters.teacher}`, 14, 45);
+      doc.text(`Filter: ${filters.dateRange} | Grade/Class: ${filters.grade} | Teacher: ${filters.teacher}`, 14, 45);
       
       // Prepare table data
-      const tableHeaders = ['Student Name', 'Grade', 'Teacher', 'Pass Type', 'Destination', 'Checkout Time', 'Return Time', 'Duration'];
+      const tableHeaders = ['Student Name', 'Grade/Class', 'Teacher', 'Pass Type', 'Destination', 'Checkout Time', 'Return Time', 'Duration'];
       const tableRows = passes.map((pass: any) => {
         const isReturned = pass.returnedAt || pass.status === 'returned';
         const calculatedDuration = isReturned ? calculateDuration(pass.issuedAt, pass.returnedAt) : null;
@@ -424,7 +424,7 @@ export function ReportsTab({ user }: ReportsTabProps) {
             )}
             
             <div>
-              <Label htmlFor="gradeFilter">Grade</Label>
+              <Label htmlFor="gradeFilter">Grade/Class</Label>
               <Select 
                 value={filters.grade} 
                 onValueChange={(value) => {
