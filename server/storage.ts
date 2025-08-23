@@ -439,7 +439,10 @@ export class DatabaseStorage implements IStorage {
 
     return result.map(row => ({
       ...row.pass,
-      student: unwrap(row.student),
+      student: row.student ? {
+        ...row.student,
+        grade: row.grade?.name || null
+      } : null,
       teacher: unwrap(row.teacher)
     }));
   }
