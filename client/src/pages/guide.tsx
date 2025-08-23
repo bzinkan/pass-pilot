@@ -50,48 +50,16 @@ export default function Guide() {
           </CardContent>
         </Card>
 
-        {/* Section 2: The 6 Tabs */}
+        {/* Section 2: The 5 Tabs */}
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Settings className="w-5 h-5 text-blue-600" />
-              2. The 6 Tabs at the Bottom
+              2. The 5 Tabs at the Bottom
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <div className="flex items-start gap-3">
-                  <Users className="w-5 h-5 text-purple-600 mt-0.5" />
-                  <div>
-                    <h4 className="font-semibold">Profile</h4>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">
-                      Edit your name, change your password, and adjust system settings like the optional notification system (e.g., set to 5 minutes to get an alert if a student is out too long).
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start gap-3">
-                  <BarChart3 className="w-5 h-5 text-green-600 mt-0.5" />
-                  <div>
-                    <h4 className="font-semibold">Report</h4>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">
-                      Tracks daily, weekly, and custom date ranges. Logs teacher activity for accountability. Tracks reasons students are out (General, Nurse, Discipline, Custom). Export as PDF or Excel.
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start gap-3">
-                  <Upload className="w-5 h-5 text-orange-600 mt-0.5" />
-                  <div>
-                    <h4 className="font-semibold">Upload</h4>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">
-                      Upload student rosters via Google Classroom or Clever.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
               <div className="space-y-3">
                 <div className="flex items-start gap-3">
                   <UserPlus className="w-5 h-5 text-indigo-600 mt-0.5" />
@@ -121,6 +89,28 @@ export default function Guide() {
                     <h4 className="font-semibold">Passes</h4>
                     <p className="text-sm text-gray-600 dark:text-gray-300">
                       See all students currently out — filtered by your assigned classes in Roster. Admins can monitor the whole school.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <BarChart3 className="w-5 h-5 text-green-600 mt-0.5" />
+                  <div>
+                    <h4 className="font-semibold">Reports</h4>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                      Tracks daily, weekly, and custom date ranges. Logs teacher activity for accountability. Tracks reasons students are out (General, Nurse, Discipline, Custom). Export as PDF or Excel.
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-3">
+                  <Settings className="w-5 h-5 text-purple-600 mt-0.5" />
+                  <div>
+                    <h4 className="font-semibold">Set Up</h4>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                      Administrative functions including teacher management, password resets, and school settings. Edit your profile, manage other teachers, and configure system preferences.
                     </p>
                   </div>
                 </div>
