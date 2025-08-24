@@ -1,3 +1,18 @@
+The crash happens before the server starts while evaluating your bundled file:
+
+TypeError [ERR_INVALID_ARG_TYPE]: The "paths[0]" argument must be of type string. Received undefined
+ at Object.resolve (node:path:1097:7)
+ at file:///app/dist/index.js:1907:17
+
+
+That almost always means some import that runs at module-load time is doing path.resolve(undefined). In your project, the likely culprit is ./vite (your helper) getting imported at the top—it probably references a path/env during module init.
+
+Fix: don’t import ./vite at the top in production
+
+Load it only in dev (dynamic import). Also remove any dependency on serveStatic and serve the built client with a tiny, safe block.
+
+Paste this minimal server/index.ts (no top-level ./vite import, own log()):
+
 // ==== env first ====
 import { ENV, isProduction } from "./env";
 
@@ -89,3 +104,11 @@ app.use((req, res, next) => {
   const port = Number(process.env.PORT || 8080);
   server.listen({ port, host: "0.0.0.0", reusePort: true }, () => log(`serving on port ${port}`));
 })();
+
+Why this works
+
+We removed any top-level import of ./vite that could call path.resolve with an undefined argument during module evaluation.
+
+Production static serving uses only __dirname (which is dist/ when running node dist/index.js)—no env-based paths.
+
+We log clientDir and whether index.html exists so the next logs will immediately tell us if Vite’s output dir mismatches.
