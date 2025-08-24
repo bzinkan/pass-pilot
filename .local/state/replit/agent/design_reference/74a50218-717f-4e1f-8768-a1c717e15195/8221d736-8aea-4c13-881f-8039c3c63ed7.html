@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hallway Pass Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'sans': ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'primary': '#3B82F6',
+                        'secondary': '#6B7280',
+                        'success': '#10B981',
+                        'warning': '#F59E0B',
+                        'danger': '#EF4444',
+                    }
+                }
+            }
+        };
+    </script>
+</head>
+<body class="bg-gray-50 font-sans">
+    <!-- Navigation Header -->
+    <!-- @COMPONENT: NavigationHeader [user role, notifications] -->
+    <nav class="bg-white shadow-sm border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-4">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-id-card-alt text-primary text-2xl"></i>
+                    </div>
+                    <h1 class="text-xl font-semibold text-gray-900">Hallway Pass Manager</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <!-- @STATE: currentUser, notificationCount -->
+                    <div class="relative">
+                        <button class="p-2 text-gray-400 hover:text-gray-600 relative" data-event="click:showNotifications">
+                            <i class="fas fa-bell text-lg"></i>
+                            <span class="absolute -top-1 -right-1 bg-danger text-white text-xs rounded-full h-5 w-5 flex items-center justify-center" data-bind="notificationCount">3</span>
+                        </button>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <div class="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+                            <span class="text-white font-medium text-sm" data-bind="user.initials">JS</span>
+                        </div>
+                        <span class="hidden sm:block text-sm font-medium text-gray-700" data-bind="user.name">John Smith</span>
+                        <button class="text-gray-400 hover:text-gray-600" data-event="click:showUserMenu">
+                            <i class="fas fa-chevron-down text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+    <!-- @END_COMPONENT: NavigationHeader -->
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Role Toggle (Demo purposes) -->
+        <div class="mb-6 bg-white rounded-lg shadow p-4">
+            <div class="flex items-center justify-center space-x-4">
+                <span class="text-sm font-medium text-gray-700">View as:</span>
+                <button id="teacherView" class="px-4 py-2 bg-primary text-white rounded-md font-medium" onclick="showTeacherView()">Teacher</button>
+                <button id="studentView" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md font-medium" onclick="showStudentView()">Student</button>
+            </div>
+        </div>
+
+        <!-- Teacher Dashboard -->
+        <!-- @COMPONENT: TeacherDashboard [activePasses, passHistory, students] -->
+        <div id="teacher-dashboard" class="space-y-6">
+            <!-- Quick Actions Header -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-900">Teacher Dashboard</h2>
+                        <p class="text-gray-600 mt-1">Manage student hallway passes</p>
+                    </div>
+                    <button class="bg-primary text-white px-6 py-3 rounded-lg font-medium flex items-center space-x-2 hover:bg-blue-600 transition-colors" data-event="click:openCreatePassModal">
+                        <i class="fas fa-plus"></i>
+                        <span>Create New Pass</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <!-- @MAP: statsData.map(stat => ( -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <div class="w-8 h-8 bg-primary bg-opacity-10 rounded-md flex items-center justify-center">
+                                <i class="fas fa-users text-primary"></i>
+                            </div>
+                        </div>
+                        <div class="ml-5 w-0 flex-1">
+                            <dl>
+                                <dt class="text-sm font-medium text-gray-500 truncate">Active Passes</dt>
+                                <dd class="text-lg font-semibold text-gray-900" data-bind="stats.activePasses">7</dd>
+                            </dl>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <div class="w-8 h-8 bg-success bg-opacity-10 rounded-md flex items-center justify-center">
+                                <i class="fas fa-check-circle text-success"></i>
+                            </div>
+                        </div>
+                        <div class="ml-5 w-0 flex-1">
+                            <dl>
+                                <dt class="text-sm font-medium text-gray-500 truncate">Today's Passes</dt>
+                                <dd class="text-lg font-semibold text-gray-900" data-bind="stats.todayPasses">23</dd>
+                            </dl>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <div class="w-8 h-8 bg-warning bg-opacity-10 rounded-md flex items-center justify-center">
+                                <i class="fas fa-clock text-warning"></i>
+                            </div>
+                        </div>
+                        <div class="ml-5 w-0 flex-1">
+                            <dl>
+                                <dt class="text-sm font-medium text-gray-500 truncate">Expiring Soon</dt>
+                                <dd class="text-lg font-semibold text-gray-900" data-bind="stats.expiringSoon">2</dd>
+                            </dl>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <div class="w-8 h-8 bg-secondary bg-opacity-10 rounded-md flex items-center justify-center">
+                                <i class="fas fa-chart-line text-secondary"></i>
+                            </div>
+                        </div>
+                        <div class="ml-5 w-0 flex-1">
+                            <dl>
+                                <dt class="text-sm font-medium text-gray-500 truncate">Avg Duration</dt>
+                                <dd class="text-lg font-semibold text-gray-900" data-bind="stats.avgDuration">12m</dd>
+                            </dl>
+                        </div>
+                    </div>
+                </div>
+                <!-- @END_MAP )) -->
+            </div>
+
+            <!-- Active Passes Table -->
+            <div class="bg-white rounded-lg shadow">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-900">Active Passes</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Destination</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Issued</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time Remaining</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            <!-- @MAP: activePasses.map(pass => ( -->
+                            <tr data-mock="true">
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="flex items-center">
+                                        <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
+                                            <span class="text-xs font-medium text-gray-700">EM</span>
+                                        </div>
+                                        <div class="ml-3">
+                                            <div class="text-sm font-medium text-gray-900" data-bind="pass.studentName">Emily Martinez</div>
+                                            <div class="text-sm text-gray-500" data-bind="pass.studentId">ID: 2024789</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" data-bind="pass.destination">Library</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" data-bind="pass.issuedTime">2:15 PM</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" data-bind="pass.timeRemaining">8 min</td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-success bg-opacity-10 text-success">Active</span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                    <button class="text-danger hover:text-red-700" data-event="click:revokePass">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </td>
+                            </tr>
+
+                            <tr data-mock="true">
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="flex items-center">
+                                        <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
+                                            <span class="text-xs font-medium text-gray-700">JD</span>
+                                        </div>
+                                        <div class="ml-3">
+                                            <div class="text-sm font-medium text-gray-900" data-bind="pass.studentName">James Davis</div>
+                                            <div class="text-sm text-gray-500" data-bind="pass.studentId">ID: 2024456</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" data-bind="pass.destination">Nurse's Office</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" data-bind="pass.issuedTime">2:18 PM</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" data-bind="pass.timeRemaining">2 min</td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-warning bg-opacity-10 text-warning">Expiring</span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                    <button class="text-danger hover:text-red-700" data-event="click:revokePass">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            <!-- @END_MAP )) -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Recent Pass History -->
+            <div class="bg-white rounded-lg shadow">
+                <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                    <h3 class="text-lg font-semibold text-gray-900">Recent Pass History</h3>
+                    <button class="text-primary hover:text-blue-600 text-sm font-medium" data-event="click:viewFullHistory">View All</button>
+                </div>
+                <div class="px-6 py-4">
+                    <!-- @MAP: recentPasses.map(pass => ( -->
+                    <div class="space-y-4" data-mock="true">
+                        <div class="flex items-center justify-between py-2 border-b border-gray-100 last:border-b-0">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center">
+                                    <span class="text-xs font-medium text-gray-700">SC</span>
+                                </div>
+                                <div>
+                                    <span class="text-sm font-medium text-gray-900" data-bind="pass.studentName">Sarah Chen</span>
+                                    <span class="text-sm text-gray-500 ml-2" data-bind="pass.destination">→ Bathroom</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-4">
+                                <span class="text-sm text-gray-500" data-bind="pass.duration">5 min</span>
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">Returned</span>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between py-2 border-b border-gray-100 last:border-b-0">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center">
+                                    <span class="text-xs font-medium text-gray-700">MJ</span>
+                                </div>
+                                <div>
+                                    <span class="text-sm font-medium text-gray-900" data-bind="pass.studentName">Michael Johnson</span>
+                                    <span class="text-sm text-gray-500 ml-2" data-bind="pass.destination">→ Principal's Office</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-4">
+                                <span class="text-sm text-gray-500" data-bind="pass.duration">15 min</span>
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">Returned</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- @END_MAP )) -->
+                </div>
+            </div>
+        </div>
+        <!-- @END_COMPONENT: TeacherDashboard -->
+
+        <!-- Student View -->
+        <!-- @COMPONENT: StudentView [activePass, passHistory] -->
+        <div id="student-dashboard" class="space-y-6 hidden">
+            <!-- Welcome Header -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-primary bg-opacity-10 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-id-card text-primary text-2xl"></i>
+                    </div>
+                    <h2 class="text-2xl font-bold text-gray-900">Welcome, <span data-bind="student.name">Emily Martinez</span></h2>
+                    <p class="text-gray-600 mt-1">Student ID: <span data-bind="student.id">2024789</span></p>
+                </div>
+            </div>
+
+            <!-- Active Pass Card -->
+            <!-- @STATE: hasActivePass:boolean -->
+            <div class="bg-gradient-to-r from-success to-emerald-600 rounded-lg shadow-lg p-6 text-white">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2">Active Hallway Pass</h3>
+                        <div class="space-y-2">
+                            <div class="flex items-center space-x-2">
+                                <i class="fas fa-map-marker-alt"></i>
+                                <span class="font-medium" data-bind="activePass.destination">Library</span>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <i class="fas fa-clock"></i>
+                                <span data-bind="activePass.issuedTime">Issued at 2:15 PM</span>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <i class="fas fa-hourglass-half"></i>
+                                <span class="font-semibold" data-bind="activePass.timeRemaining">8 minutes remaining</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-3xl font-bold mb-2" data-bind="activePass.passNumber">#1247</div>
+                        <div class="bg-white bg-opacity-20 rounded-full px-3 py-1 text-sm">
+                            Pass Active
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- QR Code Placeholder -->
+                <div class="mt-6 flex justify-center">
+                    <div class="bg-white p-4 rounded-lg">
+                        <div class="w-24 h-24 bg-gray-200 flex items-center justify-center">
+                            <i class="fas fa-qrcode text-4xl text-gray-400"></i>
+                        </div>
+                        <p class="text-center text-xs text-gray-600 mt-2">Show to staff</p>
+                    </div>
+                </div>
+
+                <div class="mt-6 text-center">
+                    <button class="bg-white bg-opacity-20 hover:bg-opacity-30 text-white font-medium px-6 py-2 rounded-lg transition-colors" data-event="click:returnEarly">
+                        Return Early
+                    </button>
+                </div>
+            </div>
+
+            <!-- Pass History -->
+            <div class="bg-white rounded-lg shadow">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-900">My Pass History</h3>
+                </div>
+                <div class="px-6 py-4">
+                    <!-- @MAP: studentPassHistory.map(pass => ( -->
+                    <div class="space-y-4" data-mock="true">
+                        <div class="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-8 h-8 bg-success bg-opacity-10 rounded-full flex items-center justify-center">
+                                    <i class="fas fa-check text-success text-sm"></i>
+                                </div>
+                                <div>
+                                    <div class="font-medium text-gray-900" data-bind="pass.destination">Bathroom</div>
+                                    <div class="text-sm text-gray-500" data-bind="pass.date">Today, 1:45 PM</div>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm font-medium text-gray-900" data-bind="pass.duration">4 min</div>
+                                <div class="text-xs text-gray-500">Completed</div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-8 h-8 bg-success bg-opacity-10 rounded-full flex items-center justify-center">
+                                    <i class="fas fa-check text-success text-sm"></i>
+                                </div>
+                                <div>
+                                    <div class="font-medium text-gray-900" data-bind="pass.destination">Nurse's Office</div>
+                                    <div class="text-sm text-gray-500" data-bind="pass.date">Yesterday, 10:30 AM</div>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm font-medium text-gray-900" data-bind="pass.duration">12 min</div>
+                                <div class="text-xs text-gray-500">Completed</div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-8 h-8 bg-success bg-opacity-10 rounded-full flex items-center justify-center">
+                                    <i class="fas fa-check text-success text-sm"></i>
+                                </div>
+                                <div>
+                                    <div class="font-medium text-gray-900" data-bind="pass.destination">Main Office</div>
+                                    <div class="text-sm text-gray-500" data-bind="pass.date">Monday, 2:20 PM</div>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm font-medium text-gray-900" data-bind="pass.duration">8 min</div>
+                                <div class="text-xs text-gray-500">Completed</div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- @END_MAP )) -->
+                </div>
+            </div>
+        </div>
+        <!-- @END_COMPONENT: StudentView -->
+    </div>
+
+    <!-- Create Pass Modal -->
+    <!-- @COMPONENT: CreatePassModal [students, destinations] -->
+    <div id="createPassModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden" data-event="click:closeModal">
+        <div class="relative top-20 mx-auto p-5 border w-full max-w-md bg-white rounded-lg shadow-lg" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-gray-900">Create New Pass</h3>
+                <button class="text-gray-400 hover:text-gray-600" onclick="closeCreatePassModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <form class="space-y-4" data-event="submit:createPass">
+                <!-- Student Selection -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Select Student</label>
+                    <select class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" data-bind="form.studentId" required>
+                        <option value="">Choose a student...</option>
+                        <!-- @MAP: students.map(student => ( -->
+                        <option value="2024789" data-mock="true">Emily Martinez (ID: 2024789)</option>
+                        <option value="2024456" data-mock="true">James Davis (ID: 2024456)</option>
+                        <option value="2024123" data-mock="true">Sarah Chen (ID: 2024123)</option>
+                        <option value="2024567" data-mock="true">Michael Johnson (ID: 2024567)</option>
+                        <!-- @END_MAP )) -->
+                    </select>
+                </div>
+
+                <!-- Destination -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Destination</label>
+                    <select class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" data-bind="form.destination" required>
+                        <option value="">Select destination...</option>
+                        <!-- @MAP: destinations.map(dest => ( -->
+                        <option value="bathroom" data-mock="true">Bathroom</option>
+                        <option value="library" data-mock="true">Library</option>
+                        <option value="nurse" data-mock="true">Nurse's Office</option>
+                        <option value="office" data-mock="true">Main Office</option>
+                        <option value="counselor" data-mock="true">Counselor's Office</option>
+                        <option value="other" data-mock="true">Other</option>
+                        <!-- @END_MAP )) -->
+                    </select>
+                </div>
+
+                <!-- Custom Destination (shown when Other is selected) -->
+                <div class="hidden" id="customDestination">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Specify Destination</label>
+                    <input type="text" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Enter custom destination" data-bind="form.customDestination">
+                </div>
+
+                <!-- Duration -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Duration (minutes)</label>
+                    <select class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" data-bind="form.duration" required>
+                        <option value="5">5 minutes</option>
+                        <option value="10" selected>10 minutes</option>
+                        <option value="15">15 minutes</option>
+                        <option value="20">20 minutes</option>
+                        <option value="30">30 minutes</option>
+                    </select>
+                </div>
+
+                <!-- Notes (Optional) -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Notes (Optional)</label>
+                    <textarea class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" rows="2" placeholder="Add any additional notes..." data-bind="form.notes"></textarea>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex space-x-3 pt-4">
+                    <button type="button" class="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded-md font-medium hover:bg-gray-400 transition-colors" onclick="closeCreatePassModal()">
+                        Cancel
+                    </button>
+                    <button type="submit" class="flex-1 px-4 py-2 bg-primary text-white rounded-md font-medium hover:bg-blue-600 transition-colors" data-implementation="Should validate form and create pass">
+                        Create Pass
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: CreatePassModal -->
+
+    <script>
+        // TODO: Implement business logic, API calls, or state management
+        (function() {
+            // View switching functionality
+            function showTeacherView() {
+                document.getElementById('teacher-dashboard').classList.remove('hidden');
+                document.getElementById('student-dashboard').classList.add('hidden');
+                document.getElementById('teacherView').classList.add('bg-primary', 'text-white');
+                document.getElementById('teacherView').classList.remove('bg-gray-200', 'text-gray-700');
+                document.getElementById('studentView').classList.remove('bg-primary', 'text-white');
+                document.getElementById('studentView').classList.add('bg-gray-200', 'text-gray-700');
+            }
+
+            function showStudentView() {
+                document.getElementById('teacher-dashboard').classList.add('hidden');
+                document.getElementById('student-dashboard').classList.remove('hidden');
+                document.getElementById('studentView').classList.add('bg-primary', 'text-white');
+                document.getElementById('studentView').classList.remove('bg-gray-200', 'text-gray-700');
+                document.getElementById('teacherView').classList.remove('bg-primary', 'text-white');
+                document.getElementById('teacherView').classList.add('bg-gray-200', 'text-gray-700');
+            }
+
+            // Modal functionality
+            function openCreatePassModal() {
+                document.getElementById('createPassModal').classList.remove('hidden');
+            }
+
+            function closeCreatePassModal() {
+                document.getElementById('createPassModal').classList.add('hidden');
+            }
+
+            // Make functions globally available
+            window.showTeacherView = showTeacherView;
+            window.showStudentView = showStudentView;
+            window.openCreatePassModal = openCreatePassModal;
+            window.closeCreatePassModal = closeCreatePassModal;
+
+            // Event listeners
+            document.querySelector('[data-event="click:openCreatePassModal"]').addEventListener('click', openCreatePassModal);
+            
+            // Custom destination toggle
+            document.querySelector('select[data-bind="form.destination"]').addEventListener('change', function(e) {
+                const customDiv = document.getElementById('customDestination');
+                if (e.target.value === 'other') {
+                    customDiv.classList.remove('hidden');
+                } else {
+                    customDiv.classList.add('hidden');
+                }
+            });
+
+            // Form submission
+            document.querySelector('form[data-event="submit:createPass"]').addEventListener('submit', function(e) {
+                e.preventDefault();
+                // TODO: Implement pass creation logic
+                alert('Pass created successfully!');
+                closeCreatePassModal();
+            });
+        })();
+    </script>
+</body>
+</html>
