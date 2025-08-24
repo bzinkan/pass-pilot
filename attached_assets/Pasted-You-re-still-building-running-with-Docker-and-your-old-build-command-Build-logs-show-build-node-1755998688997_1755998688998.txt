@@ -1,0 +1,86 @@
+You’re still building/running with Docker and your old build command:
+
+Build logs show build && node server/post-build-fix.js and [stage-0 …] COPY steps → that’s a Dockerfile build, not Nixpacks.
+
+Because of that, Railway ignores the UI and your edited railway.json. It’s using the Dockerfile + old code path, and your runtime then crashes with:
+
+TypeError [ERR_INVALID_ARG_TYPE]: The "paths[0]" argument must be of type string. Received undefined
+at Object.resolve (node:path:1097:7)
+at file:///app/dist/index.js:1907:17
+
+
+That error happens before any of our logging, so something evaluated at module load (probably an import or path helper) is calling path.resolve(undefined) in the bundled file.
+
+Fix this in 3 precise steps
+
+Kill Docker so Railway uses Nixpacks
+
+git rm -f Dockerfile
+git commit -m "Remove Dockerfile (use Nixpacks)"
+
+
+Lock the build/start via railway.json
+Create/replace railway.json with exactly:
+
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "nixpacks",
+    "buildCommand": "npm ci && npm run build"
+  },
+  "deploy": {
+    "startCommand": "npm run start",
+    "healthcheckPath": "/api/health",
+    "healthcheckTimeout": 300,
+    "restartPolicyType": "ON_FAILURE"
+  }
+}
+
+
+Then:
+
+git add railway.json
+git commit -m "Use Nixpacks: clean install + build; start via npm"
+git push
+
+
+Ensure the new server file is what runs
+
+Make sure you pushed the minimal server/index.ts we discussed (no top-level ./vite import; dynamic import only in dev; simple prod static serving; early /api/health).
+
+Confirm package.json has:
+
+"build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist"
+
+"start": "NODE_ENV=production node dist/index.js"
+
+What you should see on the next deploy
+
+Build Logs: No [stage-0] Docker steps; you should see Nixpacks detecting Node and running
+npm ci && npm run build.
+
+Deploy Logs from your app:
+
+[app] NODE_ENV=production prod=true
+[app] clientDir=/app/dist
+[app] index exists=true
+[app] serving on port 8080
+
+
+(If index exists=false, set Vite build.outDir: "dist" or tell me where it’s writing and I’ll adjust the path.)
+
+Also double-check envs (or the app won’t start)
+
+In Railway → Variables, set non-empty values for everything your env.ts marks as required:
+
+PORT=8080, NODE_ENV=production
+
+SESSION_SECRET= (use the 32-char string)
+
+DATABASE_URL (Neon or Railway PG)
+
+Any required keys you validate (Stripe, SendGrid, Slack, etc.) — use dummy non-empty values if you aren’t calling them yet.
+
+Why “npm ci && npm run build” matters
+
+Yes—without npm ci you can get stale or missing deps; without npm run build there’s no dist/index.js or dist/index.html. But your current crash is coming from the old Docker build and old bundle still running. Removing the Dockerfile + pushing the updated railway.json guarantees Railway will run the clean Nixpacks build and your new code.
